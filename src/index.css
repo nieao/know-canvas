@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+/* 建筑极简设计系统 — Design Tokens */
+:root {
+  --black: #1a1a1a;
+  --dark: #2d2d2d;
+  --gray-900: #3a3a3a;
+  --gray-700: #555;
+  --gray-500: #888;
+  --gray-300: #bbb;
+  --gray-100: #e8e8e8;
+  --white: #fafafa;
+  --warm: #c8a882;
+  --warm-light: #e8d5c0;
+  --warm-bg: #f5f0eb;
+
+  --font-serif: "Noto Serif SC", Georgia, serif;
+  --font-sans: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 全局基础样式 */
+body {
+  font-family: var(--font-sans);
+  color: var(--dark);
+  background: var(--white);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 滚动条 — 建筑极简 */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--warm);
+}
+
+/* 段落标签 */
+.section-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.35em;
+  color: var(--warm);
+  text-transform: uppercase;
+  font-family: var(--font-sans);
+}
+
+/* 标题 */
+.heading-serif {
+  font-family: var(--font-serif);
+  letter-spacing: 0.02em;
+  color: var(--black);
+}
+
+/* 1px 细线美学 */
+.border-fine {
+  border: 1px solid var(--gray-100);
+}
+.border-fine:hover {
+  border-color: var(--warm);
+}
+
+/* 暖色顶部线条 */
+.warm-top-line {
+  position: relative;
+}
+.warm-top-line::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--warm);
+  transition: width 0.5s var(--ease-out);
+}
+.warm-top-line:hover::before {
+  width: 100%;
+}
+
+/* 入场动画 */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 卡片悬浮 */
+.card-hover {
+  transition: all 0.5s var(--ease-out);
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* React Flow 自定义 */
+.react-flow__background {
+  background: var(--white) !important;
+}
+.react-flow__minimap {
+  border: 1px solid var(--gray-100) !important;
+  border-radius: 4px;
+}

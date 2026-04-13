@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Know Canvas - 开源知识图谱画布</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --black: #1a1a1a;
+    --dark: #2d2d2d;
+    --gray-900: #3a3a3a;
+    --gray-700: #555;
+    --gray-500: #888;
+    --gray-300: #bbb;
+    --gray-100: #e8e8e8;
+    --white: #fafafa;
+    --warm: #c8a882;
+    --warm-light: #e8d5c0;
+    --warm-bg: #f5f0eb;
+    --serif: "Noto Serif SC", Georgia, serif;
+    --sans: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--white);
+    color: var(--dark);
+    line-height: 1.8;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Navigation */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background: rgba(250, 250, 250, 0.85);
+    border-bottom: 1px solid var(--gray-100);
+    transition: all 0.5s var(--ease);
+  }
+  nav .nav-inner {
+    max-width: 1100px; margin: 0 auto;
+    padding: 16px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  nav .nav-logo {
+    font-family: var(--serif); font-size: 1.1rem; font-weight: 600;
+    color: var(--black); letter-spacing: 0.02em; text-decoration: none;
+  }
+  nav .nav-links { display: flex; gap: 24px; }
+  nav .nav-links a {
+    font-size: 0.82rem; color: var(--gray-700); text-decoration: none;
+    letter-spacing: 0.05em; transition: color 0.3s var(--ease);
+  }
+  nav .nav-links a:hover { color: var(--warm); }
+
+  /* Section layout */
+  .section {
+    max-width: 1100px; margin: 0 auto;
+    padding: 80px 24px;
+  }
+  .section-label {
+    font-size: 0.72rem; letter-spacing: 0.35em;
+    color: var(--warm); text-transform: uppercase;
+    font-weight: 500; margin-bottom: 12px;
+  }
+  .section-title {
+    font-family: var(--serif); font-size: 1.8rem; font-weight: 600;
+    color: var(--black); letter-spacing: 0.02em; margin-bottom: 16px;
+  }
+  .section-desc {
+    color: var(--gray-700); font-size: 0.95rem; max-width: 600px; margin-bottom: 48px;
+  }
+
+  /* Reveal animation */
+  .reveal {
+    opacity: 0; transform: translateY(30px);
+    transition: opacity 0.8s var(--ease), transform 0.8s var(--ease);
+  }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* Hero */
+  .hero {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    padding: 120px 24px 80px;
+  }
+  .hero-logo { margin-bottom: 32px; }
+  .hero-logo svg { width: 72px; height: 72px; }
+  .hero h1 {
+    font-family: var(--serif); font-size: 3.2rem; font-weight: 700;
+    color: var(--black); letter-spacing: 0.02em; margin-bottom: 12px;
+  }
+  .hero .subtitle {
+    font-size: 1.1rem; color: var(--warm); letter-spacing: 0.15em;
+    font-weight: 500; margin-bottom: 16px;
+  }
+  .hero .desc {
+    font-size: 1rem; color: var(--gray-700); max-width: 480px; margin-bottom: 32px;
+  }
+  .badges { display: flex; gap: 10px; margin-bottom: 40px; flex-wrap: wrap; justify-content: center; }
+  .badge {
+    font-size: 0.72rem; padding: 6px 14px;
+    border: 1px solid var(--gray-100); border-radius: 20px;
+    color: var(--gray-700); letter-spacing: 0.05em;
+  }
+  .badge.warm { border-color: var(--warm-light); color: var(--warm); }
+  .cta {
+    display: inline-block; padding: 14px 40px;
+    border: 1px solid var(--black); color: var(--black);
+    text-decoration: none; font-size: 0.88rem; letter-spacing: 0.1em;
+    transition: all 0.5s var(--ease);
+  }
+  .cta:hover {
+    background: var(--black); color: var(--white);
+    transform: translateY(-2px);
+  }
+
+  /* Flow diagram */
+  .flow { display: flex; align-items: center; justify-content: center; gap: 0; flex-wrap: wrap; }
+  .flow-step {
+    padding: 16px 28px; border: 1px solid var(--gray-100);
+    font-size: 0.9rem; color: var(--dark); position: relative;
+    transition: all 0.5s var(--ease); background: var(--white);
+  }
+  .flow-step::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 100%;
+    height: 2px; background: var(--warm);
+    transition: right 0.5s var(--ease);
+  }
+  .flow-step:hover::before { right: 0; }
+  .flow-step:hover { border-color: var(--warm-light); transform: translateY(-4px); }
+  .flow-arrow {
+    color: var(--gray-300); font-size: 1.2rem; padding: 0 8px;
+  }
+
+  /* Feature grid */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+  }
+  .feature-card {
+    padding: 32px; border: 1px solid var(--gray-100);
+    position: relative; transition: all 0.5s var(--ease);
+  }
+  .feature-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 100%;
+    height: 2px; background: var(--warm);
+    transition: right 0.5s var(--ease);
+  }
+  .feature-card:hover::before { right: 0; }
+  .feature-card:hover { border-color: var(--warm-light); transform: translateY(-4px); }
+  .feature-card .icon {
+    width: 40px; height: 40px; margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--warm);
+  }
+  .feature-card h3 {
+    font-family: var(--serif); font-size: 1.05rem; font-weight: 600;
+    color: var(--black); margin-bottom: 8px;
+  }
+  .feature-card p { font-size: 0.88rem; color: var(--gray-700); line-height: 1.7; }
+
+  /* Architecture */
+  .arch {
+    display: grid; grid-template-columns: 180px 1fr 180px;
+    gap: 16px; align-items: stretch;
+  }
+  .arch-panel {
+    border: 1px solid var(--gray-100); padding: 24px; text-align: center;
+    display: flex; flex-direction: column; justify-content: center; gap: 12px;
+    transition: all 0.5s var(--ease);
+  }
+  .arch-panel:hover { border-color: var(--warm-light); }
+  .arch-panel h4 {
+    font-family: var(--serif); font-size: 0.95rem; color: var(--black); font-weight: 600;
+  }
+  .arch-panel p { font-size: 0.78rem; color: var(--gray-500); }
+  .arch-center {
+    border: 2px solid var(--warm-light); padding: 32px; text-align: center;
+    background: var(--warm-bg); position: relative;
+  }
+  .arch-center h4 { font-family: var(--serif); font-size: 1.1rem; color: var(--black); margin-bottom: 8px; }
+  .arch-center p { font-size: 0.85rem; color: var(--gray-700); }
+  .arch-connector {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--warm); font-size: 1.4rem;
+  }
+  .arch-bar {
+    grid-column: 1 / -1; border: 1px solid var(--warm-light);
+    padding: 16px; text-align: center; margin-top: 8px;
+    background: linear-gradient(135deg, var(--warm-bg), var(--white));
+  }
+  .arch-bar h4 { font-family: var(--serif); font-size: 0.95rem; color: var(--warm); }
+
+  /* Tech stack */
+  .tech-row {
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+  }
+  .tech-tag {
+    padding: 12px 28px; border: 1px solid var(--gray-100);
+    font-size: 0.85rem; color: var(--dark); position: relative;
+    display: flex; align-items: center; gap: 8px;
+    transition: all 0.5s var(--ease);
+  }
+  .tech-tag::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--warm); flex-shrink: 0;
+  }
+  .tech-tag:hover { border-color: var(--warm); transform: translateY(-2px); }
+
+  /* Node & Relation grid */
+  .node-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px;
+  }
+  .node-card {
+    padding: 24px 16px; border: 1px solid var(--gray-100);
+    text-align: center; transition: all 0.5s var(--ease);
+  }
+  .node-card:hover { border-color: var(--warm-light); transform: translateY(-4px); }
+  .node-card .node-icon { font-size: 1.8rem; margin-bottom: 10px; }
+  .node-card .node-name {
+    font-size: 0.82rem; color: var(--dark); font-weight: 500;
+  }
+
+  .relation-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+  }
+  .relation-card {
+    padding: 16px 20px; border: 1px solid var(--gray-100);
+    display: flex; align-items: center; gap: 12px;
+    transition: all 0.5s var(--ease);
+  }
+  .relation-card:hover { transform: translateY(-2px); }
+  .relation-line {
+    width: 32px; height: 3px; border-radius: 2px; flex-shrink: 0;
+  }
+  .relation-card span { font-size: 0.85rem; color: var(--dark); }
+
+  /* Code block */
+  .code-block {
+    background: var(--black); color: #e0d5c8; padding: 32px;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.85rem; line-height: 2; overflow-x: auto;
+    border-left: 3px solid var(--warm);
+  }
+  .code-block .comment { color: var(--gray-500); }
+  .code-block .cmd { color: var(--warm-light); }
+
+  /* Dark section */
+  .dark-section {
+    background: var(--black); color: var(--white);
+    padding: 80px 24px;
+  }
+  .dark-section .section { padding: 0; }
+  .dark-section .section-label { color: var(--warm); }
+  .dark-section .section-title { color: var(--white); }
+  .dark-section .section-desc { color: var(--gray-300); }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 32px; }
+  .timeline::before {
+    content: ''; position: absolute; left: 8px; top: 0; bottom: 0;
+    width: 1px; background: var(--gray-100);
+  }
+  .timeline-item {
+    position: relative; padding-bottom: 40px;
+  }
+  .timeline-item::before {
+    content: ''; position: absolute; left: -28px; top: 6px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--warm); border: 2px solid var(--white);
+  }
+  .timeline-item.current::before {
+    box-shadow: 0 0 0 4px var(--warm-light);
+  }
+  .timeline-item h4 {
+    font-family: var(--serif); font-size: 1rem; color: var(--black);
+    font-weight: 600; margin-bottom: 4px;
+  }
+  .timeline-item p { font-size: 0.85rem; color: var(--gray-700); }
+  .timeline-item .tag {
+    display: inline-block; font-size: 0.7rem; padding: 2px 10px;
+    border: 1px solid var(--warm-light); color: var(--warm);
+    border-radius: 10px; margin-left: 8px; vertical-align: middle;
+  }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--gray-100);
+    padding: 48px 24px; text-align: center;
+  }
+  footer p { font-size: 0.82rem; color: var(--gray-500); margin-bottom: 8px; }
+  footer a { color: var(--warm); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 2rem; }
+    .section { padding: 48px 16px; }
+    .section-title { font-size: 1.4rem; }
+    .arch { grid-template-columns: 1fr; }
+    .flow { flex-direction: column; gap: 0; }
+    .flow-arrow { transform: rotate(90deg); padding: 4px 0; }
+    .feature-grid { grid-template-columns: 1fr; }
+    .nav-links { display: none; }
+    .node-grid { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">Know Canvas</a>
+    <div class="nav-links">
+      <a href="#workflow">工作流程</a>
+      <a href="#features">核心特性</a>
+      <a href="#architecture">架构</a>
+      <a href="#tech">技术栈</a>
+      <a href="#quickstart">快速开始</a>
+      <a href="https://github.com/nieao/know-canvas" target="_blank">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-logo reveal">
+    <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="36" cy="24" r="8" stroke="#c8a882" stroke-width="2" fill="none"/>
+      <circle cx="20" cy="48" r="7" stroke="#c8a882" stroke-width="2" fill="none"/>
+      <circle cx="52" cy="48" r="7" stroke="#c8a882" stroke-width="2" fill="none"/>
+      <line x1="32" y1="31" x2="23" y2="42" stroke="#c8a882" stroke-width="1.5" opacity="0.6"/>
+      <line x1="40" y1="31" x2="49" y2="42" stroke="#c8a882" stroke-width="1.5" opacity="0.6"/>
+      <line x1="27" y1="48" x2="45" y2="48" stroke="#c8a882" stroke-width="1.5" opacity="0.6"/>
+      <circle cx="36" cy="24" r="3" fill="#c8a882" opacity="0.4"/>
+      <circle cx="20" cy="48" r="2.5" fill="#c8a882" opacity="0.4"/>
+      <circle cx="52" cy="48" r="2.5" fill="#c8a882" opacity="0.4"/>
+    </svg>
+  </div>
+  <h1 class="reveal">Know Canvas</h1>
+  <p class="subtitle reveal">开源知识图谱画布</p>
+  <p class="desc reveal">从外部文件和信息构建可视化知识网络</p>
+  <div class="badges reveal">
+    <span class="badge warm">v0.1</span>
+    <span class="badge">MIT License</span>
+    <span class="badge">GitHub</span>
+  </div>
+  <a href="https://github.com/nieao/know-canvas" target="_blank" class="cta reveal">开始使用</a>
+</section>
+
+<!-- 01 / 工作流程 -->
+<section class="section" id="workflow">
+  <div class="section-label reveal">01 / 工作流程</div>
+  <div class="section-title reveal">从导入到可视化</div>
+  <p class="section-desc reveal">五步流程将外部文件转化为结构化知识网络</p>
+  <div class="flow reveal">
+    <div class="flow-step">导入</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">解析</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">提取</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">关系</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-step">可视化</div>
+  </div>
+</section>
+
+<!-- 02 / 核心特性 -->
+<section class="section" id="features">
+  <div class="section-label reveal">02 / 核心特性</div>
+  <div class="section-title reveal">为知识工作者而设计</div>
+  <p class="section-desc reveal">六大核心能力覆盖知识图谱全生命周期</p>
+  <div class="feature-grid">
+    <div class="feature-card reveal">
+      <div class="icon">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M6 8h20M6 16h14M6 24h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="26" cy="16" r="4" stroke="currentColor" stroke-width="2"/></svg>
+      </div>
+      <h3>多格式导入</h3>
+      <p>支持 Markdown、JSON、CSV、图片、视频、PDF 等多种格式文件的快速导入</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="icon">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="4" y="4" width="10" height="10" rx="2" stroke="currentColor" stroke-width="2"/><rect x="18" y="4" width="10" height="10" rx="2" stroke="currentColor" stroke-width="2"/><rect x="4" y="18" width="10" height="10" rx="5" stroke="currentColor" stroke-width="2"/><rect x="18" y="18" width="10" height="10" rx="2" stroke="currentColor" stroke-width="2"/></svg>
+      </div>
+      <h3>8 种节点类型</h3>
+      <p>概念、分类、书签、图片、视频、笔记、文件、分组，适配不同知识形态</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="icon">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="8" cy="16" r="4" stroke="currentColor" stroke-width="2"/><circle cx="24" cy="16" r="4" stroke="currentColor" stroke-width="2"/><path d="M12 16h8" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/></svg>
+      </div>
+      <h3>8 种关系连线</h3>
+      <p>因果、组成、依赖、相似、矛盾、顺序、引用、相关，精准表达知识关联</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="icon">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="4" y="4" width="24" height="24" rx="2" stroke="currentColor" stroke-width="2"/><path d="M4 16h24M16 4v24" stroke="currentColor" stroke-width="1" opacity="0.4"/><circle cx="10" cy="10" r="2" fill="currentColor" opacity="0.5"/><circle cx="22" cy="22" r="2" fill="currentColor" opacity="0.5"/><circle cx="22" cy="10" r="2" fill="currentColor" opacity="0.5"/></svg>
+      </div>
+      <h3>智能布局</h3>
+      <p>网格布局、力导向、径向布局、层次布局四种自动排列算法</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="icon">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M16 4l3 6h7l-5.5 4.5L22 22l-6-4-6 4 1.5-7.5L6 10h7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>AI 辅助</h3>
+      <p>概念提取、关系发现、知识摘要，AI 加速知识图谱构建</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="icon">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M8 4h16v24H8z" stroke="currentColor" stroke-width="2"/><path d="M12 12h8M12 16h6M12 20h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/><path d="M20 24l6 4V22z" stroke="currentColor" stroke-width="2"/></svg>
+      </div>
+      <h3>多格式导出</h3>
+      <p>JSON、Markdown、JSON-LD、PNG 多种导出格式满足不同场景需求</p>
+    </div>
+  </div>
+</section>
+
+<!-- 03 / 系统架构 -->
+<section class="section" id="architecture">
+  <div class="section-label reveal">03 / 系统架构</div>
+  <div class="section-title reveal">三栏画布 + AI 底栏</div>
+  <p class="section-desc reveal">清晰的分层架构实现高效知识管理</p>
+  <div class="arch reveal">
+    <div class="arch-panel">
+      <h4>知识源面板</h4>
+      <p>文件导入<br>知识源列表<br>拖拽操作</p>
+    </div>
+    <div class="arch-center">
+      <h4>中央画布</h4>
+      <p>React Flow 驱动<br>节点拖拽 / 缩放 / 连线<br>实时布局计算</p>
+    </div>
+    <div class="arch-panel">
+      <h4>详情面板</h4>
+      <p>节点属性<br>关系编辑<br>元数据展示</p>
+    </div>
+    <div class="arch-bar">
+      <h4>AI Bar - 智能分析与对话</h4>
+    </div>
+  </div>
+</section>
+
+<!-- 04 / 技术栈 -->
+<section class="section" id="tech">
+  <div class="section-label reveal">04 / 技术栈</div>
+  <div class="section-title reveal">现代前端工具链</div>
+  <p class="section-desc reveal">基于最新技术构建高性能知识图谱应用</p>
+  <div class="tech-row reveal">
+    <div class="tech-tag">React 19</div>
+    <div class="tech-tag">React Flow 11</div>
+    <div class="tech-tag">Zustand 5</div>
+    <div class="tech-tag">Tailwind 4</div>
+    <div class="tech-tag">Vite 7</div>
+    <div class="tech-tag">Playwright</div>
+  </div>
+</section>
+
+<!-- 05 / 节点图鉴 -->
+<section class="section">
+  <div class="section-label reveal">05 / 节点图鉴</div>
+  <div class="section-title reveal">8 种知识节点</div>
+  <p class="section-desc reveal">不同类型的节点承载不同形态的知识</p>
+  <div class="node-grid reveal">
+    <div class="node-card">
+      <div class="node-icon">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><circle cx="18" cy="14" r="8" stroke="#c8a882" stroke-width="2"/><path d="M14 26h8" stroke="#c8a882" stroke-width="2" stroke-linecap="round"/><path d="M15 30h6" stroke="#c8a882" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="node-name">概念</div>
+    </div>
+    <div class="node-card">
+      <div class="node-icon">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M8 10h20l-3 8 3 8H8l3-8z" stroke="#c8a882" stroke-width="2"/></svg>
+      </div>
+      <div class="node-name">分类</div>
+    </div>
+    <div class="node-card">
+      <div class="node-icon">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M14 8l-6 10h20l-6-10" stroke="#c8a882" stroke-width="2"/><circle cx="18" cy="22" r="6" stroke="#c8a882" stroke-width="2"/></svg>
+      </div>
+      <div class="node-name">书签</div>
+    </div>
+    <div class="node-card">
+      <div class="node-icon">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><rect x="6" y="8" width="24" height="20" rx="2" stroke="#c8a882" stroke-width="2"/><path d="M6 14l10 6 14-8" stroke="#c8a882" stroke-width="1.5" opacity="0.5"/></svg>
+      </div>
+      <div class="node-name">图片</div>
+    </div>
+    <div class="node-card">
+      <div class="node-icon">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><rect x="6" y="8" width="24" height="20" rx="2" stroke="#c8a882" stroke-width="2"/><polygon points="15,14 15,24 24,19" fill="#c8a882" opacity="0.5"/></svg>
+      </div>
+      <div class="node-name">视频</div>
+    </div>
+    <div class="node-card">
+      <div class="node-icon">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><rect x="8" y="6" width="20" height="24" rx="2" stroke="#c8a882" stroke-width="2"/><path d="M12 12h12M12 17h10M12 22h8" stroke="#c8a882" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/></svg>
+      </div>
+      <div class="node-name">笔记</div>
+    </div>
+    <div class="node-card">
+      <div class="node-icon">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M10 6h12l6 6v18a2 2 0 01-2 2H10a2 2 0 01-2-2V8a2 2 0 012-2z" stroke="#c8a882" stroke-width="2"/><path d="M22 6v6h6" stroke="#c8a882" stroke-width="2"/></svg>
+      </div>
+      <div class="node-name">文件</div>
+    </div>
+    <div class="node-card">
+      <div class="node-icon">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><rect x="6" y="10" width="24" height="18" rx="2" stroke="#c8a882" stroke-width="2" stroke-dasharray="4 2"/><rect x="10" y="6" width="16" height="4" rx="1" stroke="#c8a882" stroke-width="1.5"/></svg>
+      </div>
+      <div class="node-name">分组</div>
+    </div>
+  </div>
+</section>
+
+<!-- 06 / 关系类型 -->
+<section class="section">
+  <div class="section-label reveal">06 / 关系类型</div>
+  <div class="section-title reveal">8 种语义关系</div>
+  <p class="section-desc reveal">精准描述知识节点之间的逻辑关联</p>
+  <div class="relation-grid reveal">
+    <div class="relation-card">
+      <div class="relation-line" style="background: #c0392b;"></div>
+      <span>因果</span>
+    </div>
+    <div class="relation-card">
+      <div class="relation-line" style="background: #2980b9;"></div>
+      <span>组成</span>
+    </div>
+    <div class="relation-card">
+      <div class="relation-line" style="background: #e67e22;"></div>
+      <span>依赖</span>
+    </div>
+    <div class="relation-card">
+      <div class="relation-line" style="background: #27ae60;"></div>
+      <span>相似</span>
+    </div>
+    <div class="relation-card">
+      <div class="relation-line" style="background: #8e44ad;"></div>
+      <span>矛盾</span>
+    </div>
+    <div class="relation-card">
+      <div class="relation-line" style="background: #16a085;"></div>
+      <span>顺序</span>
+    </div>
+    <div class="relation-card">
+      <div class="relation-line" style="background: #d4a017;"></div>
+      <span>引用</span>
+    </div>
+    <div class="relation-card">
+      <div class="relation-line" style="background: #95a5a6;"></div>
+      <span>相关</span>
+    </div>
+  </div>
+</section>
+
+<!-- 07 / 快速开始 (Dark section) -->
+<section class="dark-section" id="quickstart">
+  <div class="section">
+    <div class="section-label reveal">07 / 快速开始</div>
+    <div class="section-title reveal">三行命令启动项目</div>
+    <p class="section-desc reveal">克隆仓库、安装依赖、启动开发服务器</p>
+    <div class="code-block reveal">
+      <span class="comment"># 克隆仓库并启动</span><br>
+      <span class="cmd">git clone</span> https://github.com/nieao/know-canvas.git<br>
+      <span class="cmd">cd</span> know-canvas && <span class="cmd">npm install</span> && <span class="cmd">npm run dev</span>
+    </div>
+  </div>
+</section>
+
+<!-- 08 / 路线图 -->
+<section class="section">
+  <div class="section-label reveal">08 / 路线图</div>
+  <div class="section-title reveal">发展规划</div>
+  <p class="section-desc reveal">持续迭代，逐步完善知识图谱能力</p>
+  <div class="timeline reveal">
+    <div class="timeline-item current">
+      <h4>v0.1 基础画布 <span class="tag">当前</span></h4>
+      <p>节点创建、拖拽连线、基础布局、文件导入导出</p>
+    </div>
+    <div class="timeline-item">
+      <h4>v0.2 AI 深度分析</h4>
+      <p>概念自动提取、关系推荐、知识摘要生成</p>
+    </div>
+    <div class="timeline-item">
+      <h4>v0.3 协同编辑</h4>
+      <p>多人实时协作、冲突解决、版本历史</p>
+    </div>
+    <div class="timeline-item">
+      <h4>v0.4 插件系统</h4>
+      <p>自定义节点类型、第三方集成、社区扩展</p>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>MIT License &middot; <a href="https://github.com/nieao/know-canvas" target="_blank">GitHub</a></p>
+  <p>Built with React Flow + Zustand + Tailwind CSS</p>
+</footer>
+
+<script>
+  // IntersectionObserver scroll reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
+</script>
+</body>
+</html>

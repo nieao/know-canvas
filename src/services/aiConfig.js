@@ -14,6 +14,18 @@ const KEY = 'know_canvas_ai_config'
 // 预设 provider 模板（用户进设置面板可一键填充）
 export const PROVIDER_PRESETS = [
   {
+    id: 'vps-proxy',
+    label: 'VPS LLM 代理（线上默认）',
+    description: '同源调 https://ha2.digitalvio.shop/canvas/api/llm — 凭据保管在 systemd, 浏览器零配置',
+    type: 'vps-proxy',
+    config: {
+      // 同源相对路径, 让 vite dev 和 vps build 都能直接用
+      // (本地 dev 时浏览器没 nginx, 改 localStorage 指向 http://localhost:17082)
+      proxyUrl: '/canvas/api/llm',
+      model: 'deepseek-chat',
+    },
+  },
+  {
     id: 'claude-cli',
     label: 'Claude CLI 桥（本机）',
     description: '调用本机 claude CLI，零 API 成本；需先启动 server/claude-bridge.js',
@@ -110,7 +122,7 @@ export const PROVIDER_PRESETS = [
 ]
 
 const DEFAULT_CONFIG = {
-  activeProviderId: 'claude-cli',
+  activeProviderId: 'vps-proxy',
   // 每个 provider 的具体配置（key 为 provider id）
   providers: PROVIDER_PRESETS.reduce((acc, p) => {
     acc[p.id] = { ...p.config }

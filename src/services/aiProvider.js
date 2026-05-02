@@ -11,6 +11,15 @@ import { getActiveProvider } from './aiConfig'
 export async function callLLM({ system, prompt, model, temperature = 0.3, jsonMode = false }) {
   const provider = getActiveProvider()
   switch (provider.type) {
+    case 'vps-proxy':
+      return callVpsProxy({
+        system,
+        prompt,
+        model: model || provider.config.model,
+        temperature,
+        jsonMode,
+        proxyUrl: provider.config.proxyUrl,
+      })
     case 'claude-cli':
       return callClaudeCli({ system, prompt, model: model || provider.config.model, bridgeUrl: provider.config.bridgeUrl })
     case 'openai-like':
@@ -33,6 +42,12 @@ export async function callLLM({ system, prompt, model, temperature = 0.3, jsonMo
 export async function checkProvider() {
   const provider = getActiveProvider()
   try {
+    if (provider.type === 'vps-proxy') {
+      const url = (provider.config.proxyUrl || '/canvas/api/llm') + '/health'
+      const resp = await fetch(url, { method: 'GET' })
+      const data = await resp.json().catch(() => ({}))
+      return { ok: resp.ok && data.ok, providerId: provider.id, detail: data }
+    }
     if (provider.type === 'claude-cli') {
       const url = (provider.config.bridgeUrl || 'http://127.0.0.1:18080') + '/health'
       const resp = await fetch(url, { method: 'GET' })
@@ -58,6 +73,27 @@ export async function checkProvider() {
     return { ok: false, providerId: provider.id, detail: e.message }
   }
   return { ok: false, providerId: provider.id, detail: '未知 provider' }
+}
+
+// ============================================================
+// VPS LLM 代理 (同源, 凭据保管在服务端 systemd)
+// 端点: POST {proxyUrl}/chat → { ok, text, model, usage }
+// ============================================================
+
+async function callVpsProxy({ system, prompt, model, temperature, jsonMode, proxyUrl }) {
+  const url = (proxyUrl || '/canvas/api/llm').replace(/\/$/, '') + '/chat'
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ system, prompt, model, temperature, jsonMode }),
+  })
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '')
+    throw new Error(`vps-proxy ${resp.status}: ${text.slice(0, 200) || resp.statusText}`)
+  }
+  const data = await resp.json()
+  if (!data.ok) throw new Error(data.error || 'vps-proxy 返回失败')
+  return data.text || ''
 }
 
 // ============================================================

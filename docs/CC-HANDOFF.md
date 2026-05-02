@@ -49,11 +49,7 @@
 
 ## 当前文件锁
 
-- `server/orchestra-base.js` (新): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 21:00
-- `server/orchestra-dispatcher.js` (新): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 21:00
-- `server/orchestra-hermes-worker.js` (新): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 21:00
-- `docs/orchestra-blackboard-spec.md` (新): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 21:00
-- `server/package.json` (小改 scripts): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 18:30
+(空 — orchestra-cc P0 阶段已 release)
 
 ---
 
@@ -381,3 +377,63 @@ P1 实施时, ui-cc 决定具体后端栈, 选哪个 boss 都接受。
 | 9 | 第三个 cc (Worker / infra) 是否启用? | boss | 待定 |
 
 ---
+
+## 2026-05-02 18:30 [orchestra-cc] P0 完工 + 释放锁
+
+完成了 spec §14 全部 P0 项, 端到端验证通过:
+- `server/orchestra-base.js` — Y.Doc client + observe + CAS 抢锁 + lease 心跳
+- `server/orchestra-dispatcher.js` — ready-set 计算 + lease 超时回收
+- `server/orchestra-hermes-worker.js` — mock + 真 Hermes 双模式 (默认 mock 因没 HERMES_USER)
+- `server/orchestra-e2e-test.js` — `npm run orchestra:e2e` 单 worker 端到端
+- `server/orchestra-race-test.js` — `npm run orchestra:race` 3 副本竞态, 不双跑
+- `docs/orchestra-blackboard-spec.md` — 全文 16 节, 包含启动 demo 的最小操作
+
+测试结果:
+- e2e: draft → running → done + ResultNode 自动建 + edge 自动建 ✓
+- race: 3 worker 抢 5 task, 全部 done, 每 task 恰好 1 个 ResultNode ✓
+
+释放所有文件锁。
+
+仍待 [boss] 决策:
+- orchestra worker 是否进生产服务清单 (加进 systemd? 加进 deploy/)? 我没动 deploy 脚本, 等 GO
+
+未做 (P1, 跟 [ui-cc] 解耦):
+- TaskNode UI 显示 agentMode 切换 (现在 agentMode 字段只能从开发者工具改; ui-cc 何时方便加 UI 都行)
+- claude-cli worker, 飞书 bot worker — 架构已就位, 加个新 worker 类继承 OrchestraWorker 实现 run() 即可
+- 真接 Hermes — 需要 boss 私信 HERMES_PASS
+
+无阻塞, 等下一波指令。
+
+---
+
+## 2026-05-02 22:00 [ui-cc] LLM 链路打通 (VPS 独立 daemon + nginx 同源)
+
+### 背景
+之前 a564e70 上线后 Aletheia 在线上不可用 — 浏览器调本地 claude-bridge:18080 必崩 (Failed to fetch). 测试方法: `https://ha2.digitalvio.shop/canvas/?room=test` 输入"在上海开咖啡馆", 0 节点涌现.
+
+### 解法
+boss 给了 DeepSeek key, 我在 VPS 起独立 daemon + nginx 同源反代:
+
+**VPS 侧** (已部署, 重启 nginx 已 reload):
+- `/opt/know-canvas-llm-proxy/server.js` — Node 独立 daemon (208 行, 0 依赖, rate limit 30/min/ip)
+- `/etc/systemd/system/know-canvas-llm-proxy.service` — chmod 600, key 嵌 Environment= (不进 git/bundle)
+- `LLM_PROXY_PORT=17082`, `LLM_BASE_URL=https://api.deepseek.com/v1`, `LLM_MODEL=deepseek-chat`
+- nginx 加 `location /canvas/api/llm/` block, `auth_basic off`, 反代 17082
+- 验证: `curl https://ha2.digitalvio.shop/canvas/api/llm/chat` → 200 OK ✓
+
+**前端侧** (本次 commit):
+- `src/services/aiConfig.js`: 加 `vps-proxy` provider preset, **默认改为 vps-proxy** (浏览器零配置)
+- `src/services/aiProvider.js`: 加 `callVpsProxy` + `checkProvider` 分支
+- 同源相对路径 `/canvas/api/llm`, vite dev / vps build 都能直接用
+
+### 跟 [orchestra-cc] 的关系
+不冲突. 我没碰 orchestra 任何文件:
+- ✓ 没动 server/orchestra-* (你的全部新文件)
+- ✓ 没动 server/hermes-proxy.js (虽然初稿加过几行, 已 git checkout 还原)
+- ✓ 没动 useCanvasStore / TaskNode / KnowledgeCanvas / BottomAIBar (你刚加 agentMode UI 切换那波)
+
+### 跟 orchestra 的潜在协同
+你的 orchestra worker 调 LLM 时, 也可以走这个 daemon (HTTP 同机调 127.0.0.1:17082/chat) — 比 hermes Kanban worker 快 (无 gateway 启动开销, 无 worker schedule 延迟). 你要用我可以把 daemon 文档化到 docs/.
+
+### 阻塞
+无. 待 60s VPS auto-pull 拉这个 commit 完成, 我跑 Playwright 验证 Aletheia 全链路 + 更新本签字.

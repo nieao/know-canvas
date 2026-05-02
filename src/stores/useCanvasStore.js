@@ -93,6 +93,13 @@ const useCanvasStore = create(
           localStorage.getItem('know_canvas_task_mode')) ||
         'auto',
 
+      // 自动排序方向 — 'TB' 竖排 / 'LR' 横排
+      // 由 SaveExportToolbar 横/竖切换控制, 影响 applyAutoLayout 的 direction 入参
+      layoutDirection:
+        (typeof localStorage !== 'undefined' &&
+          localStorage.getItem('know_canvas_layout_dir')) ||
+        'TB',
+
       // 视口状态，用于定位新节点到视图中心
       viewportCenter: { x: 400, y: 300 },
       viewportZoom: 1,
@@ -100,6 +107,30 @@ const useCanvasStore = create(
       // 更新视口中心（由画布组件在视口变化时调用）
       setViewportCenter: (center, zoom = 1) => {
         set({ viewportCenter: center, viewportZoom: zoom })
+      },
+
+      // 设置自动排序方向 ('TB' | 'LR'), 写回 localStorage
+      setLayoutDirection: (dir) => {
+        const next = dir === 'LR' ? 'LR' : 'TB'
+        if (typeof localStorage !== 'undefined') {
+          try { localStorage.setItem('know_canvas_layout_dir', next) } catch {}
+        }
+        set({ layoutDirection: next })
+      },
+
+      // 一键应用自动布局 — SaveExportToolbar "排序" 按钮调这个
+      // 内部按 layoutDirection 走 dagre (有边) 或分类 (无边)
+      applyAutoLayout: async () => {
+        const { nodes, edges, layoutDirection } = get()
+        if (!nodes || nodes.length === 0) {
+          return { count: 0, direction: layoutDirection }
+        }
+        // 动态 import 避免首屏拖慢 (dagre ~50KB)
+        const mod = await import('../utils/autoLayout')
+        const next = mod.smartLayout(nodes, edges, { direction: layoutDirection })
+        // 用 setNodes 触发 yjsSync (push 不触发引用变化)
+        set({ nodes: next })
+        return { count: next.length, direction: layoutDirection }
       },
 
       // 筛选状态
@@ -128,10 +159,11 @@ const useCanvasStore = create(
           const edge = {
             ...connection,
             id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            type: 'curved',
+            // smoothstep = 带圆角正交折线, 比 curved/default 更"工程图"感
+            type: 'smoothstep',
             animated: false,
             data: { relationType: 'related' },
-            style: { stroke: RELATION_TYPES.RELATED.color },
+            style: { stroke: RELATION_TYPES.RELATED.color, strokeWidth: 1.5 },
           }
           state.edges = addEdge(edge, state.edges)
         })
@@ -583,7 +615,8 @@ const useCanvasStore = create(
             id: `edge-${sourceId}-${targetId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             source: sourceId,
             target: targetId,
-            type: 'curved',
+            // smoothstep = 正交折线, 圆角拐弯, 工程图感
+            type: 'smoothstep',
             animated: relation.style === 'dashed',
             data: {
               relationType: relation.id,
@@ -592,7 +625,7 @@ const useCanvasStore = create(
             },
             style: {
               stroke: relation.color,
-              strokeWidth: 2,
+              strokeWidth: 1.5,
               strokeDasharray: relation.style === 'dashed' ? '5,5' : '0',
             },
             label: displayLabel,
@@ -1188,6 +1221,148 @@ const useCanvasStore = create(
           selectedNodeId: null,
           selectedEdgeId: null,
         })
+      },
+
+      // 加载演示数据：黑金 02 主题配套的"产品方案对抗"演示
+      // 6 节点 + 4 边 — 中心 ontology 节点（AI 知识助手），衍生出技术栈/用户场景两个 concept,
+      // 一个 challenge 反驳延迟问题，一个 task 节点接收灰度任务，一个 note 节点放备注
+      loadDemoBlackgold: () => {
+        const ts = Date.now()
+        const rand = () => Math.random().toString(36).slice(2, 8)
+
+        // 节点 id（一次性生成，便于建边）
+        const idOnto = `onto-${ts}-${rand()}`
+        const idTech = `concept-${ts}-${rand()}`
+        const idScene = `concept-${ts}-${rand()}`
+        const idChall = `challenge-${ts}-${rand()}`
+        const idTask = `task-${ts}-${rand()}`
+        const idNote = `note-${ts}-${rand()}`
+
+        // 竖向树布局：中心 ontology 顶部，左右两个 concept，再下一级是 challenge / task / note
+        const CX = 400        // 中心 X
+        const COL = 320       // 列间距
+        const ROW = 200       // 行间距
+
+        const nodes = [
+          // 1) 中心 ontology — 项目目标
+          {
+            id: idOnto,
+            type: 'ontologyNode',
+            position: { x: CX, y: 0 },
+            data: {
+              variant: 'goal',
+              title: 'AI 知识助手',
+              description: '为团队构建可对抗的知识图谱画布',
+              sentence: '为团队构建可对抗的知识图谱画布',
+              created_at: ts,
+            },
+          },
+          // 2) 左 concept — 技术栈
+          {
+            id: idTech,
+            type: 'conceptNode',
+            position: { x: CX - COL, y: ROW },
+            data: {
+              title: '技术栈',
+              description: 'React 19 + React Flow + Yjs 协同 + Hermes 派单',
+              tags: ['前端', '协同', '智能体'],
+              source: 'demo-blackgold',
+              categoryId: 'core',
+              createdAt: ts,
+            },
+          },
+          // 3) 右 concept — 用户场景
+          {
+            id: idScene,
+            type: 'conceptNode',
+            position: { x: CX + COL, y: ROW },
+            data: {
+              title: '用户场景',
+              description: '研究员/产品/咨询师在画布上做立场对抗与方案推演',
+              tags: ['场景', 'B 端'],
+              source: 'demo-blackgold',
+              categoryId: 'example',
+              createdAt: ts,
+            },
+          },
+          // 4) challenge — 反驳：延迟问题
+          {
+            id: idChall,
+            type: 'challengeNode',
+            position: { x: CX + COL, y: ROW * 2 + 40 },
+            data: {
+              source_node_id: idScene,
+              source_title: '用户场景',
+              angle: '商业可行性',
+              claim: '用户量超过 1w 时延迟暴涨：Yjs 房间一旦超过 50 节点 + 5 协作者，rtt 显著恶化',
+              text: '用户量超过 1w 时延迟暴涨：Yjs 房间一旦超过 50 节点 + 5 协作者，rtt 显著恶化',
+              label: '延迟暴涨风险',
+              tag: 'business',
+              severity: 'high',
+              source_id: idScene,
+              created_at: ts,
+            },
+          },
+          // 5) task — 任务：做 200 用户灰度
+          {
+            id: idTask,
+            type: 'taskNode',
+            position: { x: CX, y: ROW * 2 + 40 },
+            data: {
+              title: '做 200 用户灰度',
+              body: '邀请 200 名内测用户，2 周观察 P95 延迟、节点数分布、对抗触发次数',
+              status: 'draft',
+              checklist: [
+                { id: `ck-${rand()}`, text: '搭建灰度入口（room=beta-*）', done: false },
+                { id: `ck-${rand()}`, text: '埋点 P95 / 节点数 / 对抗触发', done: false },
+                { id: `ck-${rand()}`, text: '出 2 周复盘报告', done: false },
+              ],
+              relatedAgents: ['hermes', 'aletheia'],
+              relatedSkills: ['onto-parser', 'antithesis-engine'],
+              created_at: ts,
+            },
+          },
+          // 6) note — 备注
+          {
+            id: idNote,
+            type: 'noteNode',
+            position: { x: CX - COL, y: ROW * 2 + 40 },
+            data: {
+              content:
+                '演示主题：黑金 02 · 产品方案对抗\n用主题切换按钮 ◆/○ 在白底/黑金间切换',
+            },
+          },
+        ]
+
+        // 4 条边：onto → 2 concept；scene → challenge；onto → task
+        const edges = [
+          {
+            id: `edge-${ts}-1-${rand()}`,
+            source: idOnto,
+            target: idTech,
+            data: { label: '技术' },
+          },
+          {
+            id: `edge-${ts}-2-${rand()}`,
+            source: idOnto,
+            target: idScene,
+            data: { label: '场景' },
+          },
+          {
+            id: `edge-${ts}-3-${rand()}`,
+            source: idScene,
+            target: idChall,
+            data: { label: '反驳', type: 'challenge' },
+          },
+          {
+            id: `edge-${ts}-4-${rand()}`,
+            source: idOnto,
+            target: idTask,
+            data: { label: '任务' },
+          },
+        ]
+
+        set({ nodes, edges, selectedNodeId: null, selectedEdgeId: null })
       },
 
       // 导出画布数据
@@ -1833,9 +2008,10 @@ const useCanvasStore = create(
             id: `edge-${ts}-${rand()}`,
             source: sourceId,
             target: targetId,
-            type: 'curved',
+            // smoothstep = 正交折线, 圆角拐弯
+            type: 'smoothstep',
             data: { relationType: label || '拆解' },
-            style: { stroke: '#c8a882', strokeWidth: 1.5, strokeDasharray: label === '约束' ? '4 4' : undefined },
+            style: { stroke: '#888', strokeWidth: 1.5, strokeDasharray: label === '约束' ? '4 4' : undefined },
           })
         }
         // 兜底: goal → 每个 entity
@@ -1892,9 +2068,10 @@ const useCanvasStore = create(
           id: `edge-${ts}-${rand}`,
           source: ontoNodeId,
           target: taskId,
-          type: 'curved',
+          // smoothstep = 正交折线
+          type: 'smoothstep',
           data: { relationType: '派单' },
-          style: { stroke: '#c8a882', strokeWidth: 2 },
+          style: { stroke: '#c8a882', strokeWidth: 1.5 },
         }
         // 拆成两个 set — 单 set 同时改 nodes+edges 在 immer 下被观察过引用 stable
         // 导致 yjsSync subscribe 的 (nodes === lastNodes) 短路, 永远不 push 到 yjs
@@ -1950,7 +2127,8 @@ const useCanvasStore = create(
             id: `edge-${ts}-${rand()}`,
             source: ontoNodeId,
             target: cid,
-            type: 'curved',
+            // smoothstep = 正交折线, 圆角拐弯
+            type: 'smoothstep',
             data: { relationType: '反驳' },
             style: {
               stroke: c.severity === 'high' ? '#b27c8b' : c.severity === 'medium' ? '#c8a882' : '#888',
@@ -1997,10 +2175,11 @@ const useCanvasStore = create(
             id: `edge-${Date.now()}-${rand}`,
             source: sourceNodeId,
             target: resultNodeId,
-            type: 'curved',
+            // smoothstep = 正交折线, 比 curved 更规整
+            type: 'smoothstep',
             animated: false,
             data: { relationType: 'reference' },
-            style: { stroke: '#8b9e7c', strokeWidth: 2 },
+            style: { stroke: '#8b9e7c', strokeWidth: 1.5 },
           })
         })
       },
@@ -2015,6 +2194,7 @@ const useCanvasStore = create(
         showMiniMap: state.showMiniMap,
         showChineseLabels: state.showChineseLabels,
         taskMode: state.taskMode,
+        layoutDirection: state.layoutDirection,
       }),
     }
   )

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
+    "dagre": "^0.8.5",
     "html-to-image": "^1.11.13",
     "immer": "^11.1.3",
     "jspdf": "^3.0.4",

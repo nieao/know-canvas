@@ -1,0 +1,124 @@
+/* 黑金极简02 — 适用于 .theme-blackgold body 子树
+ * 通过覆盖 :root 的 CSS variables 让所有用 var(--xxx) 的节点自动反色，
+ * 节点 .jsx 文件无需改动。配套 react-flow 内部 class 的少量样式覆盖。
+ */
+
+.theme-blackgold {
+  /* 反转：文字白底深 */
+  --black: #fafafa;
+  --dark: #f0f0f0;
+  --gray-900: #d0d0d0;
+  --gray-700: #aaa;
+  --gray-500: #888;
+  --gray-300: #555;
+  --gray-100: #2a2a2a;     /* 边框深灰 */
+  --white: #0a0a0a;        /* 背景全黑 */
+
+  /* 暖色 → 金色 */
+  --warm: #d4af37;
+  --warm-light: #e8c66c;
+  --warm-bg: rgba(212, 175, 55, 0.08);
+
+  background: #0a0a0a;
+  color: #f0f0f0;
+}
+
+/* react-flow 画布背景 */
+.theme-blackgold .react-flow {
+  background: #0a0a0a;
+}
+.theme-blackgold .react-flow__renderer {
+  background: #0a0a0a;
+}
+.theme-blackgold .react-flow__background {
+  background: #0a0a0a !important;
+}
+.theme-blackgold .react-flow__background .react-flow__background-pattern {
+  color: #2a2a2a;
+}
+
+/* 连线 — 金色 */
+.theme-blackgold .react-flow__edge-path {
+  stroke: #d4af37 !important;
+  stroke-width: 1.2;
+}
+.theme-blackgold .react-flow__edge.selected .react-flow__edge-path,
+.theme-blackgold .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #e8c66c !important;
+  stroke-width: 1.6;
+}
+.theme-blackgold .react-flow__edge-text {
+  fill: #d4af37;
+}
+.theme-blackgold .react-flow__edge-textbg {
+  fill: #141414;
+}
+
+/* 锚点（handle） */
+.theme-blackgold .react-flow__handle {
+  background: #d4af37;
+  border: 1px solid #0a0a0a;
+}
+
+/* 小地图 */
+.theme-blackgold .react-flow__minimap {
+  background: rgba(20, 20, 20, 0.95) !important;
+  border: 1px solid #d4af37 !important;
+}
+.theme-blackgold .react-flow__minimap-mask {
+  fill: rgba(212, 175, 55, 0.15);
+}
+
+/* 控制按钮 */
+.theme-blackgold .react-flow__controls {
+  border: 1px solid #2a2a2a;
+}
+.theme-blackgold .react-flow__controls button {
+  background: #1a1a1a;
+  color: #d4af37;
+  border-color: #2a2a2a;
+  fill: #d4af37;
+}
+.theme-blackgold .react-flow__controls button:hover {
+  background: #2a2a2a;
+}
+
+/* 节点 — 统一深卡片样式 */
+.theme-blackgold .react-flow__node {
+  background: #141414 !important;
+  border: 1px solid #2a2a2a !important;
+  color: #f0f0f0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+.theme-blackgold .react-flow__node.selected,
+.theme-blackgold .react-flow__node:hover {
+  border-color: #d4af37 !important;
+  box-shadow: 0 4px 24px rgba(212, 175, 55, 0.25);
+}
+
+/* 节点内部标题/正文文字色微调 */
+.theme-blackgold .react-flow__node h1,
+.theme-blackgold .react-flow__node h2,
+.theme-blackgold .react-flow__node h3,
+.theme-blackgold .react-flow__node h4 {
+  color: #f0f0f0;
+}
+.theme-blackgold .react-flow__node p,
+.theme-blackgold .react-flow__node span {
+  color: #aaa;
+}
+
+/* 滚动条金色化 */
+.theme-blackgold ::-webkit-scrollbar {
+  width: 6px;
+}
+.theme-blackgold ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.theme-blackgold ::-webkit-scrollbar-thumb {
+  background: #d4af37;
+  border-radius: 3px;
+}
+.theme-blackgold ::-webkit-scrollbar-thumb:hover {
+  background: #e8c66c;
+}

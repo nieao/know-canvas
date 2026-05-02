@@ -6,6 +6,7 @@
  * 拆出来的目的：让 KnowledgeGraph 只引一个组件，UI 细节内聚在协作子系统里。
  */
 
+import { useEffect, useState } from 'react'
 import { RemoteUserList } from './PresenceLayer'
 import useCanvasStore from '../stores/useCanvasStore'
 
@@ -15,6 +16,44 @@ const TASK_MODES = [
   { value: 'local', label: '本地' },
   { value: 'hermes', label: 'Hermes' },
 ]
+
+// 主题切换：默认（建筑极简 · 白底）↔ 黑金极简02（深底金线）
+// 仅 toggle body 上的 .theme-blackgold class，让 CSS variables 自动反色
+function ThemeToggle() {
+  const [theme, setTheme] = useState(() =>
+    typeof window !== 'undefined'
+      ? localStorage.getItem('know_canvas_theme') || 'default'
+      : 'default'
+  )
+
+  useEffect(() => {
+    document.body.classList.remove('theme-blackgold')
+    if (theme === 'blackgold') document.body.classList.add('theme-blackgold')
+    localStorage.setItem('know_canvas_theme', theme)
+  }, [theme])
+
+  const isGold = theme === 'blackgold'
+  const next = isGold ? 'default' : 'blackgold'
+
+  return (
+    <button
+      onClick={() => setTheme(next)}
+      title={`切换到 ${isGold ? '极简白' : '黑金 02'}`}
+      className="px-2.5 py-1.5 rounded-lg shadow-sm transition-colors"
+      style={{
+        backgroundColor: isGold ? '#0a0a0a' : 'rgba(250,250,250,0.95)',
+        border: `1px solid ${isGold ? '#d4af37' : '#e8e8e8'}`,
+        color: isGold ? '#d4af37' : '#888',
+        backdropFilter: 'blur(8px)',
+        fontSize: '13px',
+        lineHeight: 1,
+        minWidth: '32px',
+      }}
+    >
+      {isGold ? '◆' : '○'}
+    </button>
+  )
+}
 
 // 三段式任务模式开关 (segmented control) — 选中 warm-bg/warm，非选中透明/灰
 function TaskModeSwitch() {
@@ -74,6 +113,7 @@ export default function CollabHeader({ room, username, onOpenAiSettings, onExit 
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </button>
+      <ThemeToggle />
       <TaskModeSwitch />
       <RemoteUserList />
       <div

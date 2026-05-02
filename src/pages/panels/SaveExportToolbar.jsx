@@ -1,10 +1,11 @@
 /**
  * SaveExportToolbar - 保存、导入、导出工具栏
- * 功能：保存 JSON、导入 JSON、导出 PNG/PDF/Markdown/JSON-LD
+ * 功能：保存 JSON、导入 JSON、导出 PNG/PDF/Markdown/JSON-LD、一键自动排序 (横/竖)
  */
 
 import { useState, useRef } from 'react'
 import useCanvasStore from '../../stores/useCanvasStore'
+import { logAction } from '../../utils/actionLog'
 
 function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCanvasData }) {
   const [showSaveMenu, setShowSaveMenu] = useState(false)
@@ -12,7 +13,44 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [isLayouting, setIsLayouting] = useState(false)
   const fileInputRef = useRef(null)
+
+  // 自动排序方向 — TB(竖) | LR(横)
+  const layoutDirection = useCanvasStore((s) => s.layoutDirection)
+  const setLayoutDirection = useCanvasStore((s) => s.setLayoutDirection)
+  const applyAutoLayout = useCanvasStore((s) => s.applyAutoLayout)
+
+  // 一键自动排序 — 按当前方向 + 节点连边算出新位置
+  const handleAutoLayout = async () => {
+    if (isLayouting) return
+    setIsLayouting(true)
+    try {
+      const result = await applyAutoLayout()
+      logAction('toolbar.autoLayout', {
+        direction: result.direction,
+        nodeCount: result.count,
+      })
+      // 简短提示, 不打扰
+      const label = result.direction === 'LR' ? '横排' : '竖排'
+      if (result.count > 0) {
+        // 用 console + 临时 toast 替代 alert (alert 会打断协作流)
+        console.log(`[自动排序] 已按 ${label} 重新布局 ${result.count} 个节点`)
+      }
+    } catch (e) {
+      console.error('自动排序失败:', e)
+      alert('自动排序失败：' + (e?.message || e))
+    }
+    setIsLayouting(false)
+  }
+
+  // 切换横竖排
+  const handleToggleDirection = (dir) => {
+    if (dir !== layoutDirection) {
+      setLayoutDirection(dir)
+      logAction('toolbar.setLayoutDirection', { direction: dir })
+    }
+  }
 
   // 清空画布（带二次确认）
   const handleClearCanvas = () => {
@@ -23,6 +61,11 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
     }
     useCanvasStore.getState().clearCanvas()
     setConfirmClear(false)
+  }
+
+  // 加载黑金 02 演示数据：6 节点 + 4 边的"产品方案对抗"模板
+  const handleLoadDemo = () => {
+    useCanvasStore.getState().loadDemoBlackgold()
   }
 
   // 下载文件辅助函数
@@ -331,6 +374,77 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
         />
       </div>
 
+      {/* 横竖切换分段按钮 (像 iOS Segmented Control) */}
+      <div
+        className="flex rounded-lg overflow-hidden shadow-sm"
+        style={{ border: '1px solid var(--gray-100)', background: 'var(--white)' }}
+        title="自动排序方向"
+      >
+        <button
+          onClick={() => handleToggleDirection('LR')}
+          className="px-3 py-2 text-xs font-medium transition-colors duration-200"
+          style={{
+            background: layoutDirection === 'LR' ? 'var(--warm-bg)' : 'transparent',
+            color: layoutDirection === 'LR' ? 'var(--warm)' : 'var(--gray-700)',
+            borderRight: '1px solid var(--gray-100)',
+          }}
+          title="横排 (Left to Right)"
+        >
+          <span className="flex items-center gap-1">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+            横排
+          </span>
+        </button>
+        <button
+          onClick={() => handleToggleDirection('TB')}
+          className="px-3 py-2 text-xs font-medium transition-colors duration-200"
+          style={{
+            background: layoutDirection === 'TB' ? 'var(--warm-bg)' : 'transparent',
+            color: layoutDirection === 'TB' ? 'var(--warm)' : 'var(--gray-700)',
+          }}
+          title="竖排 (Top to Bottom)"
+        >
+          <span className="flex items-center gap-1">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 5v14M6 13l6 6 6-6" />
+            </svg>
+            竖排
+          </span>
+        </button>
+      </div>
+
+      {/* 一键自动排序按钮 (smartLayout: 有边走 dagre, 无边走分类) */}
+      <div className="relative">
+        <button
+          onClick={handleAutoLayout}
+          disabled={isLayouting}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover disabled:opacity-50"
+          style={{
+            background: 'var(--white)',
+            border: '1px solid var(--gray-100)',
+            color: 'var(--dark)',
+          }}
+          onMouseEnter={(e) => { if (!isLayouting) e.currentTarget.style.borderColor = 'var(--warm)' }}
+          onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--gray-100)'}
+          title={`自动排序 (${layoutDirection === 'LR' ? '横排' : '竖排'}) — 解遮挡、规整化`}
+        >
+          {isLayouting ? (
+            <svg className="w-4 h-4 animate-spin" style={{ color: 'var(--warm)' }} fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {/* 网格 + 箭头, 寓意"重新排列" */}
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h6M4 12h6M4 18h6M14 4l4 4m0 0l-4 4m4-4h-4M14 16l4-4m0 0l-4-4m4 4h-4" />
+            </svg>
+          )}
+          <span className="text-xs font-medium">{isLayouting ? '排序中...' : '排序'}</span>
+        </button>
+      </div>
+
       {/* 清空画布按钮（二次确认） */}
       <div className="relative">
         <button
@@ -349,6 +463,27 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
           <span className="text-xs font-medium">{confirmClear ? '再点确认' : '清空'}</span>
+        </button>
+      </div>
+
+      {/* 加载 Demo 按钮 — 金色钻石图标，调 loadDemoBlackgold 预填演示数据 */}
+      <div className="relative">
+        <button
+          onClick={handleLoadDemo}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover"
+          style={{
+            background: 'var(--white)',
+            border: '1px solid var(--gray-100)',
+            color: 'var(--dark)',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#d4af37')}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--gray-100)')}
+          title="加载黑金 02 演示模板（6 节点 + 4 边的产品方案对抗）"
+        >
+          <svg className="w-4 h-4" style={{ color: '#d4af37' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          </svg>
+          <span className="text-xs font-medium">加载 Demo</span>
         </button>
       </div>
 

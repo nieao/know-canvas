@@ -78,11 +78,12 @@ const getFileExtension = (filename) => filename?.split('.').pop()?.toLowerCase()
 const isImageFile = (filename) => IMAGE_EXTENSIONS.includes(getFileExtension(filename))
 const isVideoFile = (filename) => VIDEO_EXTENSIONS.includes(getFileExtension(filename))
 
-// 默认连线配置
+// 默认连线配置 — smoothstep = 正交折线带圆角, 比贝塞尔更"工程图"
+// 旧房间里残留的 type:'curved' 边仍由下方 edgeTypes.curved 注册渲染, 不破坏向后兼容
 const defaultEdgeOptions = {
-  type: 'curved',
+  type: 'smoothstep',
   animated: false,
-  style: { strokeWidth: 2 },
+  style: { stroke: '#888', strokeWidth: 1.5 },
 }
 
 // 网格配置
@@ -635,6 +636,7 @@ function KnowledgeCanvasInner({
         deleteKeyCode={deleteKeyCode}
         panOnDrag={isPanMode ? [0] : [1]}
         selectionOnDrag={!isPanMode}
+        selectNodesOnDrag={false}
         multiSelectionKeyCode="Shift"
         fitView
         fitViewOptions={{ padding: 0.2 }}

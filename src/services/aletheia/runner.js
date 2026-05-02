@@ -158,7 +158,7 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
     }
     const newEdge = {
       id: `edge-${ts}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-      source: c.source, target: cid, type: 'curved', label: '反驳',
+      source: c.source, target: cid, type: 'smoothstep', label: '反驳',
       data: { relationType: '反驳' },
       style: { stroke: sevColor(c.severity), strokeWidth: 1.5, strokeDasharray: '4 4' },
     }
@@ -197,7 +197,7 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
   }
   const synEdges = [...proposers.map((p) => p.id), ...newChallengeIds].map((srcId, idx) => ({
     id: `edge-${ts}-syn-${idx}-${Math.random().toString(36).slice(2, 5)}`,
-    source: srcId, target: synId, type: 'curved', label: '吸收',
+    source: srcId, target: synId, type: 'smoothstep', label: '吸收',
     data: { relationType: '吸收' },
     style: { stroke: '#a07cb8', strokeWidth: 1, strokeDasharray: '2 4', opacity: 0.6 },
   }))

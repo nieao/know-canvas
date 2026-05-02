@@ -11,6 +11,11 @@ const MICROLINK_API = 'https://api.microlink.io'
 const BILIBILI_API = 'https://api.bilibili.com/x/web-interface/view'
 const CORS_PROXY = 'https://api.allorigins.win/raw?url='
 
+// noembed — oEmbed 包装器，浏览器原生 fetch CORS 友好
+// 支持 YouTube / Vimeo / Twitter / SoundCloud / Vine / Flickr / Slideshare 等 50+ 平台
+// 参考 ~/.claude/skills/absorber-youtube/helpers.py 的 fetch_video_metadata 思路（浏览器版替代 yt-dlp）
+const NOEMBED_API = 'https://noembed.com/embed'
+
 /**
  * 获取域名 favicon URL
  * @param {string} url - 页面 URL
@@ -83,6 +88,44 @@ async function fetchBilibiliMetadata(url) {
 }
 
 /**
+ * 通过 noembed (oEmbed 协议) 拉视频元数据
+ * 参考 absorber-youtube `fetch_video_metadata` 的等价浏览器版本
+ * 支持 YouTube / Vimeo / TikTok / 抖音 / Twitter / SoundCloud 等
+ * @param {string} url - 视频页面 URL
+ * @returns {Promise<Object|null>} - 元数据或 null
+ */
+async function fetchOembedMetadata(url) {
+  try {
+    const resp = await fetch(`${NOEMBED_API}?url=${encodeURIComponent(url)}`)
+    if (!resp.ok) return null
+    const data = await resp.json()
+    // noembed 解析失败时会回 { error: '...' }，没有 title 也算失败
+    if (!data || data.error || !data.title) return null
+
+    // 缩略图：noembed 给 thumbnail_url
+    let thumb = data.thumbnail_url || ''
+    // YouTube 的高清缩略图：把 hqdefault.jpg 升级到 maxresdefault.jpg（如果可用）
+    if (thumb && thumb.includes('ytimg.com')) {
+      thumb = thumb.replace(/\/(hqdefault|mqdefault|sddefault)\.jpg/, '/maxresdefault.jpg')
+    }
+
+    // 描述：noembed 通常没 description，用 author_name 兜底
+    const desc = data.author_name ? `作者：${data.author_name}` : ''
+
+    return {
+      title: data.title,
+      description: desc,
+      image: thumb,
+      favicon: getFaviconUrl(url),
+      screenshot: thumb,
+    }
+  } catch (e) {
+    console.warn('noembed 抓取失败:', e?.message || e)
+    return null
+  }
+}
+
+/**
  * 检查图片是否满足最小宽度要求
  * @param {string} imageUrl - 图片 URL
  * @param {number} minWidth - 最小宽度（像素）
@@ -117,7 +160,7 @@ export async function fetchLinkMetadata(url) {
   }
 
   // 检测是否为视频 URL
-  const { isVideo } = detectVideoUrl(url)
+  const { isVideo, platform } = detectVideoUrl(url)
 
   // Bilibili 视频优先使用官方 API
   if (url.includes('bilibili.com') && url.match(/BV[\w]+/)) {
@@ -125,6 +168,15 @@ export async function fetchLinkMetadata(url) {
     if (bilibiliMeta) {
       return bilibiliMeta
     }
+  }
+
+  // 视频平台：先走 noembed (oEmbed) — 比 Microlink 准很多 (拿到精确标题 + 高清缩略图)
+  // 参考 absorber-youtube/helpers.py 的 fetch_video_metadata 思路 (yt-dlp 的浏览器替代)
+  // 覆盖 YouTube / Vimeo / TikTok / 抖音 / Twitter / SoundCloud 等 noembed 支持的平台
+  if (isVideo && platform && platform !== 'bilibili') {
+    const oembed = await fetchOembedMetadata(url)
+    if (oembed) return oembed
+    // 失败继续往下兜底 Microlink
   }
 
   // 使用 Microlink API 获取元数据

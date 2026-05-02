@@ -15,6 +15,8 @@
 
 import { useState, useEffect } from 'react'
 import { useAletheiaStore } from '../../stores/useAletheiaStore'
+import useCanvasStore from '../../stores/useCanvasStore'
+import { runAletheiaCycle } from '../../services/aletheia/runner'
 import HealthScoreRing from './HealthScoreRing'
 import ImpossibleTriangle from './ImpossibleTriangle'
 import LoopStatusBar from './LoopStatusBar'
@@ -27,6 +29,9 @@ export default function AletheiaLayer() {
   const active = useAletheiaStore((s) => s?.aletheiaActive ?? false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [actionPlanOpen, setActionPlanOpen] = useState(false)
+  // 推导循环状态 — 跑一轮反驳 + 综合时的实时进度提示
+  const [running, setRunning] = useState(false)
+  const [progressMsg, setProgressMsg] = useState('')
 
   // 监听 SynthesisNode 触发的 "查看完整方案" 事件
   useEffect(() => {
@@ -34,6 +39,32 @@ export default function AletheiaLayer() {
     window.addEventListener('aletheia:show-action-plan', onShowPlan)
     return () => window.removeEventListener('aletheia:show-action-plan', onShowPlan)
   }, [])
+
+  // 触发一轮 Aletheia 推导 — 扫画布 → LLM 反驳 → ChallengeNode 一条条长出 → 综合
+  const handleRunCycle = async () => {
+    if (running) return
+    setRunning(true)
+    setProgressMsg('启动 Aletheia 推导...')
+    const store = useCanvasStore.getState()
+    try {
+      await runAletheiaCycle({
+        canvasNodes: store.nodes,
+        canvasEdges: store.edges,
+        store,
+        onProgress: (p) => {
+          const tag = p?.stage ? `[${p.stage}]` : ''
+          const msg = p?.message
+            || `${p?.stage || ''} ${p?.count != null ? p.count + '/' + p.total : ''} ${p?.current || ''}`.trim()
+          setProgressMsg(`${tag} ${msg}`.trim())
+        },
+      })
+    } catch (e) {
+      setProgressMsg(`推导失败: ${e?.message || e}`)
+    } finally {
+      setRunning(false)
+      setTimeout(() => setProgressMsg(''), 5000)
+    }
+  }
 
   // 默认 (未激活) — 只显示右下角浮动入口
   if (!active) {
@@ -72,18 +103,63 @@ export default function AletheiaLayer() {
             </div>
           </div>
         </div>
-        <button
-          onClick={() => useAletheiaStore.getState().toggleAletheia()}
-          className="px-3 py-1.5 text-xs rounded transition-colors"
+        <div className="flex items-center gap-2">
+          {/* 开始推导 — 对画布跑一轮反驳 + 综合 */}
+          <button
+            onClick={handleRunCycle}
+            disabled={running}
+            className="px-3 py-1.5 text-xs rounded transition-all"
+            style={{
+              color: running ? 'rgba(250,250,250,0.55)' : '#1a1a1a',
+              background: running ? 'transparent' : '#c8a882',
+              border: running ? '1px solid rgba(200,168,130,0.45)' : '1px solid #c8a882',
+              letterSpacing: '0.15em',
+              cursor: running ? 'wait' : 'pointer',
+              fontWeight: 500,
+            }}
+            title="扫描画布提议 → 调反驳 agent 产出 ChallengeNode → 综合方案"
+          >
+            {running ? '推导中...' : '⚔ 对画布跑一轮'}
+          </button>
+          <button
+            onClick={() => useAletheiaStore.getState().toggleAletheia()}
+            className="px-3 py-1.5 text-xs rounded transition-colors"
+            style={{
+              color: '#fafafa',
+              border: '1px solid rgba(250,250,250,0.3)',
+              letterSpacing: '0.15em',
+            }}
+          >
+            关闭 Aletheia
+          </button>
+        </div>
+      </div>
+
+      {/* 推导进度提示条 — 只在 progressMsg 非空时显示 */}
+      {progressMsg && (
+        <div
+          className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded text-xs"
           style={{
+            background: 'rgba(26,26,26,0.92)',
             color: '#fafafa',
-            border: '1px solid rgba(250,250,250,0.3)',
-            letterSpacing: '0.15em',
+            border: '1px solid #c8a882',
+            backdropFilter: 'blur(12px)',
+            letterSpacing: '0.05em',
+            pointerEvents: 'auto',
+            maxWidth: '70vw',
+            animation: 'aletheia-progress-pulse 1.6s ease-in-out infinite',
+            boxShadow: '0 4px 18px rgba(200,168,130,0.18)',
           }}
         >
-          关闭 Aletheia
-        </button>
-      </div>
+          {progressMsg}
+        </div>
+      )}
+      <style>{`
+        @keyframes aletheia-progress-pulse {
+          0%, 100% { box-shadow: 0 4px 18px rgba(200,168,130,0.18); }
+          50%      { box-shadow: 0 4px 24px rgba(200,168,130,0.42); }
+        }
+      `}</style>
 
       {/* 顶部场景切换 (在 banner 下) */}
       <div

@@ -15,6 +15,8 @@ import { useCollabSession } from '../collab/useCollabSession'
 import CollabHeader from '../collab/CollabHeader'
 import { CursorAwarenessLayer, useRemoteSelections } from '../collab/PresenceLayer'
 import AiSettingsPanel from '../components/AiSettingsPanel'
+import CliMonitor from '../components/CliMonitor'
+import { pushLog } from '../utils/logBus'
 
 // 文件类型扩展名分组
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp']
@@ -453,8 +455,8 @@ export default function KnowledgeGraph() {
           onExit={exitSession}
         />
 
-        {/* 面板切换按钮 */}
-        <div className="absolute top-4 left-4 z-30 flex gap-2">
+        {/* 面板切换按钮 + ALETHEIA 品牌名 */}
+        <div className="absolute top-4 left-4 z-30 flex items-center gap-3">
           <button
             onClick={() => setShowLeftPanel(prev => !prev)}
             className="p-2 rounded-lg shadow-sm transition-all duration-300"
@@ -469,6 +471,28 @@ export default function KnowledgeGraph() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
             </svg>
           </button>
+          {/* ALETHEIA 品牌标识 */}
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg shadow-sm"
+            style={{
+              background: 'rgba(250,250,250,0.95)',
+              border: '1px solid #e8e8e8',
+              backdropFilter: 'blur(8px)',
+              fontFamily: '"Noto Serif SC", Georgia, serif',
+            }}
+            title="ALETHEIA — 逻辑对抗决策引擎"
+          >
+            <span
+              className="inline-block w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: '#c8a882' }}
+            />
+            <span
+              className="text-xs font-medium"
+              style={{ color: '#1a1a1a', letterSpacing: '0.35em' }}
+            >
+              ALETHEIA
+            </span>
+          </div>
         </div>
 
         <div className="absolute top-4 right-4 z-30 flex gap-2">
@@ -530,6 +554,7 @@ export default function KnowledgeGraph() {
 
       <AiSettingsPanel open={showAiSettings} onClose={() => setShowAiSettings(false)} />
       <ShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+      <CliMonitor />
     </div>
   )
 }

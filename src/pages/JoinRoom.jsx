@@ -35,7 +35,7 @@ export default function JoinRoom() {
 
   // 没用户名先聚焦输入框
   useEffect(() => {
-    document.title = 'Know Canvas — 进入协作'
+    document.title = 'ALETHEIA — 进入协作'
   }, [])
 
   const canJoin = name.trim().length > 0 && room.trim().length > 0
@@ -101,7 +101,7 @@ export default function JoinRoom() {
           className="text-xs font-medium mb-3"
           style={{ color: '#c8a882', letterSpacing: '0.35em' }}
         >
-          KNOW / CANVAS
+          ALETHEIA
         </div>
 
         <h1

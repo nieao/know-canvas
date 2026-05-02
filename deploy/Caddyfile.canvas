@@ -29,7 +29,32 @@ ha2.digitalvio.shop {
         }
     }
 
-    # ↑ 上述两个 handle 块要放在 Hermes 已有的 reverse_proxy / file_server 块之前，
+    # === Orchestra HTTP API（Hermes 派单 + 任务查询） ===
+    # 浏览器 fetch /canvas/api/orchestra/inject → 反代到 VPS 本机 17082
+    # 必须先在 VPS 起 orchestra-http daemon (npm run orchestra:http) 才会真生效
+    handle_path /canvas/api/orchestra/* {
+        reverse_proxy 127.0.0.1:17082 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # === Action Log 服务（左右面板用户动作记录） ===
+    # 浏览器 POST /canvas/api/log → 反代到 18091, 写 logs/actions-YYYYMMDD.jsonl
+    handle_path /canvas/api/log {
+        reverse_proxy 127.0.0.1:18091/log {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+    handle_path /canvas/api/log/* {
+        reverse_proxy 127.0.0.1:18091 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # ↑ 上述 handle 块要放在 Hermes 已有的 reverse_proxy / file_server 块之前，
     #   因为 Caddy 按顺序匹配；如有疑问 sudo caddy validate /etc/caddy/Caddyfile 看看
     # ↓ 这里保留 Hermes 已有的所有规则，不要删
     # reverse_proxy ... (Hermes API)

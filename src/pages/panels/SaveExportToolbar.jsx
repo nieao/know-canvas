@@ -4,13 +4,26 @@
  */
 
 import { useState, useRef } from 'react'
+import useCanvasStore from '../../stores/useCanvasStore'
 
 function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCanvasData }) {
   const [showSaveMenu, setShowSaveMenu] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
   const fileInputRef = useRef(null)
+
+  // 清空画布（带二次确认）
+  const handleClearCanvas = () => {
+    if (!confirmClear) {
+      setConfirmClear(true)
+      setTimeout(() => setConfirmClear(false), 3000)
+      return
+    }
+    useCanvasStore.getState().clearCanvas()
+    setConfirmClear(false)
+  }
 
   // 下载文件辅助函数
   const downloadFile = (content, filename, type) => {
@@ -316,6 +329,27 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
           onChange={handleImportJSON}
           className="hidden"
         />
+      </div>
+
+      {/* 清空画布按钮（二次确认） */}
+      <div className="relative">
+        <button
+          onClick={handleClearCanvas}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover"
+          style={{
+            background: confirmClear ? '#9b3a3a' : 'var(--white)',
+            border: `1px solid ${confirmClear ? '#9b3a3a' : 'var(--gray-100)'}`,
+            color: confirmClear ? '#fafafa' : 'var(--dark)',
+          }}
+          onMouseEnter={(e) => { if (!confirmClear) e.currentTarget.style.borderColor = '#9b3a3a' }}
+          onMouseLeave={(e) => { if (!confirmClear) e.currentTarget.style.borderColor = 'var(--gray-100)' }}
+          title={confirmClear ? '再点一次确认清空' : '清空画布所有节点和连线（不可撤销）'}
+        >
+          <svg className="w-4 h-4" style={{ color: confirmClear ? '#fafafa' : '#9b3a3a' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          <span className="text-xs font-medium">{confirmClear ? '再点确认' : '清空'}</span>
+        </button>
       </div>
 
       {/* 点击外部关闭菜单 */}

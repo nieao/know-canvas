@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef } from 'react'
+import { logAction } from '../../utils/actionLog'
 
 // 文件类型图标映射
 const FILE_ICONS = {
@@ -73,6 +74,7 @@ function LeftPanel({ sources = [], onAddSource, onRemoveSource, onSelectSource, 
         content,
         addedAt: new Date().toISOString(),
       })
+      logAction('leftpanel.addSource', { name: file.name, ext, size: file.size })
     }
     // 重置
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -90,20 +92,23 @@ function LeftPanel({ sources = [], onAddSource, onRemoveSource, onSelectSource, 
       url: urlInput.trim(),
       addedAt: new Date().toISOString(),
     })
+    logAction('leftpanel.addSource', { name: urlInput.trim(), ext: 'url', size: 0 })
     setUrlInput('')
   }
 
   // 处理文本片段导入
   const handleTextImport = () => {
     if (!textInput.trim()) return
+    const textName = textTitle.trim() || `文本片段 ${new Date().toLocaleTimeString()}`
     onAddSource?.({
       id: `text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       type: 'text',
-      name: textTitle.trim() || `文本片段 ${new Date().toLocaleTimeString()}`,
+      name: textName,
       ext: 'text',
       content: textInput.trim(),
       addedAt: new Date().toISOString(),
     })
+    logAction('leftpanel.addSource', { name: textName, ext: 'text', size: textInput.trim().length })
     setTextInput('')
     setTextTitle('')
   }
@@ -222,7 +227,7 @@ function LeftPanel({ sources = [], onAddSource, onRemoveSource, onSelectSource, 
                     key={source.id}
                     draggable
                     onDragStart={(e) => handleDragStart(e, source)}
-                    onClick={() => onSelectSource?.(source)}
+                    onClick={() => { logAction('leftpanel.selectSource', { id: source.id, name: source.name }); onSelectSource?.(source) }}
                     className="group flex items-center gap-2.5 px-3 py-2.5 rounded-md cursor-pointer transition-all duration-300 warm-top-line overflow-hidden"
                     style={{
                       border: '1px solid var(--gray-100)',
@@ -252,7 +257,7 @@ function LeftPanel({ sources = [], onAddSource, onRemoveSource, onSelectSource, 
                     </div>
                     {/* 删除按钮 */}
                     <button
-                      onClick={(e) => { e.stopPropagation(); onRemoveSource?.(source.id) }}
+                      onClick={(e) => { e.stopPropagation(); logAction('leftpanel.removeSource', { id: source.id, name: source.name }); onRemoveSource?.(source.id) }}
                       className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded transition-all duration-300"
                       style={{ color: 'var(--gray-500)' }}
                       onMouseEnter={(e) => e.currentTarget.style.color = 'var(--black)'}

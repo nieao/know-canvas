@@ -11,6 +11,9 @@ e2e/.tmp
 server/yjs-data/
 server/node_modules/
 
+# action-log-server 输出
+logs/
+
 # 临时日志
 *.log
 

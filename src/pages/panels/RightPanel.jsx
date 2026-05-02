@@ -7,6 +7,7 @@ import { useState } from 'react'
 import useCanvasStore from '../../stores/useCanvasStore'
 import { routeTask } from '../../services/taskRouter'
 import { runLocalTask } from '../../services/localTaskExecutor'
+import { logAction } from '../../utils/actionLog'
 
 // 关系类型选项
 const RELATION_TYPES = [
@@ -58,6 +59,7 @@ function RightPanel({
   const saveEdit = () => {
     if (editingField && selectedNode) {
       onUpdateNode?.(selectedNode.id, { [editingField]: editValue })
+      logAction('rightpanel.editField', { nodeId: selectedNode.id, field: editingField, valueLen: (editValue || '').length })
     }
     setEditingField(null)
     setEditValue('')
@@ -69,6 +71,7 @@ function RightPanel({
     const currentTags = selectedNode.data?.tags || []
     if (!currentTags.includes(newTag.trim())) {
       onUpdateNode?.(selectedNode.id, { tags: [...currentTags, newTag.trim()] })
+      logAction('rightpanel.addTag', { nodeId: selectedNode.id, tag: newTag.trim() })
     }
     setNewTag('')
   }
@@ -78,12 +81,14 @@ function RightPanel({
     if (!selectedNode) return
     const currentTags = selectedNode.data?.tags || []
     onUpdateNode?.(selectedNode.id, { tags: currentTags.filter(t => t !== tag) })
+    logAction('rightpanel.removeTag', { nodeId: selectedNode.id, tag })
   }
 
   // 设置分类
   const handleSetCategory = (categoryId) => {
     if (!selectedNode) return
     onUpdateNode?.(selectedNode.id, { category: categoryId })
+    logAction('rightpanel.setCategory', { nodeId: selectedNode.id, category: categoryId })
   }
 
   // 添加关系
@@ -95,6 +100,7 @@ function RightPanel({
       type: relationType,
       label: RELATION_TYPES.find(r => r.id === relationType)?.label || '相关',
     })
+    logAction('rightpanel.addRelation', { source: selectedNode.id, target: relationTarget, type: relationType })
     setRelationTarget('')
     setShowAddRelation(false)
   }
@@ -384,7 +390,7 @@ function RightPanel({
                       </p>
                     </div>
                     <button
-                      onClick={() => onRemoveEdge?.(edge.id)}
+                      onClick={() => { logAction('rightpanel.removeEdge', { edgeId: edge.id }); onRemoveEdge?.(edge.id) }}
                       className="opacity-0 group-hover:opacity-100 p-0.5 transition-opacity"
                       style={{ color: 'var(--gray-500)' }}
                     >
@@ -487,6 +493,7 @@ function LocalTaskSection({ node }) {
     if (!text) return
     const r = routeTask({ text, mode: taskMode })
     const taskId = addLocalTask(node.id, { prompt: text, target: r.target, routerReason: r.reason })
+    logAction('rightpanel.runLocalTask', { target: r.target, promptLen: text.length })
     setPrompt('')
 
     if (r.target === 'local') {
@@ -495,11 +502,15 @@ function LocalTaskSection({ node }) {
         onUpdate: (patch) => updateLocalTaskStatus(node.id, taskId, patch),
       })
     } else {
-      // Hermes 派单
+      // Hermes 派单 — 环境感知 URL: dev=本机 17082, prod=同源 /canvas/api/orchestra (经 caddy 反代)
       updateLocalTaskStatus(node.id, taskId, { status: 'running', startedAt: Date.now() })
       try {
         const room = new URLSearchParams(window.location.search).get('room') || 'demo-final'
-        const resp = await fetch('http://127.0.0.1:17082/api/orchestra/inject', {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        const injectUrl = isLocal
+          ? 'http://127.0.0.1:17082/api/orchestra/inject'
+          : '/canvas/api/orchestra/inject'
+        const resp = await fetch(injectUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ room, title: text.slice(0, 60), body: text, assignedTo: 'hermes' }),

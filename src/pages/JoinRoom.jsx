@@ -23,6 +23,10 @@ const genRoomId = () => {
   return id
 }
 
+// 当前 hackathon 主房间 — orchestra conductor 默认 BOOT_ROOMS 接管的房间
+// 三人协作时点"快速进入主房间"即可，确保都进同一个 room
+const PRIMARY_ROOM = 'demo-final'
+
 export default function JoinRoom() {
   const [name, setName] = useState(getUsername())
   const [room, setRoom] = useState(getRoomFromUrl())
@@ -57,6 +61,17 @@ export default function JoinRoom() {
     setUsername(name.trim())
     setUserColor(color)
     navigateToRoom(genRoomId())
+  }
+
+  const handleJoinPrimary = () => {
+    setError('')
+    if (!canCreate) {
+      setError('请先填写用户名')
+      return
+    }
+    setUsername(name.trim())
+    setUserColor(color)
+    navigateToRoom(PRIMARY_ROOM)
   }
 
   return (
@@ -170,6 +185,28 @@ export default function JoinRoom() {
           <p className="text-xs mb-3" style={{ color: '#ef4444' }}>{error}</p>
         )}
 
+        {/* 快速进入主房间 — Hackathon demo 三人共用 */}
+        <button
+          type="button"
+          onClick={handleJoinPrimary}
+          disabled={!canCreate}
+          className="w-full py-3 text-sm font-medium rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed mb-2 group relative"
+          style={{
+            backgroundColor: '#1a1a1a',
+            color: '#fafafa',
+            letterSpacing: '0.05em',
+          }}
+        >
+          <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle" style={{ backgroundColor: '#c8a882' }} />
+          快速进入主房间 · {PRIMARY_ROOM}
+        </button>
+
+        <div className="flex items-center gap-3 my-3">
+          <div className="flex-1 h-px" style={{ background: '#e8e8e8' }} />
+          <span className="text-[10px]" style={{ color: '#bbb', letterSpacing: '0.2em' }}>OR</span>
+          <div className="flex-1 h-px" style={{ background: '#e8e8e8' }} />
+        </div>
+
         {/* 按钮 */}
         <div className="flex gap-2">
           <button
@@ -182,7 +219,7 @@ export default function JoinRoom() {
               color: '#fafafa',
             }}
           >
-            进入房间
+            进入自定义房间
           </button>
           <button
             type="button"
@@ -195,7 +232,7 @@ export default function JoinRoom() {
               border: '1px solid #e8e8e8',
             }}
           >
-            新建房间
+            新建随机房间
           </button>
         </div>
 

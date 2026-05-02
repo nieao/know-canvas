@@ -1,5 +1,11 @@
 /**
- * TaskNode — 派给 Hermes 的任务节点
+ * TaskNode — 任务节点 (Manual + Auto 双模式)
+ *
+ * Manual: 用户填好 → 点 "派给 Hermes" → store.dispatchTaskNode → hermes-proxy:17081
+ *         (现有 metahermes 流, 不变)
+ * Auto:   选 assignedTo (hermes/claude-cli/feishu-bot) + 状态 draft → orchestra dispatcher 推 pending →
+ *         worker 抢锁跑 → done 时自动建 ResultNode
+ *         (orchestra 流, 见 docs/orchestra-blackboard-spec.md)
  *
  * 状态机:
  *   draft → dispatching → pending/running → done/failed
@@ -7,12 +13,13 @@
  * 建筑极简风:
  *   - 顶部 ColorAccentBar (状态色)
  *   - draft 灰 / running 暖色脉动 / done 绿 / failed 红
- *
- * 行为:
- *   - draft 状态: 显示「派给 Hermes」按钮, 点击调 store.dispatchTaskNode(id)
- *   - 派出后: 自动开始 polling, 由 store 在 useEffect 里管理
- *   - done: 显示结果摘要 + 提示已自动建 ResultNode
  */
+
+const AGENT_OPTIONS = [
+  { value: 'hermes', label: 'Hermes (Kanban)' },
+  { value: 'claude-cli', label: 'Claude CLI (本机)' },
+  { value: 'feishu-bot', label: '飞书 Bot' },
+]
 
 import { memo } from 'react'
 import { Handle, Position } from 'reactflow'
@@ -37,11 +44,15 @@ function TaskNodeImpl({ id, data, selected }) {
 
   const status = data.status || TASK_NODE_STATUS.DRAFT
   const meta = STATUS_META[status] || STATUS_META[TASK_NODE_STATUS.DRAFT]
-  const title = data.title || '未命名任务'
+  const title = data.title || ''
   const body = data.body || ''
   const assignee = data.assignee || ''
   const taskId = data.task_id || ''
   const errorMessage = data.error || ''
+  const agentMode = data.agentMode || 'manual'
+  const assignedTo = data.assignedTo || ''
+  const hermesAssignee = data.hermesAssignee || ''
+  const claimedBy = data.claimedBy || ''
 
   const onDispatch = (e) => {
     e.stopPropagation()
@@ -49,6 +60,11 @@ function TaskNodeImpl({ id, data, selected }) {
       console.error('[TaskNode] dispatch failed:', err)
       handleUpdate({ status: TASK_NODE_STATUS.FAILED, error: err.message })
     })
+  }
+
+  const onModeToggle = (e) => {
+    e.stopPropagation()
+    handleUpdate({ agentMode: agentMode === 'auto' ? 'manual' : 'auto' })
   }
 
   return (
@@ -64,15 +80,32 @@ function TaskNodeImpl({ id, data, selected }) {
       <Handle type="source" position={Position.Bottom} style={{ background: '#c8a882' }} />
 
       <div className="px-4 py-3">
-        {/* 标签 */}
+        {/* 标签 + 模式切换 */}
         <div className="flex items-center justify-between mb-2">
           <span
             className="text-[10px] tracking-[0.25em] uppercase font-semibold"
             style={{ color: meta.color }}
           >
-            <span className="mr-1">{meta.dot}</span>HERMES TASK
+            <span className="mr-1">{meta.dot}</span>{agentMode === 'auto' ? 'AGENT TASK' : 'HERMES TASK'}
           </span>
-          <span className="text-[10px] text-gray-400">{meta.label}</span>
+          <div className="flex items-center gap-1.5">
+            {status === TASK_NODE_STATUS.DRAFT && (
+              <button
+                onClick={onModeToggle}
+                className="text-[9px] px-1.5 py-0.5 rounded border transition-all"
+                style={{
+                  borderColor: agentMode === 'auto' ? '#c8a882' : '#e5e5e5',
+                  color: agentMode === 'auto' ? '#c8a882' : '#888',
+                  background: agentMode === 'auto' ? '#f5f0eb' : 'white',
+                  letterSpacing: '0.1em',
+                }}
+                title={agentMode === 'auto' ? '点击切回 Manual (走 hermes-proxy 的旧流)' : '点击切到 Auto (orchestra)'}
+              >
+                {agentMode === 'auto' ? 'AUTO' : 'MANUAL'}
+              </button>
+            )}
+            <span className="text-[10px] text-gray-400">{meta.label}</span>
+          </div>
         </div>
 
         {/* 标题 */}
@@ -102,8 +135,33 @@ function TaskNodeImpl({ id, data, selected }) {
           )
         )}
 
-        {/* assignee 输入 (draft 状态可填) */}
-        {status === TASK_NODE_STATUS.DRAFT && (
+        {/* AUTO 模式 draft: assignedTo + hermesAssignee 下拉 */}
+        {agentMode === 'auto' && status === TASK_NODE_STATUS.DRAFT && (
+          <div className="mt-2 space-y-1.5">
+            <select
+              className="w-full text-[11px] text-gray-700 border-b border-gray-100 outline-none bg-transparent pb-1"
+              value={assignedTo}
+              onChange={(e) => handleUpdate({ assignedTo: e.target.value })}
+            >
+              <option value="">— 选 agent —</option>
+              {AGENT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            {assignedTo === 'hermes' && (
+              <input
+                type="text"
+                className="w-full text-[11px] text-gray-500 border-b border-gray-100 outline-none bg-transparent pb-1"
+                placeholder="Hermes profile (真模式必填)"
+                value={hermesAssignee}
+                onChange={(e) => handleUpdate({ hermesAssignee: e.target.value })}
+              />
+            )}
+          </div>
+        )}
+
+        {/* MANUAL 模式 draft: assignee 自由输入 */}
+        {agentMode === 'manual' && status === TASK_NODE_STATUS.DRAFT && (
           <input
             type="text"
             className="w-full text-[11px] text-gray-500 border-b border-gray-100 outline-none bg-transparent mt-2 pb-1"
@@ -113,10 +171,11 @@ function TaskNodeImpl({ id, data, selected }) {
           />
         )}
 
-        {/* 元信息 (派出后) */}
-        {taskId && (
-          <div className="text-[10px] text-gray-400 mt-2 font-mono">
-            {taskId} {assignee ? `· ${assignee}` : ''}
+        {/* 元信息 (派出后 / 抢锁后) */}
+        {(taskId || claimedBy) && (
+          <div className="text-[10px] text-gray-400 mt-2 font-mono break-all">
+            {taskId && <div>task: {taskId}</div>}
+            {claimedBy && <div>by: {claimedBy}</div>}
           </div>
         )}
 
@@ -127,8 +186,8 @@ function TaskNodeImpl({ id, data, selected }) {
           </div>
         )}
 
-        {/* draft 状态: 派给 Hermes 按钮 */}
-        {status === TASK_NODE_STATUS.DRAFT && (
+        {/* MANUAL 模式 draft: 派给 Hermes 按钮 */}
+        {agentMode === 'manual' && status === TASK_NODE_STATUS.DRAFT && (
           <button
             onClick={onDispatch}
             disabled={!title.trim()}
@@ -142,6 +201,25 @@ function TaskNodeImpl({ id, data, selected }) {
           >
             派给 Hermes →
           </button>
+        )}
+
+        {/* AUTO 模式 draft: 提示 dispatcher 会接手 */}
+        {agentMode === 'auto' && status === TASK_NODE_STATUS.DRAFT && (
+          <div
+            className="mt-3 text-[10px] py-1.5 px-3 rounded-sm border text-center"
+            style={{
+              borderColor: title.trim() && assignedTo ? '#c8a882' : '#e5e5e5',
+              color: title.trim() && assignedTo ? '#c8a882' : '#bbbbbb',
+              background: title.trim() && assignedTo ? '#f5f0eb' : 'transparent',
+              letterSpacing: '0.1em',
+            }}
+          >
+            {!title.trim()
+              ? '填标题…'
+              : !assignedTo
+                ? '选 agent…'
+                : `等待 dispatcher · ${assignedTo}`}
+          </div>
         )}
 
         {/* running 状态: 显示进度条动画 */}

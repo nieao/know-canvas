@@ -69,30 +69,6 @@ const createNodeFactory = (get, set) => (type, idPrefix, data, position = null) 
   return nodeId
 }
 
-// 数据迁移：清理孤儿 parentNode 引用
-const migrateNodes = (nodes) => {
-  if (!nodes || !Array.isArray(nodes)) return nodes
-
-  // 获取所有分组节点 ID
-  const groupIds = new Set(
-    nodes.filter(n => n.type === 'groupNode').map(n => n.id)
-  )
-
-  // 清理孤儿引用
-  return nodes.map(node => {
-    if (node.parentNode && !groupIds.has(node.parentNode)) {
-      const { parentNode, extent, ...cleanNode } = node
-      return {
-        ...cleanNode,
-        hidden: false,
-        draggable: true,
-        data: node.data ? { ...node.data, groupId: null } : node.data,
-      }
-    }
-    return node
-  })
-}
-
 const useCanvasStore = create(
   persist(
     immer((set, get) => ({
@@ -1551,6 +1527,10 @@ const useCanvasStore = create(
             priority: 3,
             status: 'draft',
             created_at: Date.now(),
+            // orchestra 多 agent 字段 (默认 manual, 不破坏现有派给 Hermes 流)
+            agentMode: 'manual',
+            assignedTo: null,
+            hermesAssignee: null,
           },
         }
         set((state) => {
@@ -1908,22 +1888,14 @@ const useCanvasStore = create(
     })),
     {
       name: 'know-canvas-store',
+      // 多人协作下 nodes/edges 必须永远走 yjs (黑板权威), 不能从 localStorage hydrate —
+      // 否则 yjsSync 启动时本地旧数据会通过 pushLocalToYjs 把别人刚 inject 的节点删掉 (race)。
+      // 仅持久化 UI 偏好。
       partialize: (state) => ({
-        nodes: state.nodes,
-        edges: state.edges,
         viewMode: state.viewMode,
         showMiniMap: state.showMiniMap,
         showChineseLabels: state.showChineseLabels,
       }),
-      // 加载时执行数据迁移，修复孤儿 parentNode 引用
-      merge: (persistedState, currentState) => {
-        const migratedNodes = migrateNodes(persistedState?.nodes)
-        return {
-          ...currentState,
-          ...persistedState,
-          nodes: migratedNodes || currentState.nodes,
-        }
-      },
     }
   )
 )

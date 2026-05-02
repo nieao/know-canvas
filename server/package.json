@@ -9,6 +9,12 @@
     "yws": "node y-ws-server.js",
     "bridge": "node claude-bridge.js",
     "hermes": "node hermes-proxy.js",
+    "dispatcher": "node orchestra-dispatcher.js",
+    "worker:hermes": "node orchestra-hermes-worker.js",
+    "conductor": "node orchestra-conductor.js",
+    "orchestra:http": "node orchestra-http.js",
+    "orchestra:e2e": "node orchestra-e2e-test.js",
+    "orchestra:race": "node orchestra-race-test.js",
     "all": "node y-ws-server.js & node claude-bridge.js & node hermes-proxy.js"
   },
   "dependencies": {

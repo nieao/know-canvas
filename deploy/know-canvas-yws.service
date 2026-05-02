@@ -1,0 +1,48 @@
+# Know Canvas Yjs WebSocket 同步服务 systemd unit
+#
+# 安装:
+#   sudo cp deploy/know-canvas-yws.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable know-canvas-yws
+#   sudo systemctl start know-canvas-yws
+#   sudo systemctl status know-canvas-yws
+#
+# 查看日志:
+#   sudo journalctl -u know-canvas-yws -f
+
+[Unit]
+Description=Know Canvas Yjs WebSocket Sync Server
+Documentation=https://github.com/yjs/y-websocket
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/know-canvas/server
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=1234
+Environment=PERSIST=/opt/know-canvas/server/yjs-data
+# 启用鉴权请取消注释（推荐）
+# Environment=KNOW_CANVAS_TOKEN=your-secret-token-here
+
+ExecStart=/usr/bin/node /opt/know-canvas/server/y-ws-server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 资源限制（防止失控）
+MemoryMax=512M
+CPUQuota=50%
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/know-canvas/server/yjs-data
+
+[Install]
+WantedBy=multi-user.target

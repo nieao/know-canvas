@@ -43,11 +43,15 @@ test.afterAll(() => {
   if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true })
 })
 
-// 每个测试前清除 localStorage 避免残留状态
+// 每个测试前清除 localStorage 并预置协作会话，避开 JoinRoom 入口页
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
-  await page.evaluate(() => localStorage.clear())
-  await page.reload()
+  await page.evaluate(() => {
+    localStorage.clear()
+    localStorage.setItem('know_canvas_username', 'tester')
+    localStorage.setItem('know_canvas_user_color', '#3b82f6')
+  })
+  await page.goto('/?room=fulltest')
   // 等待左侧面板加载
   await expect(page.locator('h2:has-text("知识管理")')).toBeVisible({ timeout: 10000 })
 })
@@ -224,13 +228,17 @@ test.describe('AI 分析栏', () => {
 // ============================================================
 test.describe('快捷键', () => {
   test('? 键打开快捷键面板', async ({ page }) => {
-    // 先点击画布区域确保不在输入框中
-    await page.locator('h1:has-text("知识图谱")').click()
-    // 直接输入 ? 字符
-    await page.keyboard.type('?')
+    // WelcomeOverlay 是 pointer-events:none，需要直接派发键盘事件给 window
+    await page.evaluate(() => {
+      const evt = new KeyboardEvent('keydown', { key: '?', bubbles: true })
+      window.dispatchEvent(evt)
+    })
     await expect(page.locator('h3:has-text("键盘快捷键")')).toBeVisible({ timeout: 3000 })
     // Esc 关闭
-    await page.keyboard.press('Escape')
+    await page.evaluate(() => {
+      const evt = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      window.dispatchEvent(evt)
+    })
     await expect(page.locator('h3:has-text("键盘快捷键")')).not.toBeVisible({ timeout: 2000 })
   })
 

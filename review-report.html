@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Know Canvas — 协作能力技术评审</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --black: #1a1a1a;
+      --dark: #2d2d2d;
+      --gray-900: #3a3a3a;
+      --gray-700: #555;
+      --gray-500: #888;
+      --gray-300: #bbb;
+      --gray-100: #e8e8e8;
+      --white: #fafafa;
+      --warm: #c8a882;
+      --warm-light: #e8d5c0;
+      --warm-bg: #f5f0eb;
+      --red: #b27c8b;
+      --green: #8b9e7c;
+      --blue: #7c9eb2;
+      --font-serif: "Noto Serif SC", Georgia, serif;
+      --font-sans: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--white); color: var(--dark); font-family: var(--font-sans); font-weight: 300; line-height: 1.7; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 80px 48px; }
+    .grid-fixed { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; opacity: 0.04; z-index: 0; }
+    .grid-fixed::before, .grid-fixed::after { content: ''; position: absolute; background: var(--black); }
+    .grid-fixed::before { top: 50%; left: 0; right: 0; height: 1px; }
+    .grid-fixed::after { left: 50%; top: 0; bottom: 0; width: 1px; }
+
+    .section-label { font-size: 0.72rem; letter-spacing: 0.35em; color: var(--warm); margin-bottom: 24px; font-weight: 500; }
+    h1 { font-family: var(--font-serif); font-weight: 300; font-size: 3rem; letter-spacing: 0.02em; color: var(--black); margin: 0 0 16px; }
+    h2 { font-family: var(--font-serif); font-weight: 300; font-size: 1.6rem; letter-spacing: 0.02em; color: var(--black); margin: 80px 0 24px; padding-top: 24px; border-top: 1px solid var(--gray-100); position: relative; }
+    h2::before { content: attr(data-num); position: absolute; top: 24px; right: 0; font-size: 0.85rem; color: var(--warm); letter-spacing: 0.15em; font-family: var(--font-sans); }
+    h3 { font-family: var(--font-serif); font-weight: 400; font-size: 1.2rem; color: var(--black); margin: 40px 0 16px; }
+
+    .lede { color: var(--gray-700); font-size: 1.05rem; max-width: 780px; }
+    .meta { font-size: 0.85rem; color: var(--gray-500); margin-top: 16px; letter-spacing: 0.05em; }
+
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 48px 0; }
+    .stat { padding: 24px; border: 1px solid var(--gray-100); position: relative; transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1); background: var(--white); }
+    .stat:hover { transform: translateY(-4px); border-color: var(--warm-light); }
+    .stat::before { content: ''; position: absolute; top: -1px; left: 0; width: 0; height: 1px; background: var(--warm); transition: width 0.6s ease; }
+    .stat:hover::before { width: 100%; }
+    .stat .label { font-size: 0.7rem; letter-spacing: 0.3em; color: var(--gray-500); text-transform: uppercase; }
+    .stat .value { font-family: var(--font-serif); font-size: 2.2rem; font-weight: 300; color: var(--black); margin-top: 8px; }
+    .stat .sub { font-size: 0.75rem; color: var(--gray-500); margin-top: 4px; }
+    .stat.gate-pass { border-color: var(--green); }
+    .stat.gate-pass .value { color: var(--green); }
+    .stat.warn { border-color: var(--warm); }
+    .stat.warn .value { color: var(--warm); }
+
+    table { width: 100%; border-collapse: collapse; margin: 16px 0 48px; font-size: 0.9rem; }
+    th { font-weight: 500; text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); font-size: 0.78rem; letter-spacing: 0.15em; text-transform: uppercase; }
+    td { padding: 14px 16px; border-bottom: 1px solid var(--gray-100); vertical-align: top; color: var(--dark); }
+    tr:hover td { background: var(--warm-bg); }
+
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.1em; }
+    .badge.pass { background: rgba(139, 158, 124, 0.15); color: var(--green); }
+    .badge.fail { background: rgba(178, 124, 139, 0.15); color: var(--red); }
+    .badge.warn { background: rgba(200, 168, 130, 0.18); color: var(--warm); }
+    .badge.minor { background: var(--gray-100); color: var(--gray-700); }
+
+    .score-cell { font-family: var(--font-serif); font-weight: 400; }
+    .score-9 { color: var(--green); }
+    .score-8 { color: var(--warm); }
+    .score-low { color: var(--red); }
+
+    .finding { padding: 20px 24px; border: 1px solid var(--gray-100); margin-bottom: 16px; background: var(--white); position: relative; }
+    .finding::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--gray-300); }
+    .finding.major::before { background: var(--warm); }
+    .finding.minor::before { background: var(--gray-100); }
+    .finding.blocker::before { background: var(--red); }
+    .finding-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+    .finding-id { font-family: var(--font-serif); color: var(--warm); font-size: 0.85rem; letter-spacing: 0.1em; }
+    .finding-meta { font-size: 0.78rem; color: var(--gray-500); }
+    .finding p { margin: 8px 0; color: var(--gray-700); }
+    .finding code { background: var(--warm-bg); padding: 1px 6px; border-radius: 3px; font-size: 0.85rem; color: var(--dark); }
+
+    .dark-section { background: var(--black); color: var(--white); padding: 64px 48px; margin: 80px -48px 0; position: relative; }
+    .dark-section h2 { color: var(--white); border-color: rgba(255,255,255,0.1); }
+    .dark-section h2::before { color: var(--warm); }
+    .dark-section .gate-result { font-family: var(--font-serif); font-size: 4.5rem; color: var(--warm); font-weight: 300; line-height: 1; margin: 32px 0; }
+    .dark-section .quote-mark { font-family: var(--font-serif); color: var(--warm); font-size: 4rem; opacity: 0.4; line-height: 1; }
+    .dark-section p { color: var(--gray-300); }
+    .dark-section li { color: var(--gray-300); padding: 4px 0; }
+    .dark-section a, .dark-section code { color: var(--warm); }
+
+    .highlights { background: var(--warm-bg); padding: 32px 40px; border-radius: 0; margin: 32px 0; border-left: 2px solid var(--warm); }
+    .highlights ul { padding-left: 0; list-style: none; }
+    .highlights li { padding: 8px 0 8px 24px; position: relative; color: var(--gray-700); }
+    .highlights li::before { content: '·'; position: absolute; left: 8px; color: var(--warm); font-size: 1.4rem; line-height: 1; }
+
+    .file-table tr td:nth-child(2) { font-family: var(--font-serif); }
+    .footer { margin-top: 80px; padding-top: 32px; border-top: 1px solid var(--gray-100); font-size: 0.78rem; color: var(--gray-500); letter-spacing: 0.05em; }
+  </style>
+</head>
+<body>
+  <div class="grid-fixed"></div>
+  <div class="container">
+
+    <div class="section-label">SWE / TECHNICAL REVIEW</div>
+    <h1>Know Canvas 协作能力技术评审</h1>
+    <p class="lede">
+      对本次新增的实时多人协作（Yjs + y-websocket）、AI provider 工厂、入口流程、E2E 测试和 Ubuntu 部署能力做系统性技术评审，
+      按软件工程工作流第 8 阶段标准给出 22 项结构检查、10 项优先级评分卡、具体发现和门控决策。
+    </p>
+    <div class="meta">
+      评审范围：<code>src/collab/*</code> · <code>server/*</code> · <code>src/services/aiProvider+aiConfig+aiService</code> · <code>src/components/AiSettingsPanel.jsx</code> · <code>src/pages/JoinRoom.jsx</code> · <code>src/components/canvas/ColorAccentBar.jsx</code> · 以及对 useCanvasStore / KnowledgeGraph / KnowledgeCanvas / NodePropertyPanel 的增量改动 ／ 评审日：2026-05-02 ／ 评审者：cc-ui
+    </div>
+
+    <h2 data-num="01">总览</h2>
+
+    <div class="stats">
+      <div class="stat gate-pass">
+        <div class="label">门控结果</div>
+        <div class="value">PASS</div>
+        <div class="sub">新增范围内全部通过</div>
+      </div>
+      <div class="stat">
+        <div class="label">综合评分</div>
+        <div class="value">9.0 / 10</div>
+        <div class="sub">10 项加权均值</div>
+      </div>
+      <div class="stat">
+        <div class="label">新增源文件</div>
+        <div class="value">12</div>
+        <div class="sub">全部 ≤ 500 行硬限制</div>
+      </div>
+      <div class="stat warn">
+        <div class="label">改动的存量文件</div>
+        <div class="value">4</div>
+        <div class="sub">3 个 pre-existing 超限</div>
+      </div>
+      <div class="stat gate-pass">
+        <div class="label">E2E 测试</div>
+        <div class="value">8 / 8</div>
+        <div class="sub">multi-user-collab 全过</div>
+      </div>
+      <div class="stat">
+        <div class="label">Spine 清单</div>
+        <div class="value">4</div>
+        <div class="sub">协作 sync · awareness · 登录 · AI</div>
+      </div>
+    </div>
+
+    <h2 data-num="02">数据流 Spine 清单</h2>
+
+    <table>
+      <thead>
+        <tr><th style="width: 22%">Spine</th><th>路径</th><th>所有者</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>协作 Sync</strong>（主）</td>
+          <td>用户操作 → Zustand store.set → store.subscribe → <code>yjsSync.pushLocalToYjs</code> → Y.Map.set → WebsocketProvider → ws → y-ws-server → 其他客户端 → Y.Map.observe → <code>applyRemoteToLocal</code> → setState → React Flow 重渲</td>
+          <td><code>src/collab/yjsSync.js</code></td>
+        </tr>
+        <tr>
+          <td><strong>Awareness</strong>（次）</td>
+          <td>本地光标/选中 → <code>setLocalCursor</code> / <code>setLocalSelection</code> → awareness.setLocalStateField → ws → 其他客户端 → <code>onAwarenessChange</code> → setState → 远端光标 / 用户列表</td>
+          <td><code>yjsClient.js</code> + <code>PresenceLayer.jsx</code></td>
+        </tr>
+        <tr>
+          <td><strong>登录</strong>（次）</td>
+          <td>JoinRoom 表单 → localStorage(<code>know_canvas_username</code>) + URL <code>?room=xxx</code> → <code>App.jsx</code> 路由 → <code>KnowledgeGraph.useEffect(startSync)</code></td>
+          <td><code>session.js</code> + <code>App.jsx</code></td>
+        </tr>
+        <tr>
+          <td><strong>AI 调用</strong>（次）</td>
+          <td>业务函数 (analyzeWithLLM 等) → <code>aiService</code> → <code>aiProvider.callLLM</code> → 工厂分发 (claude-cli-bridge / openai-like / mock) → fetch → 用户本机或远端模型 → 文本/JSON</td>
+          <td><code>aiProvider.js</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 data-num="03">源文件大小审计</h2>
+
+    <table class="file-table">
+      <thead>
+        <tr><th>文件</th><th style="width: 10%">有效行</th><th style="width: 12%">硬限制 ≤ 500</th><th style="width: 14%">关注点分离</th><th>备注</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>src/collab/yjsClient.js</td><td>113</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>Yjs Doc / Provider / Awareness 单例的拥有者，API 干净</td></tr>
+        <tr><td>src/collab/yjsSync.js</td><td>181</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>Zustand ↔ Yjs 双向同步策略；启动状态机 + diff 推送都在此</td></tr>
+        <tr><td>src/collab/PresenceLayer.jsx</td><td>215</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>本地 awareness 广播 + 远端光标渲染 + 远端选中查询 hook</td></tr>
+        <tr><td>src/collab/session.js</td><td>59</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>用户名/房间号/颜色 localStorage 持久化</td></tr>
+        <tr><td>server/y-ws-server.js</td><td>120</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>y-websocket setupWSConnection + LevelDB 持久化 + token 鉴权</td></tr>
+        <tr><td>server/claude-bridge.js</td><td>159</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>本地 claude CLI HTTP 桥；CORS 白名单 + 默认 127.0.0.1</td></tr>
+        <tr><td>src/services/aiProvider.js</td><td>111</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>provider 工厂：callLLM 通用入口 + checkProvider 健康检查</td></tr>
+        <tr><td>src/services/aiConfig.js</td><td>153</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>9 个 PROVIDER_PRESETS + localStorage CRUD</td></tr>
+        <tr><td>src/components/AiSettingsPanel.jsx</td><td>262</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>provider 设置面板 + 测试连接按钮</td></tr>
+        <tr><td>src/pages/JoinRoom.jsx</td><td>191</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>建筑极简风格入口页 + 颜色选择 + 房间号生成</td></tr>
+        <tr><td>src/components/canvas/ColorAccentBar.jsx</td><td>19</td><td><span class="badge pass">PASS</span></td><td><span class="badge pass">PASS</span></td><td>通用顶部色带组件，6 个节点共用</td></tr>
+        <tr><td>src/services/aiService.js</td><td>455</td><td><span class="badge warn">接近</span></td><td><span class="badge pass">PASS</span></td><td>本次新增 ~80 行 LLM 函数；规则解析 + LLM 增强并存有合理性</td></tr>
+        <tr><td>src/components/canvas/NodePropertyPanel.jsx</td><td>481</td><td><span class="badge warn">接近</span></td><td><span class="badge pass">PASS</span></td><td>本次新增 ~70 行通用 type+color section；categoryNode 内 color 字段重复（次要）</td></tr>
+        <tr><td>src/stores/useCanvasStore.js</td><td>1335</td><td><span class="badge fail">超限 (pre-existing)</span></td><td><span class="badge warn">DESIGN IMPACT</span></td><td>本次小幅改：+changeNodeType / 8 处 ID 加随机后缀。文件过大是本次之前已存在的问题</td></tr>
+        <tr><td>src/pages/KnowledgeGraph.jsx</td><td>745</td><td><span class="badge fail">超限 (pre-existing)</span></td><td><span class="badge warn">DESIGN IMPACT</span></td><td>本次新增 ~75 行 yjs 启动 useEffect / RemoteUserList / AI 设置按钮 / N 键快捷键。已是 god component</td></tr>
+        <tr><td>src/components/canvas/KnowledgeCanvas.jsx</td><td>676</td><td><span class="badge fail">超限 (pre-existing)</span></td><td><span class="badge warn">DESIGN IMPACT</span></td><td>本次新增 ~30 行双击 handler + 扩展 QuickAddMenu 选项。CurvedEdge / ZoomIndicator 等子组件早就该拆出去</td></tr>
+      </tbody>
+    </table>
+
+    <p style="color: var(--gray-700); font-size: 0.92rem;">
+      <strong>结论：</strong>本次 12 个新增源文件全部通过 500 行硬限制，关注点分离清晰。3 个超限的存量文件
+      （useCanvasStore / KnowledgeGraph / KnowledgeCanvas）是 <strong>pre-existing oversized</strong>，本次只做小幅增量改动；
+      但本次代码堆叠在已超限文件中加重了 god component 倾向，记为 Design Impact 跟进项。
+    </p>
+
+    <h2 data-num="04">22 项结构完整性检查</h2>
+
+    <table>
+      <thead>
+        <tr><th style="width: 4%">#</th><th style="width: 36%">检查项</th><th style="width: 8%">结果</th><th>证据</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>01</td><td>Spine 清单清晰度与保持</td><td><span class="badge pass">PASS</span></td><td>4 条 Spine 都可识别、起点终点清晰；启动有 Bounded Local Spine（finalizeStartup 状态机）已显式描述</td></tr>
+        <tr><td>02</td><td>所有权边界保持</td><td><span class="badge pass">PASS</span></td><td>collab/services/server 三个子系统职责清晰</td></tr>
+        <tr><td>03</td><td>离线关注点</td><td><span class="badge pass">PASS</span></td><td>session.js 是 localStorage 离线关注点，不竞争 spine</td></tr>
+        <tr><td>04</td><td>现有能力复用</td><td><span class="badge pass">PASS</span></td><td>复用 zustand persist + 现有 add* 节点工厂；borrow 起号 V0.1 的 y-ws-server.cjs 模板</td></tr>
+        <tr><td>05</td><td>可复用自有结构</td><td><span class="badge pass">PASS</span></td><td>ColorAccentBar 抽出共用；aiProvider 工厂模式</td></tr>
+        <tr><td>06</td><td>共享结构紧凑性</td><td><span class="badge pass">PASS</span></td><td>PROVIDER_PRESETS 每条字段一致；nodeToPlain / edgeToPlain 单一目的</td></tr>
+        <tr><td>07</td><td>重复协调所有权</td><td><span class="badge pass">PASS</span></td><td>sync 策略只在 yjsSync.js 实现一次；diff 算法不重复</td></tr>
+        <tr><td>08</td><td>无空间接层</td><td><span class="badge pass">PASS</span></td><td>aiService → aiProvider → 实现，每层都有职责（业务函数 / 工厂 / 协议适配）</td></tr>
+        <tr><td>09</td><td>关注点分离</td><td><span class="badge warn">PARTIAL</span></td><td>新文件 PASS；KnowledgeGraph 745 行 god component 是 pre-existing，本次进一步加重</td></tr>
+        <tr><td>10</td><td>依赖方向</td><td><span class="badge pass">PASS</span></td><td>collab → store / server 独立；无循环依赖</td></tr>
+        <tr><td>11</td><td>权威边界规则</td><td><span class="badge pass">PASS</span></td><td>外部调用者（KnowledgeGraph）只用 startSync/attachYjsSync 高层 API，未绕过；yjsSync 调 getDoc/getNodesMap 是同子系统内访问</td></tr>
+        <tr><td>12</td><td>文件放置</td><td><span class="badge pass">PASS</span></td><td>collab/、services/、server/ 路径匹配关注点</td></tr>
+        <tr><td>13</td><td>扁平 vs 过度拆分</td><td><span class="badge pass">PASS</span></td><td>collab/ 4 文件、server/ 2 文件、services/ 3 文件均合理</td></tr>
+        <tr><td>14</td><td>接口边界</td><td><span class="badge pass">PASS</span></td><td>每个 API 一个主题：startSync (建立 sync) / attachYjsSync (绑 store) / setLocalUser (awareness)</td></tr>
+        <tr><td>15</td><td>命名质量</td><td><span class="badge pass">PASS</span></td><td>yjsClient/yjsSync/PresenceLayer/JoinRoom 命名精确；ColorAccentBar 描述实际职责</td></tr>
+        <tr><td>16</td><td>无不合理代码重复</td><td><span class="badge warn">MINOR</span></td><td>NodePropertyPanel 的 categoryNode 内仍有独立 color 字段，与新通用 section 略冗余</td></tr>
+        <tr><td>17</td><td>补丁叠补丁</td><td><span class="badge warn">PARTIAL</span></td><td>新文件干净；KnowledgeGraph useEffect 已经 90+ 行依赖大数组，进一步加 yjs effect 更复杂</td></tr>
+        <tr><td>18</td><td>死代码清理</td><td><span class="badge pass">PASS</span></td><td>新代码无死代码；旧 aiService 客户端解析保留作为 mock fallback 是有意</td></tr>
+        <tr><td>19</td><td>测试质量</td><td><span class="badge warn">GOOD</span></td><td>8 个 E2E 测试覆盖核心 sync/属性同步；缺断线重连、token 鉴权、aiProvider 单元测试</td></tr>
+        <tr><td>20</td><td>测试可维护性</td><td><span class="badge pass">PASS</span></td><td>用 store API 直接调用绕过 UI 时序，稳定不易 flaky</td></tr>
+        <tr><td>21</td><td>验证证据</td><td><span class="badge pass">PASS</span></td><td>三人协作核心 sync 行为有真实 ws 通道证明</td></tr>
+        <tr><td>22</td><td>无向后兼容/无遗留</td><td><span class="badge pass">PASS</span></td><td>无 compat shim；aiService 旧函数是平行业务功能不是 legacy fallback</td></tr>
+      </tbody>
+    </table>
+
+    <p style="color: var(--gray-700); font-size: 0.92rem;">
+      <strong>22 项通过率：</strong> 18 PASS / 4 PARTIAL（含 1 MINOR、3 个 pre-existing 大文件相关）/ 0 FAIL = <strong>新增范围全 PASS</strong>。
+    </p>
+
+    <h2 data-num="05">10 项优先级评分卡</h2>
+
+    <table>
+      <thead>
+        <tr><th style="width: 4%">#</th><th style="width: 22%">类别</th><th style="width: 10%">评分</th><th>理由 / 弱点 / 改进</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td><td>Spine 清单与清晰度</td><td class="score-cell score-9">9.5</td>
+          <td>4 条 Spine 全部识别清晰；finalizeStartup 的有界本地 Spine 在代码注释中显式描述。<strong>弱点</strong>：启动 Spine 用模块级 _suppressLocalPush 控制，类型上不显式。<strong>建议</strong>：包成 SyncEngine class 让状态字段被聚合。</td>
+        </tr>
+        <tr>
+          <td>2</td><td>所有权清晰度与边界封装</td><td class="score-cell score-9">9.0</td>
+          <td>collab 子系统 4 文件各司其职；权威边界保持（外部只用 startSync/attachYjsSync）。<strong>弱点</strong>：yjsSync 用 <code>useCanvasStore.setState({nodes,edges})</code> 直改 state，绕过 setNodes/setEdges actions。<strong>建议</strong>：改为 <code>store.getState().setNodes(...)</code>，让 store 自治</td>
+        </tr>
+        <tr>
+          <td>3</td><td>API / 接口清晰度</td><td class="score-cell score-9">9.0</td>
+          <td>每个边界一个主题：startSync 建连接 / attachYjsSync 绑 store / setLocalUser 改 awareness / callLLM 通用调用 / checkProvider 健康检查。<strong>弱点</strong>：yjsClient 同时暴露低层 getDoc/getNodesMap（给 yjsSync 用）和高层 startSync（给应用用），二者命名上未区分内/外</td>
+        </tr>
+        <tr>
+          <td>4</td><td>关注点分离与文件放置</td><td class="score-cell score-8">8.0</td>
+          <td>新文件 SoC 极佳。<strong>弱点</strong>：KnowledgeGraph 745 行（pre-existing），本次又加 75+ 行 yjs/AI 集成代码，god component 加重。<strong>建议</strong>：拆出 <code>useCollabSession()</code> hook，把 startSync/attachYjsSync/setLocalUser 三步封装；右上角 RemoteUserList + 房间标签 + AI 设置按钮拆成 <code>&lt;CollabHeader/&gt;</code> 子组件</td>
+        </tr>
+        <tr>
+          <td>5</td><td>共享结构紧凑性</td><td class="score-cell score-9">9.5</td>
+          <td>PROVIDER_PRESETS 9 条紧凑统一（type / config 两字段）；nodeToPlain / edgeToPlain 字段单一明确，故意去掉 selected 是好决策（每用户独立选中）</td>
+        </tr>
+        <tr>
+          <td>6</td><td>命名质量</td><td class="score-cell score-9">9.5</td>
+          <td>yjsClient（连接层）/ yjsSync（同步层）/ PresenceLayer（在场层）/ session（会话）/ ColorAccentBar（色带）等命名精确反映职责；中文注释和英文 API 风格一致</td>
+        </tr>
+        <tr>
+          <td>7</td><td>验证强度</td><td class="score-cell score-8">8.5</td>
+          <td>8 个 E2E 测试覆盖：三人登录 / 创建同步 / 属性同步 / 类型切换 / 拖动 / 一致性 / 截图证据。<strong>弱点</strong>：缺 (a) 断线重连 + 离线编辑后合并 (b) token 鉴权失败时的拒绝 (c) aiProvider 各 provider 的单元测试</td>
+        </tr>
+        <tr>
+          <td>8</td><td>边界情况运行时正确性</td><td class="score-cell score-8">8.5</td>
+          <td>启动竞态用 _suppressLocalPush 处理；finalizeStartup 1.5s 兜底；ID 加随机后缀防同毫秒冲突。<strong>弱点</strong>：(a) applyRemoteToLocal 全量重建 nodes/edges 数组，大画布性能差 (b) addConceptNode 同标题去重在协作下可能阻塞重建 (c) yjsSync 模块级状态依赖单 doc 单例</td>
+        </tr>
+        <tr>
+          <td>9</td><td>无向后兼容 / 无遗留保留</td><td class="score-cell score-9">9.0</td>
+          <td>无 compat shim；aiService 旧客户端解析函数是 mock fallback 不是 legacy；JoinRoom 是新加流程不是替换</td>
+        </tr>
+        <tr>
+          <td>10</td><td>清理完整性</td><td class="score-cell score-9">9.0</td>
+          <td>新代码无死代码；KnowledgeCanvas 的 QuickAddMenu 双击触发器和新的 N 键快捷键并存（双击 + 快捷键各有用途，非冗余）。<strong>弱点</strong>：NodePropertyPanel 的 categoryNode 块仍包含 color 字段，与新通用 color 字段重复</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="color: var(--gray-700); font-size: 0.92rem;">
+      <strong>加权综合：</strong>(9.5+9.0+9.0+8.0+9.5+9.5+8.5+8.5+9.0+9.0) / 10 = <strong>8.95 ≈ 9.0</strong>
+    </p>
+
+    <h2 data-num="06">具体发现</h2>
+
+    <div class="finding major">
+      <div class="finding-head">
+        <span class="finding-id">CR-001</span>
+        <span class="badge warn">MAJOR</span>
+        <span class="finding-meta">Type: <strong>Design Impact</strong> · File: <code>src/pages/KnowledgeGraph.jsx</code></span>
+      </div>
+      <p><strong>Evidence：</strong>已 745 行（pre-existing 超限）。本次又新增 ~75 行 yjs 启动 useEffect、RemoteUserList、AI 设置按钮、N 键快捷键。useEffect 依赖列表已经 8 项以上。</p>
+      <p><strong>Required update：</strong>抽出 <code>useCollabSession(room, name, color)</code> hook 封装 startSync + attachYjsSync + setLocalUser + 卸载清理；抽出 <code>&lt;CollabHeader/&gt;</code> 子组件包装"在线用户列表 + 房间号 + AI 设置 + 退出按钮"四件套。目标：KnowledgeGraph ≤ 500 行。</p>
+    </div>
+
+    <div class="finding minor">
+      <div class="finding-head">
+        <span class="finding-id">CR-002</span>
+        <span class="badge minor">MINOR</span>
+        <span class="finding-meta">Type: <strong>Ownership</strong> · File: <code>src/collab/yjsSync.js</code></span>
+      </div>
+      <p><strong>Evidence：</strong>第 162 行 <code>useCanvasStore.setState({ nodes, edges })</code> 直接写 state，绕过 store 已有的 <code>setNodes/setEdges</code> action。</p>
+      <p><strong>Required update：</strong>改为 <code>const s = useCanvasStore.getState(); s.setNodes(nodes); s.setEdges(edges)</code>。让 store 是状态自治的权威边界，sync 层只调 actions。</p>
+    </div>
+
+    <div class="finding minor">
+      <div class="finding-head">
+        <span class="finding-id">CR-003</span>
+        <span class="badge minor">MINOR</span>
+        <span class="finding-meta">Type: <strong>Duplication</strong> · File: <code>src/components/canvas/NodePropertyPanel.jsx</code></span>
+      </div>
+      <p><strong>Evidence：</strong>新加的通用 section 已经包含色板 + color picker；但 categoryNode 的 case 仍保留独立 color 字段（行 ~196）。</p>
+      <p><strong>Required update：</strong>移除 categoryNode case 内的 color 字段，让通用 section 统一处理；categoryNode 只保留"分类名称"字段。</p>
+    </div>
+
+    <div class="finding minor">
+      <div class="finding-head">
+        <span class="finding-id">CR-004</span>
+        <span class="badge minor">MINOR</span>
+        <span class="finding-meta">Type: <strong>ValidationGap</strong> · File: <code>e2e/multi-user-collab.spec.js</code></span>
+      </div>
+      <p><strong>Evidence：</strong>测试覆盖核心 sync 但缺断线重连场景。Yjs 自带重连，但没测过"A 断网→改东西→重连后合并"。</p>
+      <p><strong>Required update：</strong>加 P1 测试：A page 用 <code>page.context().setOffline(true)</code> 离线 → 改节点 → 上线 → 验证最终一致。</p>
+    </div>
+
+    <div class="finding minor">
+      <div class="finding-head">
+        <span class="finding-id">CR-005</span>
+        <span class="badge minor">MINOR</span>
+        <span class="finding-meta">Type: <strong>Complexity</strong> · File: <code>src/collab/yjsSync.js</code></span>
+      </div>
+      <p><strong>Evidence：</strong>启动序列（暂存 → 清空 → 等 sync → 决定推/拉 → 解锁）用模块级 <code>let</code> 状态变量管理，可读性中等。</p>
+      <p><strong>Required update：</strong>包装为 <code>class SyncEngine</code>，启动状态变成显式枚举（IDLE / WAITING_SYNC / SYNCED）。提升可测性 + 可同时管多个 doc。</p>
+    </div>
+
+    <div class="finding minor">
+      <div class="finding-head">
+        <span class="finding-id">CR-006</span>
+        <span class="badge minor">MINOR</span>
+        <span class="finding-meta">Type: <strong>Cleanup</strong> · File: <code>src/services/aiService.js</code></span>
+      </div>
+      <p><strong>Evidence：</strong>客户端规则解析（extractConcepts / suggestRelations）和 LLM 增强（analyzeWithLLM / suggestRelationsLLM）并存，目前 BottomAIBar 仍用规则解析。两套并存合理（mock fallback），但调用约定未在文档说明。</p>
+      <p><strong>Required update：</strong>在 aiService.js 顶部注释中明确"何时用 extractConcepts vs analyzeWithLLM"的决策树；或者让 BottomAIBar 显式选 mode。</p>
+    </div>
+
+    <h2 data-num="07">值得保持的设计亮点</h2>
+
+    <div class="highlights">
+      <ul>
+        <li><strong>Bounded Local Spine 显式建模</strong>：finalizeStartup 启动序列没有用 setTimeout 黑魔法堆出来，而是显式以"暂存 → 等 sync → 决定推拉 → 解锁"四步描述，并保留扩展点</li>
+        <li><strong>三轨 AI Provider 工厂</strong>：claude-cli-bridge（默认零成本）/ openai-like（通用兜底）/ mock（无网络）三条平行通路统一在 callLLM 之下，新增 provider 只需要加 PROVIDER_PRESETS 一条</li>
+        <li><strong>本机 claude CLI 桥的安全设计</strong>：默认 HOST=127.0.0.1 物理隔离 + CORS 白名单 + 强调"只能本机跑"的注释 = 三道闸阻止公网调用滥用</li>
+        <li><strong>每用户独立选中状态</strong>：nodeToPlain 故意 skip <code>selected</code> 字段，让本地选中独立同步——这是协作画布的常见经典处理，避免互相干扰</li>
+        <li><strong>渐进式协作落地</strong>：useCanvasStore 没改 actions 接口，攻入点是 yjsSync 这个外挂模块；不开协作就是单机模式，向后完全兼容</li>
+        <li><strong>测试稳定性策略</strong>：E2E 用 <code>window.__canvasStore</code> 调 store API 而非 dblclick 等 UI 事件，绕过浏览器时序差异让测试可重复</li>
+        <li><strong>建筑极简风格一以贯之</strong>：JoinRoom 入口页 + AiSettingsPanel + RemoteUserList 视觉与现有画布风格无缝衔接（暖色 #c8a882 点缀 + Noto Serif/Sans + 1px 细线）</li>
+        <li><strong>Caddy 部署文档化</strong>：deploy/ 目录三件套（deploy.sh + Caddyfile.canvas + know-canvas-yws.service）+ README 形成完整可重复部署流</li>
+      </ul>
+    </div>
+
+    <div class="dark-section">
+      <div class="section-label" style="color: var(--warm)">FINAL VERDICT</div>
+      <h2 data-num="08" style="margin-top: 0; padding-top: 0; border-top: none;">门控决策</h2>
+
+      <div class="gate-result">PASS · 9.0 / 10</div>
+
+      <p style="font-size: 1.05rem; max-width: 720px;">
+        <span class="quote-mark">"</span>
+        本次新增的协作能力在 Spine 清单、所有权封装、API 形态、命名质量上达到清洁通过区。
+        12 个新增源文件全部通过 500 行硬限制；权威边界规则保持；E2E 测试覆盖三人协作核心场景全部通过。
+      </p>
+
+      <p style="margin-top: 32px;">
+        <strong style="color: var(--warm);">需要跟进（不阻塞合并）：</strong>
+      </p>
+      <ul style="padding-left: 24px; margin-top: 12px;">
+        <li>CR-001: KnowledgeGraph god component 拆 useCollabSession + CollabHeader（Major / Design Impact）</li>
+        <li>CR-002: yjsSync 走 setNodes/setEdges actions 而非 setState（Minor）</li>
+        <li>CR-003: NodePropertyPanel 移除 categoryNode 内重复 color 字段（Minor）</li>
+        <li>CR-004: 加断线重连 E2E 场景（Minor）</li>
+        <li>CR-005: yjsSync 包成 SyncEngine class 显式状态机（Minor）</li>
+        <li>CR-006: aiService 注释里说明规则解析 vs LLM 的决策树（Minor）</li>
+      </ul>
+
+      <p style="margin-top: 32px;">
+        <strong style="color: var(--warm);">分类：</strong>CR-001 是 <code>Design Impact</code>（pre-existing god component 加重），其余 5 项是 <code>Local Fix</code>（局部可修）。
+      </p>
+
+      <p style="margin-top: 24px;">
+        <strong style="color: var(--warm);">Pre-existing 清理项</strong>（不在本次评审责任范围但建议后续优化）：
+      </p>
+      <ul style="padding-left: 24px; margin-top: 12px;">
+        <li>useCanvasStore.js 1335 行 — 拆 actions / queries / persistence 三块</li>
+        <li>KnowledgeCanvas.jsx 676 行 — CurvedEdge / ZoomIndicator / QuickAddMenu 子组件早就该拆出去</li>
+      </ul>
+    </div>
+
+    <div class="footer">
+      Know Canvas 协作能力技术评审 · 工作流：software-engineering-workflow Stage 8 · 评审标准：design-principles + common-design-practices + code-review-principles · 生成于 2026-05-02
+    </div>
+
+  </div>
+</body>
+</html>

@@ -5,6 +5,7 @@
 
 import { memo, useState } from 'react'
 import { Handle, Position } from 'reactflow'
+import ColorAccentBar from './ColorAccentBar'
 
 // 安全获取字符串内容
 const safeString = (val) => {
@@ -43,6 +44,8 @@ function ImageNode({ id, data, selected }) {
         boxShadow: selected ? '0 4px 20px rgba(200, 168, 130, 0.15)' : '0 1px 3px rgba(0,0,0,0.06)',
       }}
     >
+      <ColorAccentBar color={data?.color} />
+
       {/* 连接点 */}
       <Handle type="target" position={Position.Top} id="top-target"
         style={{ ...HANDLE_STYLE, top: -5 }} />

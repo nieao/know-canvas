@@ -1,0 +1,36 @@
+# Know Canvas — 同机部署到 ha2.digitalvio.shop
+# 方案 A：子路径 /canvas/ + Yjs WS 子路径 /yws
+#
+# 把这段配置追加到 Hermes 已有的 Caddyfile 内（同一 site block 里）
+# 或者用单独的 site block 共用 SSL（如果 Hermes 也是 Caddy）。
+#
+# 用法：
+#   sudo nano /etc/caddy/Caddyfile  # 编辑现有配置
+#   # 把下面两段加到 ha2.digitalvio.shop 的 site block 内
+#   sudo systemctl reload caddy
+
+ha2.digitalvio.shop {
+    # === Know Canvas 静态资源（前端 build 产物） ===
+    handle_path /canvas/* {
+        root * /var/www/know-canvas
+        try_files {path} /index.html
+        file_server
+        encode gzip
+    }
+
+    # === Know Canvas 协作 WebSocket（Yjs sync） ===
+    handle_path /yws/* {
+        reverse_proxy 127.0.0.1:1234 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            # WebSocket upgrade
+            header_up Connection {>Connection}
+            header_up Upgrade {>Upgrade}
+        }
+    }
+
+    # ↑ 上述两个 handle 块要放在 Hermes 已有的 reverse_proxy / file_server 块之前，
+    #   因为 Caddy 按顺序匹配；如有疑问 sudo caddy validate /etc/caddy/Caddyfile 看看
+    # ↓ 这里保留 Hermes 已有的所有规则，不要删
+    # reverse_proxy ... (Hermes API)
+}

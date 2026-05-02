@@ -9,6 +9,24 @@ import { memo, useState, useEffect } from 'react'
 // 默认分类选项
 const CATEGORIES = ['概念', '技术', '人物', '事件', '方法', '工具', '理论', '资源']
 
+// 节点类型选项（"模块性质"），与 store 里 NODE_TYPES 对齐
+const NODE_TYPE_OPTIONS = [
+  { value: 'conceptNode', label: '概念', icon: '💡' },
+  { value: 'noteNode', label: '笔记', icon: '📝' },
+  { value: 'bookmarkNode', label: '链接', icon: '🔗' },
+  { value: 'imageNode', label: '图片', icon: '🖼️' },
+  { value: 'videoNode', label: '视频', icon: '🎬' },
+  { value: 'fileNode', label: '文件', icon: '📎' },
+  { value: 'categoryNode', label: '分类', icon: '🗂️' },
+]
+
+// 预设颜色（与 GroupNode 保持一致）
+const PRESET_COLORS = [
+  '#c8a882', '#7c9eb2', '#8b9e7c', '#9e7cb2',
+  '#b27c8b', '#7cb2a8', '#b2917c', '#a8a87c',
+  '#888888', '#1a1a1a',
+]
+
 // 来源类型选项
 const SOURCE_TYPES = [
   { value: 'file', label: '文件' },
@@ -50,6 +68,15 @@ function NodePropertyPanel({ node, position, onClose, onSave }) {
         detail: { nodeId: node.id, data: formData }
       }))
     }
+    onClose()
+  }
+
+  // 切换节点类型（"模块性质修改"）
+  const handleChangeType = (newType) => {
+    if (newType === node.type) return
+    window.dispatchEvent(new CustomEvent('node-change-type', {
+      detail: { nodeId: node.id, newType, currentData: formData }
+    }))
     onClose()
   }
 
@@ -396,7 +423,61 @@ function NodePropertyPanel({ node, position, onClose, onSave }) {
         </div>
 
         {/* 内容 */}
-        <div className="p-4 max-h-[380px] overflow-y-auto">
+        <div className="p-4 max-h-[380px] overflow-y-auto space-y-4">
+          {/* 通用：类型切换 + 颜色 */}
+          {node.type !== 'groupNode' && (
+            <div className="space-y-3 pb-3" style={{ borderBottom: '1px dashed #e8e8e8' }}>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: '#888' }}>模块性质</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {NODE_TYPE_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleChangeType(opt.value)}
+                      className="flex flex-col items-center gap-0.5 py-1.5 rounded-md text-[11px] transition-colors"
+                      style={{
+                        backgroundColor: node.type === opt.value ? '#c8a882' : '#f5f0eb',
+                        color: node.type === opt.value ? '#fafafa' : '#888',
+                      }}
+                      title={`切换为${opt.label}`}
+                    >
+                      <span>{opt.icon}</span>
+                      <span>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: '#888' }}>颜色</label>
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    {PRESET_COLORS.map(color => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => handleChange('color', color)}
+                        className="w-5 h-5 rounded-full transition-transform hover:scale-110"
+                        style={{
+                          backgroundColor: color,
+                          border: formData.color === color ? '2px solid #2d2d2d' : '1px solid #e8e8e8',
+                        }}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                  <input
+                    type="color"
+                    value={formData.color || '#c8a882'}
+                    onChange={(e) => handleChange('color', e.target.value)}
+                    className="w-7 h-7 rounded cursor-pointer"
+                    title="自定义颜色"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {renderFields()}
         </div>
 

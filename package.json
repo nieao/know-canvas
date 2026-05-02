@@ -8,9 +8,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:canvas": "cross-env BUILD_BASE=/canvas/ vite build",
     "preview": "vite preview",
+    "yws": "node server/y-ws-server.js",
+    "bridge": "node server/claude-bridge.js",
+    "hermes": "node server/hermes-proxy.js",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "deploy": "bash deploy/deploy.sh"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
@@ -22,11 +27,15 @@
     "react-router-dom": "^7.11.0",
     "reactflow": "^11.11.4",
     "tailwindcss": "^4.1.18",
+    "y-protocols": "^1.0.7",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.30",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@vitejs/plugin-react": "^5.1.1",
+    "cross-env": "^10.1.0",
     "vite": "^7.2.4"
   }
 }

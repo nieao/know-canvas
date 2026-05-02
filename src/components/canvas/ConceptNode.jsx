@@ -6,6 +6,7 @@
 
 import { memo, useState, useRef, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
+import ColorAccentBar from './ColorAccentBar'
 
 // 安全获取字符串内容
 const safeString = (val) => {
@@ -173,6 +174,9 @@ function ConceptNode({ id, data, selected }) {
             : '0 1px 3px rgba(0,0,0,0.06)',
       }}
     >
+      {/* 顶部色带（通用颜色标识） */}
+      <ColorAccentBar color={data?.color} />
+
       {/* 标记指示器 */}
       {isMarked && (
         <div

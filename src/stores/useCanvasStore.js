@@ -52,7 +52,8 @@ const LAYOUT = {
 // 通用节点工厂，确保创建一致性
 const createNodeFactory = (get, set) => (type, idPrefix, data, position = null) => {
   const pos = position || get().getNextGridPosition()
-  const nodeId = `${idPrefix}-${Date.now()}`
+  const rand = Math.random().toString(36).slice(2, 8)
+  const nodeId = `${idPrefix}-${Date.now()}-${rand}`
 
   const newNode = {
     id: nodeId,
@@ -140,7 +141,7 @@ const useCanvasStore = create(
         set((state) => {
           const edge = {
             ...connection,
-            id: `edge-${Date.now()}`,
+            id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             type: 'curved',
             animated: false,
             data: { relationType: 'related' },
@@ -206,7 +207,7 @@ const useCanvasStore = create(
         if (exists) return exists.id
 
         const pos = position || getNextGridPosition()
-        const nodeId = `concept-${Date.now()}`
+        const nodeId = `concept-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         const newNode = {
           id: nodeId,
@@ -239,7 +240,7 @@ const useCanvasStore = create(
         if (exists) return exists.id
 
         const pos = position || getNextGridPosition()
-        const nodeId = `category-${Date.now()}`
+        const nodeId = `category-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         const newNode = {
           id: nodeId,
@@ -262,7 +263,7 @@ const useCanvasStore = create(
       addBookmarkNode: (url, title = '', description = '', favicon = '', image = '', position = null, autoFetch = true) => {
         const { getNextGridPosition } = get()
         const pos = position || getNextGridPosition()
-        const nodeId = `bookmark-${Date.now()}`
+        const nodeId = `bookmark-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         // 安全提取 hostname 用于 favicon
         let faviconUrl = favicon
@@ -318,7 +319,7 @@ const useCanvasStore = create(
       addImageNode: (src, alt = '', position = null) => {
         const { getNextGridPosition } = get()
         const pos = position || getNextGridPosition()
-        const nodeId = `image-${Date.now()}`
+        const nodeId = `image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         const newNode = {
           id: nodeId,
@@ -338,7 +339,7 @@ const useCanvasStore = create(
       addVideoNode: (url, title = '', image = '', position = null, autoFetch = true, options = {}) => {
         const { getNextGridPosition } = get()
         const pos = position || getNextGridPosition()
-        const nodeId = `video-${Date.now()}`
+        const nodeId = `video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         let videoId = ''
         let platform = 'other'
@@ -404,7 +405,7 @@ const useCanvasStore = create(
       addNoteNode: (content = '', position = null) => {
         const { getNextGridPosition } = get()
         const pos = position || getNextGridPosition()
-        const nodeId = `note-${Date.now()}`
+        const nodeId = `note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         const newNode = {
           id: nodeId,
@@ -424,7 +425,7 @@ const useCanvasStore = create(
       addCombinedNode: (content = '', imageSrc = '', imageAlt = '', position = null) => {
         const { getNextGridPosition } = get()
         const pos = position || getNextGridPosition()
-        const nodeId = `combined-${Date.now()}`
+        const nodeId = `combined-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         const newNode = {
           id: nodeId,
@@ -461,7 +462,7 @@ const useCanvasStore = create(
       addFileNode: (name, url = '', size = 0, position = null) => {
         const { getNextGridPosition } = get()
         const pos = position || getNextGridPosition()
-        const nodeId = `file-${Date.now()}`
+        const nodeId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         const newNode = {
           id: nodeId,
@@ -593,7 +594,7 @@ const useCanvasStore = create(
           if (exists) return
 
           const edge = {
-            id: `edge-${sourceId}-${targetId}-${Date.now()}`,
+            id: `edge-${sourceId}-${targetId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             source: sourceId,
             target: targetId,
             type: 'curved',
@@ -666,6 +667,30 @@ const useCanvasStore = create(
           const node = state.nodes.find((n) => n.id === nodeId)
           if (node) {
             node.data = { ...node.data, ...data }
+          }
+        })
+      },
+
+      // 更换节点类型（"模块性质修改"），保留通用字段
+      changeNodeType: (nodeId, newType) => {
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (node && node.type !== newType) {
+            const preserved = {
+              title: node.data?.title || node.data?.name || node.data?.alt || '',
+              description: node.data?.description || node.data?.content || '',
+              tags: node.data?.tags || [],
+              color: node.data?.color,
+              category: node.data?.category,
+              source: node.data?.source,
+              size: node.data?.size,
+            }
+            node.type = newType
+            // noteNode 的核心字段是 content，把 description 映射过去
+            if (newType === 'noteNode') {
+              preserved.content = preserved.description
+            }
+            node.data = { ...preserved }
           }
         })
       },
@@ -1202,7 +1227,7 @@ const useCanvasStore = create(
 
         const memberTypes = selectedNodes.map(n => n.type)
 
-        const groupId = `group-${Date.now()}`
+        const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const groupName = name || `分组 (${memberNodeIds.length})`
 
         const groupNode = {
@@ -1418,7 +1443,7 @@ const useCanvasStore = create(
           ? `${centerNode.data?.title || '概念'} 组`
           : `分组 (${memberNodeIds.length})`)
 
-        const groupId = `group-${Date.now()}`
+        const groupId = `group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
         const groupNode = {
           id: groupId,
@@ -1504,6 +1529,139 @@ const useCanvasStore = create(
               x: PADDING + col * (NODE_WIDTH + GAP),
               y: HEADER_HEIGHT + PADDING + row * (NODE_HEIGHT + GAP),
             }
+          })
+        })
+      },
+
+      // ===== Hermes 派单集成 (metahermes 三件套) =====
+
+      // 在画布加一个 TaskNode (草稿状态, 用户编辑后点"派给 Hermes")
+      addTaskNode: (position = null) => {
+        const { getNextGridPosition } = get()
+        const pos = position || getNextGridPosition()
+        const nodeId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const newNode = {
+          id: nodeId,
+          type: 'taskNode',
+          position: pos,
+          data: {
+            title: '',
+            body: '',
+            assignee: '',
+            priority: 3,
+            status: 'draft',
+            created_at: Date.now(),
+          },
+        }
+        set((state) => {
+          state.nodes.push(newNode)
+        })
+        return nodeId
+      },
+
+      // 派一个 TaskNode 给 Hermes — 全程异步, 自动 polling, done 时自动建 ResultNode + 连线
+      dispatchTaskNode: async (nodeId) => {
+        const { nodes, updateNode } = get()
+        const node = nodes.find((n) => n.id === nodeId)
+        if (!node || node.type !== 'taskNode') {
+          throw new Error(`dispatchTaskNode: 找不到 TaskNode ${nodeId}`)
+        }
+        if (!node.data?.title?.trim()) {
+          throw new Error('dispatchTaskNode: title 不能为空')
+        }
+
+        // 动态 import 防止循环依赖 + 让 store 模块本身不带网络层
+        const svc = await import('../services/hermesService')
+        const { dispatchTask, pollTask, mapHermesStatus, TASK_NODE_STATUS } = svc
+
+        updateNode(nodeId, { status: TASK_NODE_STATUS.DISPATCHING, error: null })
+
+        let task
+        try {
+          task = await dispatchTask({
+            title: node.data.title,
+            body: node.data.body || '',
+            assignee: node.data.assignee || null,
+            priority: node.data.priority || 3,
+          })
+        } catch (err) {
+          updateNode(nodeId, { status: TASK_NODE_STATUS.FAILED, error: err.message })
+          throw err
+        }
+
+        updateNode(nodeId, {
+          task_id: task.id,
+          status: TASK_NODE_STATUS.PENDING,
+          assignee: task.assignee || node.data.assignee,
+        })
+
+        // 轮询直到 done / blocked / 超时
+        const { task: finalTask, timedOut } = await pollTask(task.id, {
+          intervalMs: 3000,
+          maxMs: 600000,
+          onUpdate: (t) => {
+            updateNode(nodeId, { status: mapHermesStatus(t.status) })
+          },
+        })
+
+        if (timedOut) {
+          updateNode(nodeId, {
+            status: TASK_NODE_STATUS.FAILED,
+            error: '轮询超时 (10min). gateway 可能没起或 worker 卡住.',
+          })
+          return
+        }
+
+        if (finalTask?.status === 'done') {
+          const resultText =
+            finalTask.result ||
+            finalTask.output ||
+            finalTask.body_after ||
+            finalTask.body ||
+            '(任务已完成, 无返回内容 — gateway 没起时 worker 不会写 result)'
+          get()._addResultNodeFor(nodeId, finalTask, resultText)
+          updateNode(nodeId, { status: TASK_NODE_STATUS.DONE })
+        } else {
+          updateNode(nodeId, {
+            status: TASK_NODE_STATUS.FAILED,
+            error: `Hermes status=${finalTask?.status || 'unknown'}`,
+          })
+        }
+      },
+
+      // 内部: 给一个 done 任务在右侧建 ResultNode + 自动连线
+      _addResultNodeFor: (sourceNodeId, hermesTask, resultText) => {
+        set((state) => {
+          const src = state.nodes.find((n) => n.id === sourceNodeId)
+          if (!src) return
+
+          const rand = Math.random().toString(36).slice(2, 8)
+          const resultNodeId = `result-${Date.now()}-${rand}`
+          const newResultNode = {
+            id: resultNodeId,
+            type: 'resultNode',
+            position: { x: src.position.x + 320, y: src.position.y },
+            data: {
+              source_task_id: hermesTask.id,
+              source_title: src.data?.title || '未知任务',
+              result: resultText,
+              task_id: hermesTask.id,
+              assignee: hermesTask.assignee || src.data?.assignee || '',
+              finished_at: hermesTask.finished_at
+                ? new Date(hermesTask.finished_at * 1000).toLocaleString()
+                : new Date().toLocaleString(),
+            },
+          }
+          state.nodes.push(newResultNode)
+
+          state.edges.push({
+            id: `edge-${Date.now()}-${rand}`,
+            source: sourceNodeId,
+            target: resultNodeId,
+            type: 'curved',
+            animated: false,
+            data: { relationType: 'reference' },
+            style: { stroke: '#8b9e7c', strokeWidth: 2 },
           })
         })
       },

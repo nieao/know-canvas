@@ -1,24 +1,34 @@
 /**
  * 知识图谱 AI 服务
- * v0.1: 基于客户端的文本解析（无 AI 依赖）
- * 未来版本: 接入本地 claude CLI 进行深度分析
+ * v0.2: provider 工厂模式
+ *  - extractConcepts / suggestRelations / parseMarkdown 等沿用客户端规则解析（不烧 API）
+ *  - 新增 extractConceptsLLM / suggestRelationsLLM 走配置的 provider（claude-cli / openai-like）
+ *
+ * 业务调用方按需选用。BottomAIBar 默认走客户端解析，"AI 深度分析"按钮走 LLM。
  */
 
-// ============================================================
-// 系统提示词（供未来 claude CLI 调用使用）
-// ============================================================
-export const SYSTEM_PROMPT = `你是知识图谱助手。分析用户输入的文本，提取关键概念和它们之间的关系。输出JSON格式。
+import { callLLM } from './aiProvider'
 
-输出格式要求：
+// ============================================================
+// 系统提示词（供 LLM 调用使用）
+// ============================================================
+export const SYSTEM_PROMPT = `你是知识图谱助手。分析用户输入的文本，提取关键概念和它们之间的关系。输出严格的 JSON 格式，不要包含 markdown 代码块。
+
+输出格式要求（JSON）：
 {
   "concepts": [
-    { "title": "概念名称", "description": "简要描述", "tags": ["标签1", "标签2"] }
+    { "title": "概念名称", "description": "简要描述（不超过 50 字）", "tags": ["标签1", "标签2"], "importance": "high|medium|low" }
   ],
   "relations": [
-    { "source": "概念A", "target": "概念B", "type": "关系类型", "reason": "关系说明" }
+    { "source": "概念A", "target": "概念B", "type": "因果|组成|依赖|相似|对比|顺序|引用", "reason": "关系说明" }
   ],
-  "summary": "整体知识摘要"
-}`
+  "summary": "整体知识摘要（不超过 100 字）"
+}
+
+要求：
+- concepts 不超过 12 条；优先选信息量大、可独立成节点的核心概念
+- relations 中的 source/target 必须出自 concepts 中的 title
+- 全程使用中文`
 
 // ============================================================
 // 客户端文本解析工具函数
@@ -404,4 +414,92 @@ export async function parseJSON(text) {
       reason: item.reason || '',
     })),
   }
+}
+
+// ============================================================
+// LLM 增强分析（走 provider 工厂）
+// ============================================================
+
+/**
+ * 把 LLM 输出的 JSON 字符串解析出来，容忍 markdown 代码块包裹
+ */
+function tryParseLLMJson(text) {
+  if (!text) return null
+  // 去掉 ```json ... ``` 包裹
+  let s = text.trim()
+  const fenceMatch = s.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fenceMatch) s = fenceMatch[1].trim()
+  // 找第一个 { 到最后一个 }（处理前后有寒暄文字的情况）
+  const start = s.indexOf('{')
+  const end = s.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) s = s.slice(start, end + 1)
+  try {
+    return JSON.parse(s)
+  } catch (_e) {
+    return null
+  }
+}
+
+/**
+ * 用 LLM 提取概念 + 关系
+ * @param {string} text 待分析文本
+ * @returns {Promise<{concepts, relations, summary}>}
+ */
+export async function analyzeWithLLM(text) {
+  if (!text || text.trim().length === 0) {
+    return { concepts: [], relations: [], summary: '' }
+  }
+  const prompt = `请分析以下文本，提取关键概念与关系，按上方 JSON schema 输出：\n\n---\n${text.slice(0, 8000)}`
+  const raw = await callLLM({ system: SYSTEM_PROMPT, prompt, jsonMode: true })
+  const parsed = tryParseLLMJson(raw)
+  if (!parsed) {
+    // LLM 输出解析失败 → 退回客户端规则解析
+    console.warn('[aiService] LLM 输出无法解析为 JSON，回退到规则解析')
+    return parseMarkdown(text)
+  }
+  return {
+    concepts: (parsed.concepts || []).map((c) => ({
+      title: c.title || c.name || '',
+      description: c.description || '',
+      tags: c.tags || [],
+      importance: c.importance || 'medium',
+    })).filter((c) => c.title),
+    relations: (parsed.relations || []).map((r) => ({
+      source: r.source || r.from || '',
+      target: r.target || r.to || '',
+      type: r.type || '相关',
+      reason: r.reason || '',
+    })).filter((r) => r.source && r.target),
+    summary: parsed.summary || '',
+  }
+}
+
+/**
+ * 让 LLM 给现有节点推荐新关系
+ * @param {Array<{title:string, description?:string}>} concepts
+ * @returns {Promise<Array>}
+ */
+export async function suggestRelationsLLM(concepts) {
+  if (!concepts || concepts.length < 2) return []
+  const list = concepts.map((c, i) => `${i + 1}. ${c.title}${c.description ? ' — ' + c.description : ''}`).join('\n')
+  const system = '你是知识图谱关系推断助手。给定一组概念，推断它们之间最有价值的连接关系。'
+  const prompt = `下列是用户画布上的概念列表，请推断它们之间最值得连线的关系（最多 12 条），输出 JSON：
+
+${list}
+
+输出格式（严格 JSON，不要 markdown）：
+{ "relations": [ { "source": "概念A", "target": "概念B", "type": "因果|组成|依赖|相似|对比|顺序|引用", "reason": "理由" } ] }
+
+注意：source 和 target 必须从上方列表的概念名中选，type 从给定的 7 种关系里选。`
+  const raw = await callLLM({ system, prompt, jsonMode: true })
+  const parsed = tryParseLLMJson(raw)
+  if (!parsed?.relations) return []
+  return parsed.relations
+    .filter((r) => r.source && r.target && r.source !== r.target)
+    .map((r) => ({
+      source: r.source,
+      target: r.target,
+      type: r.type || '相关',
+      reason: r.reason || '',
+    }))
 }

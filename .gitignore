@@ -6,3 +6,10 @@ dist
 test-results
 playwright-report
 e2e/.tmp
+
+# 后端运行时数据 (y-ws-server LevelDB 持久化)
+server/yjs-data/
+server/node_modules/
+
+# 临时日志
+*.log

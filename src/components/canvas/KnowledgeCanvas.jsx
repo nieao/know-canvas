@@ -28,6 +28,8 @@ import VideoNode from './VideoNode'
 import FileNode from './FileNode'
 import NoteNode from './NoteNode'
 import GroupNode from './GroupNode'
+import TaskNode from './TaskNode'
+import ResultNode from './ResultNode'
 import SelectionToolbar from './SelectionToolbar'
 import NodePropertyPanel from './NodePropertyPanel'
 
@@ -41,6 +43,9 @@ const nodeTypes = {
   fileNode: FileNode,
   noteNode: NoteNode,
   groupNode: GroupNode,
+  // metahermes 集成: Hermes 任务派单 + 结果回流
+  taskNode: TaskNode,
+  resultNode: ResultNode,
 }
 
 // 知识关系类型
@@ -202,6 +207,11 @@ function QuickAddMenu({ x, y, onSelect, onClose }) {
     { type: 'concept', label: '概念', icon: '💡' },
     { type: 'note', label: '笔记', icon: '📝' },
     { type: 'link', label: '链接', icon: '🔗' },
+    { type: 'image', label: '图片', icon: '🖼️' },
+    { type: 'video', label: '视频', icon: '🎬' },
+    { type: 'file', label: '文件', icon: '📎' },
+    { type: 'voice', label: '语音', icon: '🎤' },
+    { type: 'task', label: 'Hermes 任务', icon: '⚡' },
   ]
 
   return (
@@ -390,6 +400,29 @@ function KnowledgeCanvasInner({
     }
   }, [nodes])
 
+  // 双击空白唤起快速添加菜单（仅当目标在画布空白区，不在节点/handle 上）
+  const handleWrapperDoubleClick = useCallback((e) => {
+    if (!reactFlowInstance) return
+    // 排除：节点、handle、控制按钮等
+    const target = e.target
+    if (target.closest('.react-flow__node')) return
+    if (target.closest('.react-flow__handle')) return
+    if (target.closest('.react-flow__controls')) return
+    if (target.closest('.react-flow__minimap')) return
+    if (target.closest('button')) return
+    if (target.closest('input, textarea, select')) return
+    const flowPosition = reactFlowInstance.screenToFlowPosition({
+      x: e.clientX,
+      y: e.clientY,
+    })
+    setQuickAddMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      flowPosition,
+    })
+  }, [reactFlowInstance])
+
   // 画布空白区域右键（也支持多选状态）
   const handlePaneContextMenu = useCallback((e) => {
     e.preventDefault()
@@ -494,6 +527,7 @@ function KnowledgeCanvasInner({
       style={{ backgroundColor: '#fafafa', cursor: isPanMode ? 'grab' : 'default' }}
       onDragOver={handleDragOver}
       onDrop={handleFileDrop}
+      onDoubleClick={handleWrapperDoubleClick}
     >
       <ReactFlow
         nodes={nodes}

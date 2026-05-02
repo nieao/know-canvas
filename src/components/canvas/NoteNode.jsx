@@ -5,6 +5,7 @@
 
 import { memo, useState, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
+import ColorAccentBar from './ColorAccentBar'
 
 // 安全获取字符串内容
 const safeString = (val) => {
@@ -87,6 +88,8 @@ function NoteNode({ id, data, selected }) {
       }}
       onDoubleClick={handleDoubleClick}
     >
+      <ColorAccentBar color={data?.color} />
+
       {/* 连接点 */}
       <Handle type="target" position={Position.Top} id="top-target"
         style={{ ...HANDLE_STYLE, top: -5 }} />

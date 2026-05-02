@@ -10,12 +10,20 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
-  webServer: {
-    command: 'npm run dev -- --port 5180',
-    port: 5180,
-    timeout: 15000,
-    reuseExistingServer: true,
-  },
+  webServer: [
+    {
+      command: 'npm run dev -- --port 5180',
+      port: 5180,
+      timeout: 15000,
+      reuseExistingServer: true,
+    },
+    {
+      command: 'node server/y-ws-server.js --port 1234',
+      port: 1234,
+      timeout: 15000,
+      reuseExistingServer: true,
+    },
+  ],
   projects: [
     {
       name: 'chromium',

@@ -1763,10 +1763,12 @@ const useCanvasStore = create(
             body: src.data?.description || '',
             assignee: '',
             priority: src.data?.variant === 'constraint' ? 4 : 3,
-            status: 'draft',
+            // status='pending' — conductor _maybeClaim 只接 pending+auto+hermes
+            // draft 是 UI 编辑中态, pending 才是 worker 可接的派单态
+            status: 'pending',
             from_ontology_node: ontoNodeId,
             created_at: ts,
-            // orchestra auto 流: conductor 在 demo-final 房间会自动接管
+            // orchestra auto 流: conductor 在 demo-final 房间自动接管
             agentMode: 'auto',
             assignedTo: 'hermes',
             hermesAssignee: 'default',

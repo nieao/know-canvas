@@ -7,6 +7,29 @@
 
 ---
 
+## ⛔ 千万不要做的事 (重要!)
+
+**不要执行 `hermes gateway start/restart/install`**.
+
+`hermes gateway` 是 **messaging gateway** (Telegram / Discord / WhatsApp), **不是 LLM gateway**.
+know-canvas 的 auto 派单 / Aletheia 拆解 / Hermes worker 跑 task **完全不依赖它**.
+
+如果你看到这个错误:
+
+```
+⚠ Cannot restart gateway as a service — linger is not enabled.
+  Run:  sudo loginctl enable-linger root
+  Then restart the gateway: hermes gateway restart
+```
+
+**直接忽略**. 不要 enable-linger, 不要 restart gateway. 这跟我们的系统无关.
+
+`/api/status` 返回 `gateway_running=false` 是正常状态 — Hermes worker 跑 task **不依赖** gateway 状态.
+
+---
+
+---
+
 ## 当前状态
 
 VPS (ha2.digitalvio.shop) 上 4 个 know-canvas 服务全跑：

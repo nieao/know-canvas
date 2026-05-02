@@ -109,16 +109,32 @@ cd "$INSTALL_DIR/server"
 npm install --production --no-audit --no-fund 2>&1 | tail -3
 echo "  ✓ server deps OK"
 
-# ---- 5. 装 systemd unit ----
+# ---- 5. 装 systemd unit + 重启相关服务 ----
 echo ""
-echo "[5/6] 装 systemd unit know-canvas-yws..."
+echo "[5/6] 装 systemd unit know-canvas-yws + restart 相关守护..."
 sudo cp "$INSTALL_DIR/deploy/know-canvas-yws.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable know-canvas-yws
 sudo systemctl restart know-canvas-yws
 sleep 2
-echo "  systemd status:"
-sudo systemctl status know-canvas-yws --no-pager -l | head -15
+echo "  yws status:"
+sudo systemctl status know-canvas-yws --no-pager -l | head -10
+
+# 如果 conductor 服务已装 (lichang/前面 agent 装过), 重启让它读新代码
+# 不存在的话不报错
+if systemctl list-unit-files | grep -q '^know-canvas-conductor.service'; then
+  echo "  conductor 服务存在, 重启读新代码..."
+  sudo systemctl restart know-canvas-conductor
+  sleep 2
+  sudo systemctl status know-canvas-conductor --no-pager -l | head -10
+else
+  echo "  (跳过 conductor — 服务未装, 用 server/orchestra-hermes-worker.js 手动起)"
+fi
+
+# llm-proxy 同理
+if systemctl list-unit-files | grep -q '^know-canvas-llm-proxy.service'; then
+  echo "  llm-proxy 不需要重启 (代码不在 repo, /opt/know-canvas-llm-proxy/server.js)"
+fi
 
 # ---- 6. 健康检查 ----
 echo ""

@@ -14,6 +14,7 @@
  */
 
 const { OrchestraWorker, sleep } = require('./orchestra-base')
+const { parseHermesLog, parseHermesSessionMeta } = require('./lib/hermes-log-parser')
 
 const HERMES_BASE = (process.env.HERMES_BASE || 'https://ha2.digitalvio.shop').replace(/\/$/, '')
 const HERMES_USER = process.env.HERMES_USER || ''
@@ -138,6 +139,11 @@ class HermesWorker extends OrchestraWorker {
     this.log(`hermes task created: ${taskId}, polling...`)
     reportProgress?.({ phase: 'polling', hermesStatus: 'ready', hermesTaskId: taskId, etaMs: 120_000 })
 
+    // 立刻 trigger 一次 dispatch — ready→running 时间从 ~5s 降到 ~200ms
+    hermesCall('POST', '/api/plugins/kanban/dispatch', {}).catch((e) => {
+      this.warn(`dispatch trigger 失败 (容错): ${e.message}`)
+    })
+
     for (let i = 0; i < POLL_MAX_TRIES; i++) {
       await sleep(POLL_INTERVAL_MS)
       const r = await hermesCall('GET', `/api/plugins/kanban/tasks/${taskId}`)
@@ -159,11 +165,41 @@ class HermesWorker extends OrchestraWorker {
       })
 
       if (['done', 'completed', 'success'].includes(status)) {
+        // task.result 在 hermes 里基本永远是 null, worker 真正输出在 task log 里.
+        // 拉一次 log + parse 出最后一个 ⚕ Hermes ─...╯ 块, 这是 worker 的最终回答.
+        let workerOutput = null
+        let sessionMeta = {}
+        try {
+          const lr = await hermesCall('GET', `/api/plugins/kanban/tasks/${taskId}/log`)
+          if (lr.ok && lr.data?.content) {
+            workerOutput = parseHermesLog(lr.data.content)
+            sessionMeta = parseHermesSessionMeta(lr.data.content)
+            this.log(`worker 输出长度=${workerOutput?.length || 0}, session=${sessionMeta.sessionId || 'n/a'}`)
+          } else {
+            this.warn(`拉 log 失败 ${lr.status}, 用 fallback`)
+          }
+        } catch (e) {
+          this.warn(`拉 log 异常: ${e.message}`)
+        }
+
+        // 给 ResultNode 直接渲染字符串 (base._createResultNode 看 outcome.result 类型 —
+        // 字符串就直接写, 对象会 JSON.stringify 害用户看一坨 JSON).
+        // 优先级: parse 出的 worker 输出 > task.result > task.summary > 占位
+        const finalText = workerOutput
+          || (typeof t?.result === 'string' ? t.result : null)
+          || t?.summary
+          || `(hermes task ${taskId} 完成, 但没拉到输出文本)`
         return {
           ok: true,
-          summary: t?.summary || `hermes task ${taskId} 完成`,
-          result: { hermes_task_id: taskId, status, result: t?.result, summary: t?.summary, events },
+          summary: workerOutput?.slice(0, 80) || t?.summary || `hermes task ${taskId} 完成`,
+          result: finalText,
           tokens,
+          // 元信息塞到 outcome 顶层 (base 暂不消费, 留作日后扩展)
+          meta: {
+            hermes_task_id: taskId,
+            session: sessionMeta,
+            events,
+          },
         }
       }
       if (['failed', 'cancelled', 'error'].includes(status)) {

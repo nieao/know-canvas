@@ -13,3 +13,10 @@ server/node_modules/
 
 # 临时日志
 *.log
+
+# 探测 / E2E 测试产物
+.hermes-recon/probe-*.json
+.hermes-recon/e2e-*.ndjson
+.test-screenshots/
+e2e-orchestra-shots/
+e2e-real-run.png

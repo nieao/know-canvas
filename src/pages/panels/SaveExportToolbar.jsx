@@ -5,6 +5,7 @@
 
 import { useState, useRef } from 'react'
 import useCanvasStore from '../../stores/useCanvasStore'
+import { useAletheiaStore } from '../../stores/useAletheiaStore'
 import { logAction } from '../../utils/actionLog'
 
 function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCanvasData }) {
@@ -20,6 +21,10 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
   const layoutDirection = useCanvasStore((s) => s.layoutDirection)
   const setLayoutDirection = useCanvasStore((s) => s.setLayoutDirection)
   const applyAutoLayout = useCanvasStore((s) => s.applyAutoLayout)
+
+  // Aletheia 决策引擎激活时, 让工具栏给 banner 的"对画布跑一轮"等按钮让位
+  // (banner 的按钮坐标和工具栏的"排序"按钮在 1280 视口下 bbox 重叠, 工具栏会拦截 banner 的点击)
+  const aletheiaActive = useAletheiaStore((s) => s?.aletheiaActive ?? false)
 
   // 一键自动排序 — 按当前方向 + 节点连边算出新位置
   const handleAutoLayout = async () => {
@@ -230,6 +235,9 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
     setIsImporting(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
+
+  // Aletheia 引擎激活时隐藏工具栏 — 让 banner 的"对画布跑一轮"独占顶部点击
+  if (aletheiaActive) return null
 
   return (
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex gap-2">

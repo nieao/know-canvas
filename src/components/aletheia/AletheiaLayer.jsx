@@ -74,9 +74,10 @@ export default function AletheiaLayer() {
   // 激活后 — 全屏 Aletheia 决策引擎
   return (
     <>
-      {/* 顶部 banner — 标识当前是 Aletheia 模式 + 关闭入口 */}
+      {/* 顶部 banner — 标识当前是 Aletheia 模式 + 关闭入口
+          z-[60] 必须高于 SaveExportToolbar (z-50), 否则工具栏的"排序"按钮会拦截"对画布跑一轮"的点击 */}
       <div
-        className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-6 py-3"
+        className="absolute top-0 left-0 right-0 z-[60] flex items-center justify-between px-6 py-3"
         style={{
           background: 'linear-gradient(180deg, rgba(26,26,26,0.92) 0%, rgba(26,26,26,0.6) 100%)',
           backdropFilter: 'blur(16px)',

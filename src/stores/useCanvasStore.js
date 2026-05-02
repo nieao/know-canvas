@@ -1896,13 +1896,13 @@ const useCanvasStore = create(
           data: { relationType: '派单' },
           style: { stroke: '#c8a882', strokeWidth: 2 },
         }
-        set((state) => {
-          state.nodes.push(taskNode)
-          state.edges.push(newEdge)
-        })
+        // 拆成两个 set — 单 set 同时改 nodes+edges 在 immer 下被观察过引用 stable
+        // 导致 yjsSync subscribe 的 (nodes === lastNodes) 短路, 永远不 push 到 yjs
+        set((state) => { state.nodes.push(taskNode) })
+        set((state) => { state.edges.push(newEdge) })
 
         // 不调 dispatchTaskNode (那是 manual 流) — orchestra dispatcher 看到
-        // agentMode='auto' + status='draft' 会自动推 pending → hermes worker 抢锁
+        // agentMode='auto' + status='pending' 会自动接管 → hermes worker 抢锁
         return taskId
       },
 

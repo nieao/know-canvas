@@ -81,7 +81,10 @@ export function attachYjsSync() {
     pushLocalToYjs(state.nodes, state.edges)
   })
 
-  // 临时调试: 暴露到 window 让 Playwright/手测能直接读
+  // 调试钩子: 浏览器 console / Playwright 可以读 yjs 实时状态
+  // window.__yjsDebug.getNodes() — 当前 yjs nodes
+  // window.__yjsDebug.isSuppressed() — sync 是否被 suppress
+  // window.__zustand.getState() — zustand 当前 state
   if (typeof window !== 'undefined') {
     window.__yjsDebug = {
       getNodes: () => {
@@ -91,7 +94,6 @@ export function attachYjsSync() {
       },
       getYDoc: getDoc,
       getProvider,
-      getNodesMap,
       isSuppressed: () => _suppressLocalPush,
       pushNow: () => pushLocalToYjs(useCanvasStore.getState().nodes, useCanvasStore.getState().edges),
     }

@@ -123,7 +123,7 @@ class OrchestraWorker {
     const data = node.data
     if (!data) return
     if (node.type !== 'taskNode') return
-    // 临时调试: TaskNode 看到的 data 全 dump (黑客松排查用)
+    // 排查时打开: ORCHESTRA_DEBUG_CLAIM=1 dump 每个 TaskNode 的 mode/assignee/status
     if (process.env.ORCHESTRA_DEBUG_CLAIM === '1') {
       this.log(`[debug] task ${nodeId}: agentMode=${data.agentMode} assignedTo=${data.assignedTo} status=${data.status} title=${(data.title || '').slice(0, 30)}`)
     }

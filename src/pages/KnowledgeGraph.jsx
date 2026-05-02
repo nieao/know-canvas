@@ -229,6 +229,12 @@ export default function KnowledgeGraph() {
       }
     }
 
+    // 系统剪贴板纯文本粘贴 → 自动建 NoteNode
+    const onCanvasPasteText = (e) => {
+      const { text, position } = e.detail
+      if (text) addNoteNode(text, position)
+    }
+
     const onCanvasSelectAll = () => {
       const allNodes = useCanvasStore.getState().nodes
       onNodesChange(allNodes.map(n => ({ id: n.id, type: 'select', selected: true })))
@@ -350,6 +356,7 @@ export default function KnowledgeGraph() {
     window.addEventListener('canvas-file-drop', onCanvasFileDrop)
     window.addEventListener('canvas-url-drop', onCanvasUrlDrop)
     window.addEventListener('canvas-paste', onCanvasPaste)
+    window.addEventListener('canvas-paste-text', onCanvasPasteText)
     window.addEventListener('canvas-select-all', onCanvasSelectAll)
     window.addEventListener('canvas-quick-add', onCanvasQuickAdd)
     window.addEventListener('selection-action', onSelectionAction)
@@ -361,6 +368,7 @@ export default function KnowledgeGraph() {
       window.removeEventListener('canvas-file-drop', onCanvasFileDrop)
       window.removeEventListener('canvas-url-drop', onCanvasUrlDrop)
       window.removeEventListener('canvas-paste', onCanvasPaste)
+      window.removeEventListener('canvas-paste-text', onCanvasPasteText)
       window.removeEventListener('canvas-select-all', onCanvasSelectAll)
       window.removeEventListener('canvas-quick-add', onCanvasQuickAdd)
       window.removeEventListener('selection-action', onSelectionAction)

@@ -81,6 +81,23 @@ export function attachYjsSync() {
     pushLocalToYjs(state.nodes, state.edges)
   })
 
+  // 临时调试: 暴露到 window 让 Playwright/手测能直接读
+  if (typeof window !== 'undefined') {
+    window.__yjsDebug = {
+      getNodes: () => {
+        const arr = []
+        getNodesMap().forEach((v, k) => arr.push({ id: k, type: v.type, data: v.data }))
+        return arr
+      },
+      getYDoc: getDoc,
+      getProvider,
+      getNodesMap,
+      isSuppressed: () => _suppressLocalPush,
+      pushNow: () => pushLocalToYjs(useCanvasStore.getState().nodes, useCanvasStore.getState().edges),
+    }
+    window.__zustand = useCanvasStore
+  }
+
   console.log('[yjsSync] attached, waiting for sync...')
 }
 

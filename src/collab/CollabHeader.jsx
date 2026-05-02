@@ -1,12 +1,59 @@
 /**
  * CollabHeader — 画布右上角的协作信息条
  *
- * 包含：AI 设置按钮 · 在线用户列表 · 房间号/用户名徽章 · 退出按钮
+ * 包含：AI 设置按钮 · 全局任务模式开关 · 在线用户列表 · 房间号/用户名徽章 · 退出按钮
  *
  * 拆出来的目的：让 KnowledgeGraph 只引一个组件，UI 细节内聚在协作子系统里。
  */
 
 import { RemoteUserList } from './PresenceLayer'
+import useCanvasStore from '../stores/useCanvasStore'
+
+// 三种全局任务模式：自动路由 / 强制本地 / 强制 Hermes
+const TASK_MODES = [
+  { value: 'auto', label: '自动' },
+  { value: 'local', label: '本地' },
+  { value: 'hermes', label: 'Hermes' },
+]
+
+// 三段式任务模式开关 (segmented control) — 选中 warm-bg/warm，非选中透明/灰
+function TaskModeSwitch() {
+  const taskMode = useCanvasStore((s) => s.taskMode)
+  const setTaskMode = useCanvasStore((s) => s.setTaskMode)
+  const wrap = {
+    backgroundColor: 'rgba(250,250,250,0.95)', border: '1px solid #e8e8e8',
+    backdropFilter: 'blur(8px)', padding: '3px 8px',
+    fontFamily: '"Noto Sans SC", system-ui, sans-serif',
+  }
+  return (
+    <div className="flex items-center gap-1.5 rounded-lg shadow-sm" style={wrap}>
+      <span style={{ fontSize: '0.7rem', letterSpacing: '0.25em', color: '#bbb' }}>模式</span>
+      <div className="flex items-center" style={{ border: '1px solid #e8e8e8', borderRadius: '6px', overflow: 'hidden' }}>
+        {TASK_MODES.map((m, i) => {
+          const active = taskMode === m.value
+          return (
+            <button
+              key={m.value}
+              onClick={() => setTaskMode(m.value)}
+              className="transition-colors"
+              style={{
+                fontSize: '11px', padding: '4px 12px', cursor: 'pointer',
+                background: active ? 'var(--warm-bg, #f5f0eb)' : 'transparent',
+                color: active ? 'var(--warm, #c8a882)' : '#888',
+                borderLeft: i === 0 ? 'none' : '1px solid #e8e8e8',
+              }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = '#555' }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = '#888' }}
+              title={`任务模式: ${m.label}`}
+            >
+              {m.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 export default function CollabHeader({ room, username, onOpenAiSettings, onExit }) {
   return (
@@ -27,6 +74,7 @@ export default function CollabHeader({ room, username, onOpenAiSettings, onExit 
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </button>
+      <TaskModeSwitch />
       <RemoteUserList />
       <div
         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg shadow-sm"

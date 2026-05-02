@@ -83,6 +83,16 @@ const useCanvasStore = create(
       showMiniMap: true,
       showChineseLabels: true,
 
+      // 全局任务模式 — 决策层路由器使用
+      // 'auto'   = 自动路由 (TaskRouter 按复杂度判断 local 还是 hermes)
+      // 'local'  = 强制本地 (callLLM)
+      // 'hermes' = 强制 Hermes (走 orchestra inject)
+      // 初始化时从 localStorage 读取，setTaskMode 时写回
+      taskMode:
+        (typeof localStorage !== 'undefined' &&
+          localStorage.getItem('know_canvas_task_mode')) ||
+        'auto',
+
       // 视口状态，用于定位新节点到视图中心
       viewportCenter: { x: 400, y: 300 },
       viewportZoom: 1,
@@ -668,6 +678,111 @@ const useCanvasStore = create(
             }
             node.data = { ...preserved }
           }
+        })
+      },
+
+      // ===== 任务模式 + 本地任务 + 任务清单 + 关联 agent/skill =====
+      // 决策层 (RightPanel 路由器 + 三模式开关) 用于派单的统一数据模型。
+
+      // 切换全局任务模式 ('auto' | 'local' | 'hermes')，并写入 localStorage
+      setTaskMode: (mode) => {
+        if (!['auto', 'local', 'hermes'].includes(mode)) return
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('know_canvas_task_mode', mode)
+        }
+        set({ taskMode: mode })
+      },
+
+      // 本地任务 — 添加 (status='pending')，返回 taskId
+      addLocalTask: (nodeId, { prompt, target, routerReason }) => {
+        const taskId = `ltask-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (!node) return
+          if (!Array.isArray(node.data.localTasks)) node.data.localTasks = []
+          node.data.localTasks.push({
+            id: taskId,
+            prompt,
+            target: target || 'local',
+            routerReason: routerReason || '',
+            status: 'pending',
+            result: null,
+            error: null,
+            createdAt: Date.now(),
+            startedAt: null,
+            finishedAt: null,
+            durationMs: 0,
+          })
+        })
+        return taskId
+      },
+
+      // 本地任务 — 更新状态/字段 (patch merge)
+      updateLocalTaskStatus: (nodeId, taskId, patch) => {
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (!node || !Array.isArray(node.data.localTasks)) return
+          const task = node.data.localTasks.find((t) => t.id === taskId)
+          if (!task) return
+          Object.assign(task, patch)
+        })
+      },
+
+      // 本地任务 — 删除
+      removeLocalTask: (nodeId, taskId) => {
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (!node || !Array.isArray(node.data.localTasks)) return
+          node.data.localTasks = node.data.localTasks.filter((t) => t.id !== taskId)
+        })
+      },
+
+      // 任务清单 — 添加项，返回 itemId
+      addChecklistItem: (nodeId, text) => {
+        const itemId = `cl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (!node) return
+          if (!Array.isArray(node.data.checklist)) node.data.checklist = []
+          node.data.checklist.push({ id: itemId, text, done: false })
+        })
+        return itemId
+      },
+
+      // 任务清单 — 切换 done
+      toggleChecklistItem: (nodeId, itemId) => {
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (!node || !Array.isArray(node.data.checklist)) return
+          const item = node.data.checklist.find((i) => i.id === itemId)
+          if (item) item.done = !item.done
+        })
+      },
+
+      // 任务清单 — 删除项
+      removeChecklistItem: (nodeId, itemId) => {
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (!node || !Array.isArray(node.data.checklist)) return
+          node.data.checklist = node.data.checklist.filter((i) => i.id !== itemId)
+        })
+      },
+
+      // 关联 agents — 整体覆盖
+      setRelatedAgents: (nodeId, agents) => {
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (!node) return
+          node.data.relatedAgents = Array.isArray(agents) ? agents : []
+        })
+      },
+
+      // 关联 skills — 整体覆盖
+      setRelatedSkills: (nodeId, skills) => {
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === nodeId)
+          if (!node) return
+          node.data.relatedSkills = Array.isArray(skills) ? skills : []
         })
       },
 
@@ -1511,7 +1626,9 @@ const useCanvasStore = create(
 
       // ===== Hermes 派单集成 (metahermes 三件套) =====
 
-      // 在画布加一个 TaskNode (草稿状态, 用户编辑后点"派给 Hermes")
+      // 在画布加一个 TaskNode (草稿状态)
+      // 由决策层 (RightPanel 路由器 + 三模式开关) 统一调度，节点本身只承载
+      // "任务清单 + 关联 agent/skill 标签" 展示，不再自带 Hermes 派单 UI。
       addTaskNode: (position = null) => {
         const { getNextGridPosition } = get()
         const pos = position || getNextGridPosition()
@@ -1523,14 +1640,11 @@ const useCanvasStore = create(
           data: {
             title: '',
             body: '',
-            assignee: '',
-            priority: 3,
             status: 'draft',
+            checklist: [],          // [{ id, text, done }] - 任务清单
+            relatedAgents: [],      // ['hermes', 'aletheia', 'claude-cli']
+            relatedSkills: [],      // ['onto-parser', 'antithesis-engine']
             created_at: Date.now(),
-            // orchestra 多 agent 字段 (默认 manual, 不破坏现有派给 Hermes 流)
-            agentMode: 'manual',
-            assignedTo: null,
-            hermesAssignee: null,
           },
         }
         set((state) => {
@@ -1900,6 +2014,7 @@ const useCanvasStore = create(
         viewMode: state.viewMode,
         showMiniMap: state.showMiniMap,
         showChineseLabels: state.showChineseLabels,
+        taskMode: state.taskMode,
       }),
     }
   )

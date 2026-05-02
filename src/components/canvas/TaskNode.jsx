@@ -1,239 +1,212 @@
 /**
- * TaskNode — 任务节点 (Manual + Auto 双模式)
- *
- * Manual: 用户填好 → 点 "派给 Hermes" → store.dispatchTaskNode → hermes-proxy:17081
- *         (现有 metahermes 流, 不变)
- * Auto:   选 assignedTo (hermes/claude-cli/feishu-bot) + 状态 draft → orchestra dispatcher 推 pending →
- *         worker 抢锁跑 → done 时自动建 ResultNode
- *         (orchestra 流, 见 docs/orchestra-blackboard-spec.md)
- *
- * 状态机:
- *   draft → dispatching → pending/running → done/failed
- *
- * 建筑极简风:
- *   - 顶部 ColorAccentBar (状态色)
- *   - draft 灰 / running 暖色脉动 / done 绿 / failed 红
+ * TaskNode — 任务清单 + agent/skill 标签展示器
+ * boss 方向调整 (2026-05-02 21:00): 节点级 Hermes 派单下放给「决策层」(RightPanel 路由器 + 三模式开关)。
+ * 节点本身只展示「当前节点要完成的清单」+「牵扯到的 agent / skill」。
+ * 状态机: draft → running → done / failed
+ * data: title / body / status / error? / checklist[{id,text,done}] / relatedAgents[] / relatedSkills[]
  */
 
-const AGENT_OPTIONS = [
-  { value: 'hermes', label: 'Hermes (Kanban)' },
-  { value: 'claude-cli', label: 'Claude CLI (本机)' },
-  { value: 'feishu-bot', label: '飞书 Bot' },
-]
-
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import ColorAccentBar from './ColorAccentBar'
 import useCanvasStore from '../../stores/useCanvasStore'
 import { TASK_NODE_STATUS } from '../../services/hermesService'
 
 const STATUS_META = {
-  [TASK_NODE_STATUS.DRAFT]:       { label: '草稿', color: '#bbbbbb', dot: '○' },
-  [TASK_NODE_STATUS.DISPATCHING]: { label: '派单中…', color: '#c8a882', dot: '◐' },
-  [TASK_NODE_STATUS.PENDING]:     { label: '排队中', color: '#c8a882', dot: '◔' },
-  [TASK_NODE_STATUS.RUNNING]:     { label: 'AI 执行中…', color: '#7c9eb2', dot: '◕' },
-  [TASK_NODE_STATUS.DONE]:        { label: '完成', color: '#8b9e7c', dot: '●' },
-  [TASK_NODE_STATUS.FAILED]:      { label: '失败', color: '#b27c8b', dot: '✕' },
+  [TASK_NODE_STATUS.DRAFT]:   { label: '草稿', color: '#bbbbbb', dot: '○' },
+  [TASK_NODE_STATUS.RUNNING]: { label: 'AI 执行中…', color: '#7c9eb2', dot: '◕' },
+  [TASK_NODE_STATUS.DONE]:    { label: '完成', color: '#8b9e7c', dot: '●' },
+  [TASK_NODE_STATUS.FAILED]:  { label: '失败', color: '#b27c8b', dot: '✕' },
 }
+const MAX_VISIBLE = 5
 
 function TaskNodeImpl({ id, data, selected }) {
-  const dispatchTaskNode = useCanvasStore((s) => s.dispatchTaskNode)
+  // 派单逻辑由决策层统一接管, 这里只读写本节点数据
   const updateNode = useCanvasStore((s) => s.updateNode)
-
-  const handleUpdate = (patch) => updateNode(id, patch)
+  const addChecklistItem = useCanvasStore((s) => s.addChecklistItem)
+  const toggleChecklistItem = useCanvasStore((s) => s.toggleChecklistItem)
+  const removeChecklistItem = useCanvasStore((s) => s.removeChecklistItem)
+  const setRelatedAgents = useCanvasStore((s) => s.setRelatedAgents)
+  const setRelatedSkills = useCanvasStore((s) => s.setRelatedSkills)
 
   const status = data.status || TASK_NODE_STATUS.DRAFT
   const meta = STATUS_META[status] || STATUS_META[TASK_NODE_STATUS.DRAFT]
   const title = data.title || ''
   const body = data.body || ''
-  const assignee = data.assignee || ''
-  const taskId = data.task_id || ''
   const errorMessage = data.error || ''
-  const agentMode = data.agentMode || 'manual'
-  const assignedTo = data.assignedTo || ''
-  const hermesAssignee = data.hermesAssignee || ''
-  const claimedBy = data.claimedBy || ''
+  const checklist = Array.isArray(data.checklist) ? data.checklist : []
+  const agents = Array.isArray(data.relatedAgents) ? data.relatedAgents : []
+  const skills = Array.isArray(data.relatedSkills) ? data.relatedSkills : []
+  const isDraft = status === TASK_NODE_STATUS.DRAFT
 
-  const onDispatch = (e) => {
-    e.stopPropagation()
-    dispatchTaskNode(id).catch((err) => {
-      console.error('[TaskNode] dispatch failed:', err)
-      handleUpdate({ status: TASK_NODE_STATUS.FAILED, error: err.message })
-    })
+  const [expanded, setExpanded] = useState(false)
+  const [newItem, setNewItem] = useState('')
+  const [tagInput, setTagInput] = useState({ kind: null, text: '' }) // kind: 'agents' | 'skills' | null
+
+  const handleUpdate = (patch) => updateNode(id, patch)
+
+  const submitItem = () => {
+    const t = newItem.trim()
+    if (!t) return
+    addChecklistItem?.(id, t)
+    setNewItem('')
   }
 
-  const onModeToggle = (e) => {
-    e.stopPropagation()
-    handleUpdate({ agentMode: agentMode === 'auto' ? 'manual' : 'auto' })
+  const submitTag = () => {
+    const t = tagInput.text.trim()
+    if (t) {
+      if (tagInput.kind === 'agents' && !agents.includes(t)) setRelatedAgents?.(id, [...agents, t])
+      if (tagInput.kind === 'skills' && !skills.includes(t)) setRelatedSkills?.(id, [...skills, t])
+    }
+    setTagInput({ kind: null, text: '' })
+  }
+
+  const visible = expanded ? checklist : checklist.slice(0, MAX_VISIBLE)
+  const hidden = checklist.length - MAX_VISIBLE
+
+  // 渲染单行标签 (agents 或 skills)
+  const renderTagRow = (kind, list, color, removeFn) => {
+    // 空状态: 非 draft 且空 → 不渲染整行
+    if (!isDraft && list.length === 0) return null
+    return (
+      <div className="flex items-start gap-1.5 flex-wrap text-[10px]">
+        <span className="text-gray-400 tracking-[0.15em] uppercase pt-0.5">{kind} ·</span>
+        {list.map((t) => (
+          <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm border bg-white"
+            style={{ borderColor: color, color }}>
+            {t}
+            {isDraft && (
+              <button onClick={(e) => { e.stopPropagation(); removeFn(t) }}
+                className="text-gray-400 hover:text-rose-600 leading-none" title="删除">×</button>
+            )}
+          </span>
+        ))}
+        {isDraft && tagInput.kind !== kind && (
+          <button onClick={(e) => { e.stopPropagation(); setTagInput({ kind, text: '' }) }}
+            className="text-gray-400 hover:text-amber-600 px-1">+</button>
+        )}
+        {isDraft && tagInput.kind === kind && (
+          <input autoFocus type="text" className="text-[10px] border-b outline-none bg-transparent w-20"
+            style={{ borderColor: color }}
+            value={tagInput.text}
+            onChange={(e) => setTagInput({ kind, text: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submitTag() }
+              else if (e.key === 'Escape') setTagInput({ kind: null, text: '' })
+            }}
+            onBlur={submitTag} />
+        )}
+      </div>
+    )
   }
 
   return (
-    <div
-      className={`relative bg-white border rounded-md shadow-sm transition-all duration-300 ${
-        selected ? 'border-amber-500' : 'border-gray-200'
-      }`}
-      style={{ width: 260, minHeight: 140 }}
-    >
+    <div className={`relative bg-white border rounded-md shadow-sm transition-all duration-300 ${
+      selected ? 'border-amber-500' : 'border-gray-200'
+    }`} style={{ width: 280, minHeight: 140 }}>
       <ColorAccentBar color={meta.color} />
-
       <Handle type="target" position={Position.Top} style={{ background: '#c8a882' }} />
       <Handle type="source" position={Position.Bottom} style={{ background: '#c8a882' }} />
 
       <div className="px-4 py-3">
-        {/* 标签 + 模式切换 */}
+        {/* 顶部状态行 */}
         <div className="flex items-center justify-between mb-2">
-          <span
-            className="text-[10px] tracking-[0.25em] uppercase font-semibold"
-            style={{ color: meta.color }}
-          >
-            <span className="mr-1">{meta.dot}</span>{agentMode === 'auto' ? 'AGENT TASK' : 'HERMES TASK'}
+          <span className="text-[10px] tracking-[0.25em] uppercase font-semibold" style={{ color: meta.color }}>
+            <span className="mr-1">{meta.dot}</span>TASK
           </span>
-          <div className="flex items-center gap-1.5">
-            {status === TASK_NODE_STATUS.DRAFT && (
-              <button
-                onClick={onModeToggle}
-                className="text-[9px] px-1.5 py-0.5 rounded border transition-all"
-                style={{
-                  borderColor: agentMode === 'auto' ? '#c8a882' : '#e5e5e5',
-                  color: agentMode === 'auto' ? '#c8a882' : '#888',
-                  background: agentMode === 'auto' ? '#f5f0eb' : 'white',
-                  letterSpacing: '0.1em',
-                }}
-                title={agentMode === 'auto' ? '点击切回 Manual (走 hermes-proxy 的旧流)' : '点击切到 Auto (orchestra)'}
-              >
-                {agentMode === 'auto' ? 'AUTO' : 'MANUAL'}
-              </button>
-            )}
-            <span className="text-[10px] text-gray-400">{meta.label}</span>
-          </div>
+          <span className="text-[10px] text-gray-400">{meta.label}</span>
         </div>
 
         {/* 标题 */}
-        <input
-          type="text"
+        <input type="text"
           className="w-full text-sm font-medium text-gray-900 border-none outline-none bg-transparent mb-1"
-          placeholder="任务标题…"
-          value={title}
+          placeholder="任务标题…" value={title}
           onChange={(e) => handleUpdate({ title: e.target.value })}
-          disabled={status !== TASK_NODE_STATUS.DRAFT}
-        />
+          disabled={!isDraft} />
 
-        {/* 描述 (草稿时可编辑, 之后只读) */}
-        {status === TASK_NODE_STATUS.DRAFT ? (
+        {/* 描述 */}
+        {isDraft ? (
           <textarea
             className="w-full text-xs text-gray-600 border-none outline-none bg-transparent resize-none mt-1"
-            placeholder="任务描述 (markdown)…"
-            rows={3}
-            value={body}
-            onChange={(e) => handleUpdate({ body: e.target.value })}
-          />
-        ) : (
-          body && (
-            <div className="text-xs text-gray-500 mt-1 line-clamp-2 whitespace-pre-wrap">
-              {body}
-            </div>
-          )
+            placeholder="任务描述 (markdown)…" rows={2} value={body}
+            onChange={(e) => handleUpdate({ body: e.target.value })} />
+        ) : body && (
+          <div className="text-xs text-gray-500 mt-1 line-clamp-2 whitespace-pre-wrap">{body}</div>
         )}
 
-        {/* AUTO 模式 draft: assignedTo + hermesAssignee 下拉 */}
-        {agentMode === 'auto' && status === TASK_NODE_STATUS.DRAFT && (
-          <div className="mt-2 space-y-1.5">
-            <select
-              className="w-full text-[11px] text-gray-700 border-b border-gray-100 outline-none bg-transparent pb-1"
-              value={assignedTo}
-              onChange={(e) => handleUpdate({ assignedTo: e.target.value })}
-            >
-              <option value="">— 选 agent —</option>
-              {AGENT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            {assignedTo === 'hermes' && (
-              <input
-                type="text"
-                className="w-full text-[11px] text-gray-500 border-b border-gray-100 outline-none bg-transparent pb-1"
-                placeholder="Hermes profile (真模式必填)"
-                value={hermesAssignee}
-                onChange={(e) => handleUpdate({ hermesAssignee: e.target.value })}
-              />
-            )}
-          </div>
-        )}
+        {/* 任务清单 */}
+        <div className="mt-3 pt-2 border-t" style={{ borderColor: '#f0f0f0' }}>
+          <div className="text-[10px] tracking-[0.2em] uppercase text-gray-400 mb-1.5">任务清单</div>
+          <ul className="space-y-1">
+            {visible.map((item) => (
+              <li key={item.id} className="group flex items-center gap-1.5 text-[11px]">
+                <button
+                  onClick={(e) => { e.stopPropagation(); isDraft && toggleChecklistItem?.(id, item.id) }}
+                  disabled={!isDraft}
+                  className="flex-shrink-0 w-3.5 h-3.5 border rounded-sm flex items-center justify-center"
+                  style={{
+                    borderColor: item.done ? '#c8a882' : '#d0d0d0',
+                    background: item.done ? '#c8a882' : 'transparent',
+                    color: 'white', fontSize: '9px',
+                    cursor: isDraft ? 'pointer' : 'default',
+                  }}>{item.done ? '✓' : ''}</button>
+                <span className="flex-1 break-words" style={{
+                  textDecoration: item.done ? 'line-through' : 'none',
+                  opacity: item.done ? 0.5 : 1, color: '#3a3a3a',
+                }}>{item.text}</span>
+                {isDraft && (
+                  <button onClick={(e) => { e.stopPropagation(); removeChecklistItem?.(id, item.id) }}
+                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-rose-600 text-[12px] leading-none px-1"
+                    title="删除该项">×</button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {hidden > 0 && (
+            <button onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
+              className="text-[10px] text-gray-400 hover:text-amber-600 mt-1">
+              {expanded ? '收起 ↑' : `还有 ${hidden} 项 ↓`}
+            </button>
+          )}
+          {isDraft && (
+            <input type="text"
+              className="w-full text-[11px] mt-1.5 border-b outline-none bg-transparent pb-0.5"
+              style={{ borderColor: '#f0f0f0', color: '#3a3a3a' }}
+              placeholder="+ 添加项…" value={newItem}
+              onChange={(e) => setNewItem(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); submitItem() }
+                else if (e.key === 'Escape') setNewItem('')
+              }}
+              onBlur={submitItem} />
+          )}
+        </div>
 
-        {/* MANUAL 模式 draft: assignee 自由输入 */}
-        {agentMode === 'manual' && status === TASK_NODE_STATUS.DRAFT && (
-          <input
-            type="text"
-            className="w-full text-[11px] text-gray-500 border-b border-gray-100 outline-none bg-transparent mt-2 pb-1"
-            placeholder="assignee (可空)"
-            value={assignee}
-            onChange={(e) => handleUpdate({ assignee: e.target.value })}
-          />
-        )}
-
-        {/* 元信息 (派出后 / 抢锁后) */}
-        {(taskId || claimedBy) && (
-          <div className="text-[10px] text-gray-400 mt-2 font-mono break-all">
-            {taskId && <div>task: {taskId}</div>}
-            {claimedBy && <div>by: {claimedBy}</div>}
+        {/* 关联标签 */}
+        {(isDraft || agents.length > 0 || skills.length > 0) && (
+          <div className="mt-3 pt-2 border-t space-y-1.5" style={{ borderColor: '#f0f0f0' }}>
+            {renderTagRow('agents', agents, '#c8a882',
+              (t) => setRelatedAgents?.(id, agents.filter((a) => a !== t)))}
+            {renderTagRow('skills', skills, '#7c9eb2',
+              (t) => setRelatedSkills?.(id, skills.filter((s) => s !== t)))}
           </div>
         )}
 
         {/* 错误信息 */}
         {errorMessage && (
-          <div className="text-[11px] text-rose-600 mt-2 break-words">
-            ⚠ {errorMessage}
-          </div>
+          <div className="text-[11px] text-rose-600 mt-2 break-words">⚠ {errorMessage}</div>
         )}
 
-        {/* MANUAL 模式 draft: 派给 Hermes 按钮 */}
-        {agentMode === 'manual' && status === TASK_NODE_STATUS.DRAFT && (
-          <button
-            onClick={onDispatch}
-            disabled={!title.trim()}
-            className="mt-3 w-full text-xs py-1.5 px-3 rounded-sm border transition-all"
-            style={{
-              borderColor: title.trim() ? '#c8a882' : '#e5e5e5',
-              color: title.trim() ? '#1a1a1a' : '#bbbbbb',
-              background: title.trim() ? '#f5f0eb' : 'transparent',
-              cursor: title.trim() ? 'pointer' : 'not-allowed',
-            }}
-          >
-            派给 Hermes →
-          </button>
-        )}
-
-        {/* AUTO 模式 draft: 提示 dispatcher 会接手 */}
-        {agentMode === 'auto' && status === TASK_NODE_STATUS.DRAFT && (
-          <div
-            className="mt-3 text-[10px] py-1.5 px-3 rounded-sm border text-center"
-            style={{
-              borderColor: title.trim() && assignedTo ? '#c8a882' : '#e5e5e5',
-              color: title.trim() && assignedTo ? '#c8a882' : '#bbbbbb',
-              background: title.trim() && assignedTo ? '#f5f0eb' : 'transparent',
-              letterSpacing: '0.1em',
-            }}
-          >
-            {!title.trim()
-              ? '填标题…'
-              : !assignedTo
-                ? '选 agent…'
-                : `等待 dispatcher · ${assignedTo}`}
-          </div>
-        )}
-
-        {/* running 状态: 显示进度条动画 */}
-        {(status === TASK_NODE_STATUS.RUNNING || status === TASK_NODE_STATUS.DISPATCHING) && (
+        {/* running 进度条 */}
+        {status === TASK_NODE_STATUS.RUNNING && (
           <div className="mt-3 h-0.5 bg-gray-100 overflow-hidden rounded-full">
             <div className="h-full bg-amber-400 animate-pulse" style={{ width: '60%' }} />
           </div>
         )}
 
-        {/* done 状态: 结果跳转 */}
+        {/* done 提示 */}
         {status === TASK_NODE_STATUS.DONE && (
-          <div className="text-[11px] text-emerald-700 mt-2">
-            ✓ 已完成 — 结果已生成 ResultNode
-          </div>
+          <div className="text-[11px] text-emerald-700 mt-2">✓ 已完成 — 结果已生成 ResultNode</div>
         )}
       </div>
     </div>

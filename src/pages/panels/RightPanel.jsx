@@ -1,9 +1,12 @@
 /**
  * RightPanel - 概念详情与关系编辑面板
- * 功能：选中概念信息展示、关系列表、快速添加关系、分类分配
+ * 功能：选中概念信息展示、关系列表、快速添加关系、分类分配、本地任务派单
  */
 
 import { useState } from 'react'
+import useCanvasStore from '../../stores/useCanvasStore'
+import { routeTask } from '../../services/taskRouter'
+import { runLocalTask } from '../../services/localTaskExecutor'
 
 // 关系类型选项
 const RELATION_TYPES = [
@@ -395,6 +398,11 @@ function RightPanel({
             </div>
           )}
         </div>
+
+        {/* 本地任务区块 — 决策层入口 (路由器 + 三模式开关) */}
+        <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--gray-100)' }}>
+          <LocalTaskSection node={selectedNode} />
+        </div>
       </div>
 
       {/* 底部操作栏 */}
@@ -421,6 +429,191 @@ function RightPanel({
         >
           删除概念
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LocalTaskSection — 节点级本地任务面板（决策层入口）
+// 用户写 prompt → routeTask 实时判路由 → 点执行：
+//   target='local'  → runLocalTask 直调本地 callLLM
+//   target='hermes' → POST /api/orchestra/inject 派给 Hermes 集群
+// 任务以 node.data.localTasks 形式持久化，受 yjs 同步
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 中文相对时间
+function formatRelativeTime(ts) {
+  if (!ts) return ''
+  const d = Date.now() - ts
+  if (d < 5000) return '刚刚'
+  if (d < 60000) return `${Math.floor(d / 1000)} 秒前`
+  if (d < 3600000) return `${Math.floor(d / 60000)} 分钟前`
+  if (d < 86400000) return `${Math.floor(d / 3600000)} 小时前`
+  return `${Math.floor(d / 86400000)} 天前`
+}
+
+// 状态图标 + 颜色
+const STATUS_META = {
+  pending: { icon: '◌', color: '#bbb' },
+  running: { icon: '⏵', color: 'var(--warm)' },
+  done:    { icon: '✓', color: '#7bc47f' },
+  failed:  { icon: '✗', color: '#d27b7b' },
+}
+
+// 共享样式常量（避免重复 inline）
+const S_LABEL = { fontSize: '0.7rem', letterSpacing: '0.25em', color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: '12px' }
+const S_TEXTAREA = { width: '100%', border: '1px solid #e8e8e8', borderRadius: '4px', padding: '12px', fontSize: '12px', minHeight: '80px', resize: 'vertical', color: 'var(--dark)', fontFamily: 'var(--font-sans, system-ui)', outline: 'none' }
+const S_BTN_PRIMARY = { padding: '6px 16px', fontSize: '12px', border: '1px solid var(--warm)', color: 'var(--warm)', borderRadius: '4px', background: 'transparent', transition: 'all 0.3s' }
+const S_BTN_GHOST = { padding: '6px 16px', fontSize: '12px', border: '1px solid var(--gray-100)', color: 'var(--gray-500)', borderRadius: '4px', background: 'transparent' }
+const S_PRE = { marginTop: '6px', fontSize: '11px', color: 'var(--gray-700)', background: '#fafafa', border: '1px solid var(--gray-100)', padding: '8px', borderRadius: '3px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-sans, system-ui)', maxHeight: '300px', overflowY: 'auto' }
+const S_DOT = { color: '#e8e8e8' }
+
+function LocalTaskSection({ node }) {
+  const [prompt, setPrompt] = useState('')
+  const [expanded, setExpanded] = useState({})
+  const taskMode = useCanvasStore((s) => s.taskMode)
+  const addLocalTask = useCanvasStore((s) => s.addLocalTask)
+  const updateLocalTaskStatus = useCanvasStore((s) => s.updateLocalTaskStatus)
+  const removeLocalTask = useCanvasStore((s) => s.removeLocalTask)
+
+  if (!node) return null
+
+  const tasks = (node.data?.localTasks || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+  const route = prompt.trim() ? routeTask({ text: prompt, mode: taskMode }) : null
+
+  const handleRun = async () => {
+    const text = prompt.trim()
+    if (!text) return
+    const r = routeTask({ text, mode: taskMode })
+    const taskId = addLocalTask(node.id, { prompt: text, target: r.target, routerReason: r.reason })
+    setPrompt('')
+
+    if (r.target === 'local') {
+      runLocalTask({
+        nodeId: node.id, taskId, prompt: text,
+        onUpdate: (patch) => updateLocalTaskStatus(node.id, taskId, patch),
+      })
+    } else {
+      // Hermes 派单
+      updateLocalTaskStatus(node.id, taskId, { status: 'running', startedAt: Date.now() })
+      try {
+        const room = new URLSearchParams(window.location.search).get('room') || 'demo-final'
+        const resp = await fetch('http://127.0.0.1:17082/api/orchestra/inject', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room, title: text.slice(0, 60), body: text, assignedTo: 'hermes' }),
+        })
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const j = await resp.json()
+        updateLocalTaskStatus(node.id, taskId, {
+          status: 'done',
+          result: `已派单到 Hermes\n\ntask_id: ${j.taskId || j.task_id || '(unknown)'}\n\n看画布 TaskNode 进展`,
+          finishedAt: Date.now(),
+        })
+      } catch (err) {
+        updateLocalTaskStatus(node.id, taskId, {
+          status: 'failed',
+          error: 'Hermes 派单失败：' + (err?.message || String(err)),
+          finishedAt: Date.now(),
+        })
+      }
+    }
+  }
+
+  const canRun = !!prompt.trim()
+
+  return (
+    <div>
+      <div style={S_LABEL}>本地任务</div>
+
+      {/* 输入区 */}
+      <textarea
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder="写下要做什么..."
+        style={S_TEXTAREA}
+        onFocus={(e) => (e.target.style.borderColor = 'var(--warm)')}
+        onBlur={(e) => (e.target.style.borderColor = '#e8e8e8')}
+      />
+      {route && (
+        <p style={{ fontSize: '11px', marginTop: '8px', color: route.target === 'hermes' ? 'var(--warm)' : '#888' }}>
+          路由：{route.target === 'hermes' ? 'Hermes' : '本地'} · {route.reason}
+        </p>
+      )}
+
+      <div className="flex items-center gap-2 mt-3">
+        <button
+          onClick={handleRun}
+          disabled={!canRun}
+          style={{ ...S_BTN_PRIMARY, cursor: canRun ? 'pointer' : 'not-allowed', opacity: canRun ? 1 : 0.4 }}
+          onMouseEnter={(e) => { if (canRun) e.currentTarget.style.background = 'var(--warm-bg)' }}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        >执行</button>
+        <button
+          onClick={() => setPrompt('')}
+          disabled={!prompt}
+          style={{ ...S_BTN_GHOST, cursor: prompt ? 'pointer' : 'not-allowed', opacity: prompt ? 1 : 0.4 }}
+        >清空</button>
+      </div>
+
+      {/* 历史 */}
+      <div className="mt-5">
+        <div style={{ fontSize: '10px', letterSpacing: '0.15em', color: 'var(--gray-500)', marginBottom: '6px' }}>
+          历史 ({tasks.length})
+        </div>
+
+        {tasks.length === 0 ? (
+          <p style={{ fontSize: '11px', color: 'var(--gray-300)', padding: '8px 0' }}>还没有任务，写一句试试。</p>
+        ) : tasks.map((t) => {
+          const meta = STATUS_META[t.status] || STATUS_META.pending
+          const dur = t.durationMs ? `${Math.round(t.durationMs / 1000)}s` : null
+          const isExpanded = !!expanded[t.id]
+          const full = t.result || ''
+          const preview = full.length > 400 ? full.slice(0, 400) + ' ...' : full
+          const promptShort = (t.prompt || '').length > 60 ? t.prompt.slice(0, 60) + '...' : t.prompt
+
+          return (
+            <div key={t.id} className="group" style={{ padding: '8px 0', borderBottom: '1px solid var(--gray-100)', position: 'relative' }}>
+              {/* 顶行 */}
+              <div className="flex items-center gap-2" style={{ fontSize: '11px', color: 'var(--gray-500)' }}>
+                <span style={{ color: meta.color, fontSize: '12px', animation: t.status === 'running' ? 'pulse 1.5s ease-in-out infinite' : 'none' }}>{meta.icon}</span>
+                <span>{formatRelativeTime(t.createdAt)}</span>
+                <span style={S_DOT}>·</span>
+                <span style={{ color: t.target === 'hermes' ? 'var(--warm)' : '#888' }}>{t.target === 'hermes' ? 'Hermes' : '本地'}</span>
+                {dur && (<><span style={S_DOT}>·</span><span>{dur}</span></>)}
+                {t.status === 'failed' && (<><span style={S_DOT}>·</span><span style={{ color: '#d27b7b' }}>失败</span></>)}
+                <button
+                  onClick={() => removeLocalTask(node.id, t.id)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ marginLeft: 'auto', color: 'var(--gray-500)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '12px', padding: '0 2px' }}
+                  title="删除该任务"
+                >×</button>
+              </div>
+
+              {/* prompt 预览 */}
+              <p style={{ marginTop: '4px', fontSize: '12px', color: 'var(--dark)', lineHeight: 1.5 }}>{promptShort}</p>
+
+              {/* 错误信息 */}
+              {t.status === 'failed' && t.error && (
+                <p style={{ marginTop: '4px', fontSize: '11px', color: '#d27b7b', background: '#fff5f5', padding: '6px 8px', borderRadius: '3px' }}>{t.error}</p>
+              )}
+
+              {/* result 折叠/展开 */}
+              {full && (
+                <div style={{ marginTop: '4px' }}>
+                  <button
+                    onClick={() => setExpanded((s) => ({ ...s, [t.id]: !s[t.id] }))}
+                    style={{ fontSize: '11px', color: 'var(--warm)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    {isExpanded ? '▾ 收起结果' : '▸ 查看结果'}
+                  </button>
+                  {isExpanded && <pre style={S_PRE}>{preview}</pre>}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

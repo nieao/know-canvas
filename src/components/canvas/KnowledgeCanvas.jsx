@@ -553,6 +553,7 @@ function KnowledgeCanvasInner({
         multiSelectionKeyCode="Shift"
         fitView
         fitViewOptions={{ padding: 0.2 }}
+        zoomOnDoubleClick={false}
       >
         {/* 背景网格 */}
         <Background

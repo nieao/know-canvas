@@ -22,11 +22,13 @@ const http = require('http')
 const path = require('path')
 const { Dispatcher } = require('./orchestra-dispatcher')
 const { HermesWorker } = require('./orchestra-hermes-worker')
+const { SynthesisWorker } = require('./orchestra-synthesis-worker')
 
 const PORT = parseInt(process.env.CONDUCTOR_PORT || '17083', 10)
 const HOST = process.env.CONDUCTOR_HOST || '127.0.0.1'
 const PERSIST_DIR = process.env.PERSIST || path.join(__dirname, 'yjs-data')
-const AGENTS = (process.env.ORCHESTRA_AGENTS || 'hermes').split(',').map(s => s.trim()).filter(Boolean)
+// 默认启 hermes + synthesis 双 worker, ORCHESTRA_AGENTS 可覆写
+const AGENTS = (process.env.ORCHESTRA_AGENTS || 'hermes,synthesis').split(',').map(s => s.trim()).filter(Boolean)
 
 // roomId → { dispatcher, workers: { hermes: HermesWorker, ...}, addedAt, addedBy }
 const rooms = new Map()
@@ -50,6 +52,8 @@ function ensureRoom(roomId, opts = {}) {
   for (const agentName of AGENTS) {
     if (agentName === 'hermes') {
       entry.workers.hermes = new HermesWorker({ room: roomId }).start()
+    } else if (agentName === 'synthesis') {
+      entry.workers.synthesis = new SynthesisWorker({ room: roomId }).start()
     }
     // claude-cli / feishu-bot worker — 后续加
   }

@@ -32,8 +32,11 @@ import TaskNode from './TaskNode'
 import ResultNode from './ResultNode'
 import OntologyNode from './OntologyNode'
 import ChallengeNode from './ChallengeNode'
+import SynthesisNode from './SynthesisNode'
 import SelectionToolbar from './SelectionToolbar'
 import NodePropertyPanel from './NodePropertyPanel'
+import AletheiaLayer from '../aletheia/AletheiaLayer'
+import '../aletheia/collision.css'
 
 // 注册自定义节点类型
 const nodeTypes = {
@@ -48,9 +51,10 @@ const nodeTypes = {
   // metahermes 集成: Hermes 任务派单 + 结果回流
   taskNode: TaskNode,
   resultNode: ResultNode,
-  // Aletheia 集成: 本体拆解 + 反驳引擎
+  // Aletheia 集成: 本体拆解 + 反驳引擎 + 共识综合 (紫色融合节点)
   ontologyNode: OntologyNode,
   challengeNode: ChallengeNode,
+  synthesisNode: SynthesisNode,
 }
 
 // 知识关系类型
@@ -380,6 +384,82 @@ function KnowledgeCanvasInner({
     }
   }, [handleCopy, handlePaste, handleSelectAll, handleFitView, handleResetZoom, handleZoomIn, handleZoomOut])
 
+  // 系统剪贴板粘贴 → 自动建节点 (URL → BookmarkNode, 图/文件 → ImageNode/FileNode, 纯文本 → NoteNode)
+  // 关键: 当焦点在 INPUT/TEXTAREA/SELECT/contenteditable 时不拦截 (让节点内编辑正常工作)
+  // 关键 2: 当画布有内部剪贴板内容时, Ctrl+V 走 handlePaste (复制节点); 否则走系统粘贴
+  useEffect(() => {
+    if (!reactFlowInstance) return
+
+    const handleSystemPaste = (e) => {
+      const ae = document.activeElement
+      const isEditable =
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(ae?.tagName) ||
+        ae?.isContentEditable
+      if (isEditable) return
+      // 优先内部剪贴板复制 (画布内复制粘贴)
+      if (clipboardData.nodes.length > 0) return
+
+      const cd = e.clipboardData
+      if (!cd) return
+
+      // 计算落点: 画布可视中心 (相对 wrapper)
+      const rect = reactFlowWrapper.current?.getBoundingClientRect()
+      const screenCenter = rect
+        ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        : { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+      const position = reactFlowInstance.screenToFlowPosition(screenCenter)
+
+      // 1. 文件 / 图片 (从资源管理器复制 / 从浏览器复制图)
+      const files = Array.from(cd.files || [])
+      if (files.length > 0) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('canvas-file-drop', {
+          detail: { files, position },
+        }))
+        return
+      }
+
+      // 2. 纯文本: URL 走 BookmarkNode, 否则 NoteNode
+      const text = (cd.getData('text/uri-list') || cd.getData('text/plain') || '').trim()
+      if (!text) return
+
+      // URL 检测: http(s):// 开头, 或域名样 (含 . 且无空格 + 长度合理)
+      const urlPattern = /^https?:\/\/\S+$/i
+      if (urlPattern.test(text)) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('canvas-url-drop', {
+          detail: { url: text, position },
+        }))
+        return
+      }
+
+      // 多行 URL? 取第一行检测; 多 URL 全部建节点
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+      const allUrls = lines.length > 1 && lines.every(l => urlPattern.test(l))
+      if (allUrls) {
+        e.preventDefault()
+        lines.forEach((url, idx) => {
+          window.dispatchEvent(new CustomEvent('canvas-url-drop', {
+            detail: {
+              url,
+              position: { x: position.x + idx * 30, y: position.y + idx * 30 },
+            },
+          }))
+        })
+        return
+      }
+
+      // 3. 纯文本 → NoteNode
+      e.preventDefault()
+      window.dispatchEvent(new CustomEvent('canvas-paste-text', {
+        detail: { text, position },
+      }))
+    }
+
+    document.addEventListener('paste', handleSystemPaste)
+    return () => document.removeEventListener('paste', handleSystemPaste)
+  }, [reactFlowInstance])
+
   // 多选右键菜单状态
   const [contextMenu, setContextMenu] = useState({ visible: false, x: 0, y: 0 })
 
@@ -528,7 +608,7 @@ function KnowledgeCanvasInner({
   return (
     <div
       ref={reactFlowWrapper}
-      className="w-full h-full"
+      className="w-full h-full relative"
       style={{ backgroundColor: '#fafafa', cursor: isPanMode ? 'grab' : 'default' }}
       onDragOver={handleDragOver}
       onDrop={handleFileDrop}
@@ -616,6 +696,9 @@ function KnowledgeCanvasInner({
           </div>
         </Panel>
       </ReactFlow>
+
+      {/* Aletheia 全套覆盖层 — 顶部场景切换 / 左侧辩论流 / 右侧 HealthScore / 底部循环条 / 齿轮抽屉 / 综合弹窗 */}
+      <AletheiaLayer />
 
       {/* 多选工具栏 */}
       {selectedCount >= 2 && (

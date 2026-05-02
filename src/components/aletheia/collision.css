@@ -1,0 +1,151 @@
+/* 节点对撞动效全局 CSS — 蓝/红光晕 + 蓝红→紫融合 + 红节点飞入 */
+
+/* ============================================================
+   PROPOSER 蓝色光晕 — 持续呼吸 (cycle 2.4s)
+   施加于 .react-flow__node-ontologyNode 等具体节点上即可
+   ============================================================ */
+@keyframes aletheia-blue-glow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgba(58, 110, 165, 0.55),
+      0 0 18px rgba(58, 110, 165, 0.20);
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px rgba(58, 110, 165, 0),
+      0 0 32px rgba(58, 110, 165, 0.45);
+  }
+}
+
+.aletheia-proposer-node {
+  animation: aletheia-blue-glow-pulse 2.4s ease-in-out infinite;
+  position: relative;
+  z-index: 5;
+}
+
+/* ============================================================
+   REFUTER 红色光晕 — 节奏紧迫 (cycle 2s)
+   ============================================================ */
+@keyframes aletheia-red-glow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgba(178, 76, 96, 0.60),
+      0 0 18px rgba(178, 76, 96, 0.22);
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px rgba(178, 76, 96, 0),
+      0 0 36px rgba(178, 76, 96, 0.52);
+  }
+}
+
+.aletheia-refuter-node {
+  animation: aletheia-red-glow-pulse 2s ease-in-out infinite;
+  position: relative;
+  z-index: 5;
+}
+
+/* ============================================================
+   蓝红混合 → 紫色融合过渡 (1.2s ease-out)
+   施加在即将合并的节点上, 视觉提示对撞瞬间生成 SynthesisNode
+   ============================================================ */
+@keyframes aletheia-collision-fusion-keyframes {
+  0% {
+    background: linear-gradient(135deg, #3a6ea5 0%, #b24c60 100%);
+    box-shadow:
+      0 0 0 0 rgba(58, 110, 165, 0.65),
+      0 0 0 0 rgba(178, 76, 96, 0.65);
+    transform: scale(1);
+    filter: saturate(1.2);
+  }
+  40% {
+    background: linear-gradient(135deg, #6a59a8 0%, #a060a0 100%);
+    box-shadow:
+      0 0 0 12px rgba(160, 124, 184, 0.35),
+      0 0 32px rgba(160, 124, 184, 0.55);
+    transform: scale(1.06);
+    filter: saturate(1.5) brightness(1.1);
+  }
+  70% {
+    background: linear-gradient(135deg, #a07cb8 0%, #8a68a4 100%);
+    box-shadow:
+      0 0 0 6px rgba(200, 168, 130, 0.30),
+      0 0 28px rgba(160, 124, 184, 0.45);
+    transform: scale(1.02);
+    filter: saturate(1.2);
+  }
+  100% {
+    background: linear-gradient(160deg, #a07cb8 0%, #7e5b96 100%);
+    box-shadow:
+      0 0 0 0 rgba(200, 168, 130, 0),
+      0 4px 14px rgba(126, 91, 150, 0.22);
+    transform: scale(1);
+    filter: saturate(1);
+  }
+}
+
+.aletheia-collision-fusion {
+  animation: aletheia-collision-fusion-keyframes 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  position: relative;
+  z-index: 10;
+}
+
+/* ============================================================
+   红节点从右侧飞入 (translateX 100px → 0, 0.6s)
+   配合反驳节点出现时的入场动效
+   ============================================================ */
+@keyframes aletheia-fly-in-from-right {
+  0% {
+    transform: translateX(100px) scale(0.9);
+    opacity: 0;
+    filter: blur(2px);
+  }
+  60% {
+    transform: translateX(-6px) scale(1.02);
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.aletheia-flying-in {
+  animation: aletheia-fly-in-from-right 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ============================================================
+   辅助: 对撞连接线高亮 (可选, 给 .react-flow__edge.aletheia-collision-edge)
+   ============================================================ */
+@keyframes aletheia-edge-collision-pulse {
+  0%, 100% {
+    stroke-opacity: 0.5;
+    stroke-width: 1.5;
+  }
+  50% {
+    stroke-opacity: 1;
+    stroke-width: 2.5;
+  }
+}
+
+.aletheia-collision-edge .react-flow__edge-path {
+  stroke: #c8a882;
+  animation: aletheia-edge-collision-pulse 1.2s ease-in-out infinite;
+}
+
+/* ============================================================
+   降低视觉刺激 - 用户偏好减少动效时退化为静态高光
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .aletheia-proposer-node,
+  .aletheia-refuter-node {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(200, 168, 130, 0.4);
+  }
+  .aletheia-collision-fusion,
+  .aletheia-flying-in {
+    animation-duration: 0.01ms !important;
+  }
+}

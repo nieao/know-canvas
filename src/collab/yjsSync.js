@@ -71,18 +71,14 @@ export function attachYjsSync() {
   }, 1500)
 
   // 监听本地 Zustand 变更
-  // 立即推送，避免节流期间被远端 apply 覆盖造成节点丢失。
-  // 拖动节点 60fps 也能扛住（每次 push 是 diff，单条记录 set）。
-  let lastNodes = store.getState().nodes
-  let lastEdges = store.getState().edges
+  // 立即推送, 避免节流期间被远端 apply 覆盖造成节点丢失.
+  // 拖动节点 60fps 也能扛住 (每次 push 是 diff, 单条记录 set).
+  // ⚠ 不能用引用比较 (state.nodes === lastNodes) 短路 — immer 在某些路径下
+  // (单 set 改多个数组 / 数组 mutation) 会保持 nodes 数组引用不变, 导致漏 push.
+  // 实际 yjs push 内部已经做 diff (JSON.stringify 比对), 重复 push 几乎零成本.
   _unsubStore = store.subscribe((state) => {
     if (_suppressLocalPush) return
-    const nodes = state.nodes
-    const edges = state.edges
-    if (nodes === lastNodes && edges === lastEdges) return
-    lastNodes = nodes
-    lastEdges = edges
-    pushLocalToYjs(nodes, edges)
+    pushLocalToYjs(state.nodes, state.edges)
   })
 
   console.log('[yjsSync] attached, waiting for sync...')

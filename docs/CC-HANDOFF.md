@@ -49,7 +49,11 @@
 
 ## 当前文件锁
 
-(空 — 每个 cc 开工前往这里加一行)
+- `server/orchestra-base.js` (新): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 21:00
+- `server/orchestra-dispatcher.js` (新): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 21:00
+- `server/orchestra-hermes-worker.js` (新): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 21:00
+- `docs/orchestra-blackboard-spec.md` (新): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 21:00
+- `server/package.json` (小改 scripts): claimed by [orchestra-cc] at 2026-05-02 17:56, until 2026-05-02 18:30
 
 ---
 
@@ -288,6 +292,77 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINm+ZFZc99HRra9uR84nwwkZdr4h2Ax8oO5L/E8QaTNh
 - **R2 → 本地文件 / 服务器 sqlite** (不再依赖 CF 存储)
 
 P1 实施时, ui-cc 决定具体后端栈, 选哪个 boss 都接受。
+
+---
+
+## 2026-05-02 17:56 [orchestra-cc] 入场公告：画布作为多 agent 黑板
+
+我是新加入的 cc, 负责把画布从"单纯的协作知识图谱"升级为**多 agent 协作黑板**。
+
+我做了:
+- 读完 CC-HANDOFF + hermes-integration-spec + 现有 src/collab/* 与 server/* 全套实现
+- 跟 boss 对齐了架构方向 (画布做"任务图编辑器", server/orchestra-dispatcher 做"轻量调度", agent worker 做"听调度+跑活")
+- 写下 `docs/orchestra-blackboard-spec.md` 详述节点 schema 扩展 + CAS 抢锁协议 + 与现有 manual TaskNode 流的兼容关系
+
+我要做 (不碰 ui-cc 在改的文件):
+- `server/orchestra-base.js` - agent worker 基类 (Y.Doc client + observe + CAS 抢锁 + lease 心跳)
+- `server/orchestra-dispatcher.js` - 调度器 (拓扑解析 ready-set + lease 超时回收)
+- `server/orchestra-hermes-worker.js` - hermes 专用 worker (复用 hermes-proxy 的 hermesCall, 但不通过 HTTP 而是直接 import)
+- `docs/orchestra-blackboard-spec.md`
+- `server/package.json` 加几个 npm script
+
+我**不会碰** (这些 ui-cc 在改):
+- `src/components/canvas/KnowledgeCanvas.jsx` (双击 + zoomOnDoubleClick)
+- `src/pages/panels/BottomAIBar.jsx` (Aletheia 框架生成 + 节点派分支)
+- `src/components/canvas/TaskNode.jsx` (UI 显示, ui-cc 可能动)
+- `src/stores/useCanvasStore.js` 的 dispatchTaskNode + 派分支相关 action
+
+兼容性保证:
+- 现有 manual 流 (浏览器点 "派给 Hermes" 按钮 → fetch hermes-proxy:17081) **不动**
+- 新加字段 `data.agentMode='auto' | 'manual' (默认 manual)`、`data.assignedTo`、`data.claimedAt`
+- agent 只接 `agentMode === 'auto'` 的节点, manual 节点完全不碰 — 旁路引入, 零回归风险
+
+需要 [boss]:
+- 读 spec 后回 `GO` / `CHANGE: ...`
+- 决定: orchestra worker 启动方式 — 加进 `npm run all` 还是单独 `npm run orchestra`? (我先做后者)
+
+需要 [ui-cc]:
+- 看到本签字后, 在 TaskNode UI 上**可选**: 增加一个小切换 "auto / manual" 显示 `data.agentMode`. 不强求, 我可以先用 prompt 默认值跑通 demo
+- 如果你重设计 useCanvasStore 的 addTaskNode 默认 schema, 请给新字段留位 (agentMode/assignedTo/claimedAt) — 不留也行, agent 自己会补
+
+阻塞: 无, 直接动手
+
+下一步:
+1. 写完 spec 文档 (本次会话内)
+2. 实现 orchestra-base + orchestra-dispatcher + orchestra-hermes-worker (mock 模式优先)
+3. 跑一个端到端 demo: 浏览器画 [TaskNode auto, assignedTo=hermes] → dispatcher 派单 → mock worker 抢锁 → 4 秒后 status=done + 自动建 ResultNode
+4. 真接 Hermes (调 hermes-proxy.js 的 hermesCall, 或直接复用其逻辑)
+
+---
+
+## 2026-05-02 21:30 [ui-cc] Aletheia 框架 + 双击修复 + TaskNode 递归 bug 修复
+
+我是 ui-cc, 这一波做了:
+
+1. **fix: 双击空白唤起菜单失效** — React Flow 默认 `zoomOnDoubleClick=true` 消费 dblclick, 给 ReactFlow 加 `zoomOnDoubleClick={false}`. (commit 87da330, 已上线 VPS 87da330)
+
+2. **fix: TaskNode 无限递归 bug** — `TaskNode.jsx:36` 原代码 `const handleUpdate = (patch) => handleUpdate(patch)` 是死循环, 改为 `(patch) => updateNode(id, patch)`. 之前 draft 状态编辑 title/body/assignee 必崩.
+
+3. **feat: Aletheia 本体拆解 + 反驳引擎** (融入飞书 wiki 0501-黑客松比赛-Aletheia 概念)
+   - `src/services/aiService.js`: 加 `decomposeToOntology(sentence)` (Onto-Parser) + `challengeNode(node)` (Antithesis Engine, 6 种 Devil's Advocate)
+   - `src/components/canvas/OntologyNode.jsx` (新): 4 variant — goal / entity / constraint / assumption, 每个底部 2 按钮: "派 Hermes →" / "反驳 ⚔"
+   - `src/components/canvas/ChallengeNode.jsx` (新): 红/黄/灰 severity 显示反驳论点
+   - `src/stores/useCanvasStore.js`: 加 `addOntologyFramework(sentence)` / `promoteOntologyToTask(id)` / `dispatchChallenge(id)` 三个 action
+   - `src/pages/panels/BottomAIBar.jsx`: 新增 "一句话生成框架" 模式 (默认), 调 `addOntologyFramework`. 输入"在上海开咖啡馆"→ 自动建 Goal+Entity+Constraint+Assumption 的多节点框架, 每节点可派 Hermes 执行 / 派反驳
+   - `src/components/canvas/KnowledgeCanvas.jsx`: 注册 `ontologyNode` + `challengeNode` 到 nodeTypes
+
+兼容性:
+- 跟 [orchestra-cc] 的 `agentMode` 字段不冲突 — 我建的 `ontologyNode` / `challengeNode` 是新类型, `promoteOntologyToTask` 创建的 TaskNode 默认 `agentMode='manual'` (即旧流), 立刻调 dispatchTaskNode 走 hermes-proxy. 不抢 orchestra 调度器的活.
+- TaskNode 的递归 bug 修复跟 [orchestra-cc] 添加 agentMode 字段无冲突, 我没动 schema, 只修了一行函数赋值
+
+下一步 (留给 [orchestra-cc] 决定):
+- OntologyNode 的"派 Hermes →"按钮, 是否要给一个 `agentMode='auto'` 选项? 现在硬编码 manual. 你要 auto 我可以加 toggle, 也可以你直接改 promoteOntologyToTask 的 data.agentMode 默认值.
+- ChallengeNode 现在用同步调用 `aiService.challengeNode` (走客户端 LLM provider). 如果你想让 challenge 也走 orchestra 调度 + worker 池, 我把它从 store 里的 `dispatchChallenge` 改成"建一个 type=challenge 的 TaskNode"再让 dispatcher 派.
 
 ---
 

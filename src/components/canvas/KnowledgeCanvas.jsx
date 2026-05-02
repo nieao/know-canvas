@@ -30,6 +30,8 @@ import NoteNode from './NoteNode'
 import GroupNode from './GroupNode'
 import TaskNode from './TaskNode'
 import ResultNode from './ResultNode'
+import OntologyNode from './OntologyNode'
+import ChallengeNode from './ChallengeNode'
 import SelectionToolbar from './SelectionToolbar'
 import NodePropertyPanel from './NodePropertyPanel'
 
@@ -46,6 +48,9 @@ const nodeTypes = {
   // metahermes 集成: Hermes 任务派单 + 结果回流
   taskNode: TaskNode,
   resultNode: ResultNode,
+  // Aletheia 集成: 本体拆解 + 反驳引擎
+  ontologyNode: OntologyNode,
+  challengeNode: ChallengeNode,
 }
 
 // 知识关系类型

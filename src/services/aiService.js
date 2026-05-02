@@ -474,6 +474,123 @@ export async function analyzeWithLLM(text) {
   }
 }
 
+// ============================================================
+// Aletheia: 本体拆解 + 反驳引擎 (元认知 + Hermes 合作)
+// 来源: 飞书 wiki 0501-黑客松比赛-Aletheia
+//   - Onto-Parser: 一句话 → 本体结构(Goal/Entity/Constraint/Assumption)
+//   - Antithesis Engine: 节点 → 6 种 Devil's Advocate 攻击
+// ============================================================
+
+const ONTOLOGY_SYSTEM_PROMPT = `你是 Aletheia 决策引擎的本体拆解器 (Onto-Parser).
+将用户的一句话目标拆解为本体论结构, 输出严格 JSON.
+
+输出 schema:
+{
+  "goal": "顶层目标的精炼陈述 (10-30 字)",
+  "entities": [
+    { "title": "实体名称", "description": "30 字内说明" }
+  ],
+  "constraints": [
+    { "title": "硬约束 (资源/时间/合规/物理)", "description": "为什么必须满足" }
+  ],
+  "assumptions": [
+    { "title": "隐含假设", "description": "如果不成立后果是什么" }
+  ],
+  "edges": [
+    { "from": "Goal | entity/constraint/assumption 的 title", "to": "另一个 title", "label": "拆解|依赖|约束|假设" }
+  ]
+}
+
+要求:
+- entities 3-6 个 (核心实体, 不堆砌)
+- constraints 1-3 个 (硬约束)
+- assumptions 1-3 个 (没明说但方案站立的前提)
+- edges 必须包括 Goal → 各 entity 的"拆解"边, 以及 entity 之间的依赖
+- 全程中文
+- 只输出 JSON, 不要 markdown 代码块, 不要任何前言`
+
+const CHALLENGE_SYSTEM_PROMPT = `你是 Aletheia 反驳引擎 (Antithesis Engine), 模拟红队攻击.
+针对给定的方案 / 节点, 从 6 种攻击角度生成反驳论点.
+
+6 种攻击 (Devil's Advocate):
+1. 资源短缺: 时间/资金/人力是否够
+2. 外部风险: 监管/竞争/市场变化
+3. 逻辑矛盾: 内部假设是否互相冲突
+4. 反例: 历史上有没有反向案例
+5. 逆向激励: 长期是否制造道德风险或扭曲行为
+6. 二阶效应: 解决 A 后是否制造 B
+
+输出 JSON schema:
+{
+  "challenges": [
+    { "angle": "攻击角度名 (上述 6 种之一)", "claim": "反驳论点 (40 字内, 必须具体)", "severity": "high|medium|low" }
+  ]
+}
+
+要求:
+- 选 2-4 个最锋利的攻击 (不凑数)
+- claim 必须具体: 引数据 / 引判例 / 引反例, 禁止空话
+- severity 反映对方案的实际威胁
+- 全程中文, 只输出 JSON`
+
+/**
+ * Aletheia 本体拆解: 一句话 → 多节点框架
+ * @param {string} sentence
+ * @returns {Promise<{goal:string, entities:[], constraints:[], assumptions:[], edges:[]}>}
+ */
+export async function decomposeToOntology(sentence) {
+  if (!sentence || sentence.trim().length === 0) {
+    return { goal: '', entities: [], constraints: [], assumptions: [], edges: [] }
+  }
+  const prompt = `请把下列目标拆解为本体结构:\n\n"${sentence.trim()}"\n\n按 schema 输出 JSON.`
+  const raw = await callLLM({ system: ONTOLOGY_SYSTEM_PROMPT, prompt, jsonMode: true })
+  const parsed = tryParseLLMJson(raw)
+  if (!parsed) {
+    console.warn('[aiService] decomposeToOntology LLM 输出无法解析')
+    return { goal: sentence.slice(0, 30), entities: [], constraints: [], assumptions: [], edges: [] }
+  }
+  return {
+    goal: parsed.goal || sentence.slice(0, 30),
+    entities: (parsed.entities || []).map((e) => ({
+      title: e.title || e.name || '',
+      description: e.description || e.desc || '',
+    })).filter((e) => e.title),
+    constraints: (parsed.constraints || []).map((c) => ({
+      title: c.title || c.name || '',
+      description: c.description || c.desc || '',
+    })).filter((c) => c.title),
+    assumptions: (parsed.assumptions || []).map((a) => ({
+      title: a.title || a.name || '',
+      description: a.description || a.desc || '',
+    })).filter((a) => a.title),
+    edges: (parsed.edges || []).map((e) => ({
+      from: e.from || e.source || '',
+      to: e.to || e.target || '',
+      label: e.label || e.type || '拆解',
+    })).filter((e) => e.from && e.to),
+  }
+}
+
+/**
+ * Aletheia 反驳引擎: 节点 → 多个 Devil's Advocate 反驳论点
+ * @param {{title:string, description?:string}} node
+ * @returns {Promise<Array<{angle:string, claim:string, severity:string}>>}
+ */
+export async function challengeNode(node) {
+  if (!node?.title) return []
+  const prompt = `针对下列方案 / 节点生成反驳:\n\n标题: ${node.title}${node.description ? '\n描述: ' + node.description : ''}\n\n按 schema 输出 JSON.`
+  const raw = await callLLM({ system: CHALLENGE_SYSTEM_PROMPT, prompt, jsonMode: true })
+  const parsed = tryParseLLMJson(raw)
+  if (!parsed?.challenges) return []
+  return parsed.challenges
+    .filter((c) => c.claim)
+    .map((c) => ({
+      angle: c.angle || '反驳',
+      claim: c.claim,
+      severity: c.severity || 'medium',
+    }))
+}
+
 /**
  * 让 LLM 给现有节点推荐新关系
  * @param {Array<{title:string, description?:string}>} concepts

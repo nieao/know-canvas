@@ -33,7 +33,7 @@ function TaskNodeImpl({ id, data, selected }) {
   const dispatchTaskNode = useCanvasStore((s) => s.dispatchTaskNode)
   const updateNode = useCanvasStore((s) => s.updateNode)
 
-  const handleUpdate = (patch) => handleUpdate(patch)
+  const handleUpdate = (patch) => updateNode(id, patch)
 
   const status = data.status || TASK_NODE_STATUS.DRAFT
   const meta = STATUS_META[status] || STATUS_META[TASK_NODE_STATUS.DRAFT]

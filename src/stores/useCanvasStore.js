@@ -1629,6 +1629,246 @@ const useCanvasStore = create(
         }
       },
 
+      // ===== Aletheia 集成: 本体拆解 + 反驳引擎 (元认知 + Hermes 合作) =====
+
+      // 一句话 → 调 LLM 拆解为本体框架, 一次性建 N 个节点 + 边
+      // 节点类型: ontologyNode (variant: goal/entity/constraint/assumption)
+      // 自动布局: goal 居中, entities 横排上方, constraints 左下, assumptions 右下
+      addOntologyFramework: async (sentence, originPosition = null) => {
+        if (!sentence?.trim()) {
+          throw new Error('addOntologyFramework: sentence 不能为空')
+        }
+        const svc = await import('../services/aiService')
+        const struct = await svc.decomposeToOntology(sentence)
+        if (!struct.goal && struct.entities.length === 0) {
+          throw new Error('LLM 没拆出任何节点 (可能未配置 provider 或调用失败)')
+        }
+
+        const { getNextGridPosition } = get()
+        const origin = originPosition || getNextGridPosition()
+        const ts = Date.now()
+        const rand = () => Math.random().toString(36).slice(2, 8)
+
+        // 布局参数
+        const COL_W = 250
+        const ROW_H = 180
+        const goalX = origin.x
+        const goalY = origin.y
+
+        // 1. goal 节点
+        const goalId = `onto-${ts}-${rand()}`
+        const newNodes = [{
+          id: goalId,
+          type: 'ontologyNode',
+          position: { x: goalX, y: goalY },
+          data: {
+            variant: 'goal',
+            title: struct.goal,
+            description: '',
+            sentence,
+            created_at: ts,
+          },
+        }]
+
+        // 2. entities 横排在 goal 下一行, 居中
+        const entCount = struct.entities.length
+        const entStartX = goalX - ((entCount - 1) * COL_W) / 2
+        const titleToId = { [struct.goal]: goalId }
+        struct.entities.forEach((e, i) => {
+          const nid = `onto-${ts}-${rand()}`
+          titleToId[e.title] = nid
+          newNodes.push({
+            id: nid,
+            type: 'ontologyNode',
+            position: { x: entStartX + i * COL_W, y: goalY + ROW_H },
+            data: {
+              variant: 'entity',
+              title: e.title,
+              description: e.description,
+              parent_goal: struct.goal,
+              created_at: ts,
+            },
+          })
+        })
+
+        // 3. constraints 左下
+        struct.constraints.forEach((c, i) => {
+          const nid = `onto-${ts}-${rand()}`
+          titleToId[c.title] = nid
+          newNodes.push({
+            id: nid,
+            type: 'ontologyNode',
+            position: { x: goalX - COL_W * (Math.ceil(struct.constraints.length / 2)) + i * COL_W, y: goalY + ROW_H * 2 + 40 },
+            data: {
+              variant: 'constraint',
+              title: c.title,
+              description: c.description,
+              parent_goal: struct.goal,
+              created_at: ts,
+            },
+          })
+        })
+
+        // 4. assumptions 右下
+        struct.assumptions.forEach((a, i) => {
+          const nid = `onto-${ts}-${rand()}`
+          titleToId[a.title] = nid
+          newNodes.push({
+            id: nid,
+            type: 'ontologyNode',
+            position: { x: goalX + COL_W * (i + 1), y: goalY + ROW_H * 2 + 40 },
+            data: {
+              variant: 'assumption',
+              title: a.title,
+              description: a.description,
+              parent_goal: struct.goal,
+              created_at: ts,
+            },
+          })
+        })
+
+        // 5. edges: 用 LLM 给的 + 兜底 goal→entities
+        const newEdges = []
+        const seenEdges = new Set()
+        const pushEdge = (sourceId, targetId, label) => {
+          if (!sourceId || !targetId || sourceId === targetId) return
+          const key = `${sourceId}|${targetId}`
+          if (seenEdges.has(key)) return
+          seenEdges.add(key)
+          newEdges.push({
+            id: `edge-${ts}-${rand()}`,
+            source: sourceId,
+            target: targetId,
+            type: 'curved',
+            data: { relationType: label || '拆解' },
+            style: { stroke: '#c8a882', strokeWidth: 1.5, strokeDasharray: label === '约束' ? '4 4' : undefined },
+          })
+        }
+        // 兜底: goal → 每个 entity
+        struct.entities.forEach((e) => pushEdge(goalId, titleToId[e.title], '拆解'))
+        // LLM 给的 edges
+        struct.edges.forEach((e) => {
+          const s = e.from === 'Goal' || e.from === struct.goal ? goalId : titleToId[e.from]
+          const t = e.to === 'Goal' || e.to === struct.goal ? goalId : titleToId[e.to]
+          pushEdge(s, t, e.label)
+        })
+
+        set((state) => {
+          state.nodes.push(...newNodes)
+          state.edges.push(...newEdges)
+        })
+
+        return { goalId, nodeCount: newNodes.length, edgeCount: newEdges.length, struct }
+      },
+
+      // 把 OntologyNode (entity/constraint/assumption) 转为 TaskNode 并自动派给 Hermes
+      // 不改原节点 — 在右侧建一个 TaskNode + 连线 + 立刻 dispatch
+      promoteOntologyToTask: async (ontoNodeId) => {
+        const { nodes } = get()
+        const src = nodes.find((n) => n.id === ontoNodeId)
+        if (!src || src.type !== 'ontologyNode') {
+          throw new Error(`promoteOntologyToTask: 找不到 OntologyNode ${ontoNodeId}`)
+        }
+        const ts = Date.now()
+        const rand = Math.random().toString(36).slice(2, 8)
+        const taskId = `task-${ts}-${rand}`
+        const taskNode = {
+          id: taskId,
+          type: 'taskNode',
+          position: { x: src.position.x + 280, y: src.position.y },
+          data: {
+            title: src.data?.title || '未命名任务',
+            body: src.data?.description || '',
+            assignee: '',
+            priority: src.data?.variant === 'constraint' ? 4 : 3,
+            status: 'draft',
+            from_ontology_node: ontoNodeId,
+            created_at: ts,
+          },
+        }
+        const newEdge = {
+          id: `edge-${ts}-${rand}`,
+          source: ontoNodeId,
+          target: taskId,
+          type: 'curved',
+          data: { relationType: '派单' },
+          style: { stroke: '#c8a882', strokeWidth: 2 },
+        }
+        set((state) => {
+          state.nodes.push(taskNode)
+          state.edges.push(newEdge)
+        })
+
+        // 立刻派单 (异步, 不阻塞)
+        get().dispatchTaskNode(taskId).catch((err) => {
+          console.error('[promoteOntologyToTask] auto-dispatch failed:', err)
+        })
+
+        return taskId
+      },
+
+      // 反驳引擎: 给一个 OntologyNode 生成 N 个 ChallengeNode (Devil's Advocate)
+      dispatchChallenge: async (ontoNodeId) => {
+        const { nodes } = get()
+        const src = nodes.find((n) => n.id === ontoNodeId)
+        if (!src) throw new Error(`dispatchChallenge: 找不到节点 ${ontoNodeId}`)
+
+        const svc = await import('../services/aiService')
+        const challenges = await svc.challengeNode({
+          title: src.data?.title || '',
+          description: src.data?.description || '',
+        })
+
+        if (!challenges.length) {
+          console.warn('[dispatchChallenge] LLM 没返回反驳论点')
+          return []
+        }
+
+        const ts = Date.now()
+        const rand = () => Math.random().toString(36).slice(2, 8)
+        const newNodes = []
+        const newEdges = []
+
+        challenges.forEach((c, i) => {
+          const cid = `challenge-${ts}-${rand()}`
+          newNodes.push({
+            id: cid,
+            type: 'challengeNode',
+            position: {
+              x: src.position.x + 320,
+              y: src.position.y + i * 130 - ((challenges.length - 1) * 130) / 2,
+            },
+            data: {
+              source_node_id: ontoNodeId,
+              source_title: src.data?.title || '',
+              angle: c.angle,
+              claim: c.claim,
+              severity: c.severity,
+              created_at: ts,
+            },
+          })
+          newEdges.push({
+            id: `edge-${ts}-${rand()}`,
+            source: ontoNodeId,
+            target: cid,
+            type: 'curved',
+            data: { relationType: '反驳' },
+            style: {
+              stroke: c.severity === 'high' ? '#b27c8b' : c.severity === 'medium' ? '#c8a882' : '#888',
+              strokeWidth: 1.5,
+              strokeDasharray: '4 4',
+            },
+          })
+        })
+
+        set((state) => {
+          state.nodes.push(...newNodes)
+          state.edges.push(...newEdges)
+        })
+
+        return challenges
+      },
+
       // 内部: 给一个 done 任务在右侧建 ResultNode + 自动连线
       _addResultNodeFor: (sourceNodeId, hermesTask, resultText) => {
         set((state) => {

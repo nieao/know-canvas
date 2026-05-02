@@ -6,9 +6,11 @@
 
 import { useState } from 'react'
 import { extractConcepts, suggestRelations, summarizeKnowledge } from '../../services/aiService'
+import useCanvasStore from '../../stores/useCanvasStore'
 
 // AI 分析功能选项
 const AI_FUNCTIONS = [
+  { id: 'aletheia', label: '一句话生成框架', icon: '本', description: 'Aletheia: 本体拆解, 一句话→Goal+实体+约束+假设, 每节点可派 Hermes / 反驳' },
   { id: 'extract', label: '提取概念', icon: '概', description: '从文本中提取关键概念' },
   { id: 'relations', label: '发现关系', icon: '关', description: '分析概念间的关系' },
   { id: 'summary', label: '知识摘要', icon: '摘', description: '生成知识结构摘要' },
@@ -22,14 +24,15 @@ function BottomAIBar({
   concepts = [],
 }) {
   const [input, setInput] = useState('')
-  const [activeFunction, setActiveFunction] = useState('extract')
+  const [activeFunction, setActiveFunction] = useState('aletheia')
   const [isLoading, setIsLoading] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [messages, setMessages] = useState([])
+  const addOntologyFramework = useCanvasStore((s) => s.addOntologyFramework)
 
   // 执行分析
   const handleAnalyze = async () => {
-    if (!input.trim() && activeFunction === 'extract') return
+    if (!input.trim() && (activeFunction === 'extract' || activeFunction === 'aletheia')) return
     if (isLoading) return
 
     setIsLoading(true)
@@ -44,6 +47,18 @@ function BottomAIBar({
       let result = ''
 
       switch (activeFunction) {
+        case 'aletheia': {
+          const out = await addOntologyFramework(input)
+          const { struct, nodeCount, edgeCount } = out
+          result =
+            `已生成 Aletheia 本体框架: ${nodeCount} 节点 / ${edgeCount} 边\n\n` +
+            `目标: ${struct.goal}\n` +
+            `实体 (${struct.entities.length}): ${struct.entities.map((e) => e.title).join('、')}\n` +
+            (struct.constraints.length ? `约束 (${struct.constraints.length}): ${struct.constraints.map((c) => c.title).join('、')}\n` : '') +
+            (struct.assumptions.length ? `假设 (${struct.assumptions.length}): ${struct.assumptions.map((a) => a.title).join('、')}\n` : '') +
+            `\n→ 在画布上点节点的「派 Hermes →」执行, 或「反驳 ⚔」生成 Devil's Advocate.`
+          break
+        }
         case 'extract': {
           const extracted = await extractConcepts(input)
           if (extracted.length > 0) {
@@ -202,7 +217,9 @@ function BottomAIBar({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              activeFunction === 'extract'
+              activeFunction === 'aletheia'
+                ? '一句话目标 (例: 在上海开一家咖啡馆) → AI 拆解为本体框架...'
+                : activeFunction === 'extract'
                 ? '输入文本，AI 将提取关键概念...'
                 : activeFunction === 'relations'
                 ? '输入上下文文本辅助关系分析（可选）...'
@@ -222,12 +239,12 @@ function BottomAIBar({
         {/* 发送按钮 */}
         <button
           onClick={handleAnalyze}
-          disabled={isLoading || (!input.trim() && activeFunction === 'extract')}
+          disabled={isLoading || (!input.trim() && (activeFunction === 'extract' || activeFunction === 'aletheia'))}
           className="px-4 py-2.5 rounded-lg text-xs font-medium transition-all duration-300 flex items-center gap-1.5"
           style={{
             background: isLoading ? 'var(--gray-100)' : 'var(--warm)',
             color: isLoading ? 'var(--gray-500)' : 'white',
-            opacity: (!input.trim() && activeFunction === 'extract') ? 0.5 : 1,
+            opacity: (!input.trim() && (activeFunction === 'extract' || activeFunction === 'aletheia')) ? 0.5 : 1,
           }}
         >
           {isLoading ? (

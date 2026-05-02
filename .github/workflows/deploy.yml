@@ -1,0 +1,103 @@
+name: Deploy to VPS
+
+# 触发条件: push 到 main 时自动部署
+# 也可以在 GitHub UI 手动触发 (workflow_dispatch)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      # 只有这些路径变化才触发部署 — 改 docs/.gitignore 之类不触发
+      - 'src/**'
+      - 'server/**'
+      - 'deploy/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.js'
+      - 'index.html'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    # 手动触发: GitHub UI → Actions → Deploy to VPS → Run workflow
+    inputs:
+      reason:
+        description: '部署原因 (可空)'
+        required: false
+        default: 'manual deploy'
+
+concurrency:
+  # 同时只允许一个部署在跑, 新的 push 会取消正在进行的
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to ha2.digitalvio.shop
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo (用于显示 commit info, 实际部署是 VPS git pull)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 显示部署信息
+        run: |
+          echo "=========================================="
+          echo "  Deploy reason: ${{ inputs.reason || github.event.head_commit.message }}"
+          echo "  Commit: ${{ github.sha }}"
+          echo "  Pusher: ${{ github.actor }}"
+          echo "  Target: ${{ secrets.DEPLOY_HOST }}"
+          echo "=========================================="
+
+      - name: 安装 SSH 私钥
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # 接受 host key (避免首次连接 prompt)
+          ssh-keyscan -H -p ${{ secrets.DEPLOY_PORT || '22' }} ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "  ✓ SSH key 已配置"
+
+      - name: SSH 部署 (git pull + build + restart)
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=20 \
+              -p ${{ secrets.DEPLOY_PORT || '22' }} \
+              ${{ secrets.DEPLOY_USER || 'root' }}@${{ secrets.DEPLOY_HOST }} \
+              "set -e
+               echo '==> 在 VPS 上 pull + 部署...'
+               if [ ! -d /opt/know-canvas/.git ]; then
+                 sudo git clone https://github.com/${{ github.repository }}.git /opt/know-canvas
+                 sudo chown -R \$(whoami):\$(whoami) /opt/know-canvas
+               fi
+               cd /opt/know-canvas
+               git fetch origin main
+               git reset --hard origin/main
+               sudo bash deploy/deploy-on-vps.sh
+               echo '==> 部署脚本完成, 健康检查...'
+               sleep 2
+               curl -sf http://127.0.0.1:1234/health || (echo 'yws health 失败' && sudo journalctl -u know-canvas-yws -n 20 --no-pager && exit 1)
+               echo '==> 部署成功 ✓'
+              "
+
+      - name: 验证 HTTPS 可达
+        run: |
+          # 在 GitHub runner (公网) 验证 https 入口
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://ha2.digitalvio.shop/canvas/ || echo '000')
+          echo "  HTTPS /canvas/ status: $STATUS"
+          if [ "$STATUS" = "200" ] || [ "$STATUS" = "301" ] || [ "$STATUS" = "302" ]; then
+            echo "  ✓ Canvas 已上线 https://ha2.digitalvio.shop/canvas/"
+          elif [ "$STATUS" = "404" ]; then
+            echo "  ⚠ 404 — Caddy 还没追加 /canvas/ 配置 (一次性手动操作, 见 deploy/ONESHOT.md)"
+          else
+            echo "  ⚠ 异常 status $STATUS — 但 yws health 已 OK, 通常 Caddy 配置问题"
+          fi
+
+      - name: 清理 SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

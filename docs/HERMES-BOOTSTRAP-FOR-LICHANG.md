@@ -7,24 +7,51 @@
 
 ---
 
-## ⛔ 千万不要做的事 (重要!)
+## ⚠️ 撤回前一版"不要启 gateway"的判断 (2026-05-02 23:50 更正)
 
-**不要执行 `hermes gateway start/restart/install`**.
+我之前在这里写了"⛔ 不要做 hermes gateway"——**错了**, 撤回. 实测发现:
 
-`hermes gateway` 是 **messaging gateway** (Telegram / Discord / WhatsApp), **不是 LLM gateway**.
-know-canvas 的 auto 派单 / Aletheia 拆解 / Hermes worker 跑 task **完全不依赖它**.
+- `hermes gateway` 名字虽叫 messaging gateway, **但默认内嵌 kanban dispatcher** (`kanban.dispatch_in_gateway=true`)
+- **没启 gateway → dispatcher 不跑 → ready task 永远不被 worker 接走**
+- 所以 **gateway 必须启**
 
-如果你看到这个错误:
+## ✅ 已经全部配好了 (2026-05-02 23:50, agent 替你做了)
 
+诊断 + 修复 agent 已完成下面所有事, 你不用再操作:
+
+1. ✅ `loginctl enable-linger root` (开 user systemd 持久化)
+2. ✅ `hermes gateway install && hermes gateway start` (PID 13823, 现运行)
+3. ✅ `/root/.hermes/.env` 加了 `DEEPSEEK_API_KEY=sk-...` (boss 提供的 key)
+4. ✅ `/root/.hermes/config.yaml` 改 model.default=`deepseek-chat`, provider=`deepseek`, base_url=`api.deepseek.com/v1`
+5. ✅ `systemctl restart hermes-dashboard` 已重启
+6. ✅ 测试 task `t_50064147` 端到端跑通: DeepSeek 8 秒返回中文回复
+
+## 验证当前状态
+
+```bash
+curl -s -u "hermes:bdegDr5w4GfIqwEFH5+ZYMYK" \
+     -H "User-Agent: Mozilla/5.0 (compatible; check/0.1)" \
+     https://ha2.digitalvio.shop/api/status | python3 -m json.tool
+# 应该看到: gateway_running: true, gateway_pid: 13823
 ```
-⚠ Cannot restart gateway as a service — linger is not enabled.
-  Run:  sudo loginctl enable-linger root
-  Then restart the gateway: hermes gateway restart
+
+profile 名是 **`default`** (agent 没创新 profile, 复用 hermes 自带), 不是我之前写的 `aletheia-worker`. 派 task 时 `assignee` 必须填 `default`.
+
+## 下面只剩 1 件事请你做 (可选, 提升稳定性)
+
+worker 跑完 LLM 后**必须调 `kanban_done` 工具**才算 done, 不然 dispatcher 看到 task 还 running 会误判 crashed 并 re-spawn (浪费 DeepSeek 额度).
+
+请在 `/root/.hermes/profiles/default/SOUL.md` (或新建一个) 加一行:
+```
+完成 task 后必须调用 kanban_done 工具标记 task 状态, 否则 dispatcher 会误判 crashed 重派.
 ```
 
-**直接忽略**. 不要 enable-linger, 不要 restart gateway. 这跟我们的系统无关.
+或者在每个 task body 末尾加 "请用 kanban_done 收尾" 的指引 (但每次都要写, 不如改 SOUL 一次到位).
 
-`/api/status` 返回 `gateway_running=false` 是正常状态 — Hermes worker 跑 task **不依赖** gateway 状态.
+---
+
+## 历史: 之前发给你的 3 步配置清单 (现已无效, 仅供参考)
+保留下面段落是历史, 实际操作不用做了 — agent 已替你完成. 只在你要换 LLM provider 或加新 profile 时才回头看.
 
 ---
 

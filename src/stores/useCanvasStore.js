@@ -1742,7 +1742,9 @@ const useCanvasStore = create(
       },
 
       // 把 OntologyNode (entity/constraint/assumption) 转为 TaskNode 并自动派给 Hermes
-      // 不改原节点 — 在右侧建一个 TaskNode + 连线 + 立刻 dispatch
+      // OntologyNode "派 Hermes →" 按钮调这个 — 创建 TaskNode 走 orchestra auto 流.
+      // 真 Hermes worker (默认 profile=`default`, agent 已在 VPS 配好 deepseek-chat) 会接.
+      // 不走 manual hermes-proxy (那条要 gateway+token, 限制多), 走 orchestra conductor 抢锁更稳.
       promoteOntologyToTask: async (ontoNodeId) => {
         const { nodes } = get()
         const src = nodes.find((n) => n.id === ontoNodeId)
@@ -1764,6 +1766,10 @@ const useCanvasStore = create(
             status: 'draft',
             from_ontology_node: ontoNodeId,
             created_at: ts,
+            // orchestra auto 流: conductor 在 demo-final 房间会自动接管
+            agentMode: 'auto',
+            assignedTo: 'hermes',
+            hermesAssignee: 'default',
           },
         }
         const newEdge = {
@@ -1779,11 +1785,8 @@ const useCanvasStore = create(
           state.edges.push(newEdge)
         })
 
-        // 立刻派单 (异步, 不阻塞)
-        get().dispatchTaskNode(taskId).catch((err) => {
-          console.error('[promoteOntologyToTask] auto-dispatch failed:', err)
-        })
-
+        // 不调 dispatchTaskNode (那是 manual 流) — orchestra dispatcher 看到
+        // agentMode='auto' + status='draft' 会自动推 pending → hermes worker 抢锁
         return taskId
       },
 

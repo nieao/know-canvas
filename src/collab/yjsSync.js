@@ -170,12 +170,17 @@ function applyRemoteToLocal() {
   const edges = []
   yEdges.forEach((v) => edges.push(v))
 
+  // ⚠ 不要用 microtask 恢复 _suppressLocalPush — finalizeStartup 调完
+  // applyRemoteToLocal 后会设 _suppressLocalPush = false, 但 microtask 在那之后
+  // 才把 wasSuppressed=true 写回, 永远把 _suppressLocalPush 锁死在 true,
+  // 结果浏览器派的新节点全都漏 push 到 yjs.
+  // 同步恢复就行 — setState 是 sync 调用, callback 也 sync 触发, suppress 已生效.
   const wasSuppressed = _suppressLocalPush
   _suppressLocalPush = true
   try {
     useCanvasStore.setState({ nodes, edges })
   } finally {
-    queueMicrotask(() => { _suppressLocalPush = wasSuppressed })
+    _suppressLocalPush = wasSuppressed
   }
 }
 

@@ -437,3 +437,166 @@ boss 给了 DeepSeek key, 我在 VPS 起独立 daemon + nginx 同源反代:
 
 ### 阻塞
 无. 待 60s VPS auto-pull 拉这个 commit 完成, 我跑 Playwright 验证 Aletheia 全链路 + 更新本签字.
+
+---
+
+## 2026-05-02 19:35 [orchestra-cc] Conductor 单进程整合 + 单房间收敛 + race fix
+
+### 背景
+boss 这一波要求: "修改乱码问题。把 demo 直接做成完整的实际可用功能" + "room 目前只做一个，因为只给三个人用" + "三个人各自入口选择点击进入"。
+
+### 我做了
+
+**1. server/orchestra-conductor.js (新文件, 173 行)** — 单进程整合 dispatcher + hermes worker
+   - 替代之前 "每个 room 起 1 个 dispatcher 进程 + 1 个 hermes-worker 进程" 模式
+   - 端口 17083, HTTP API: GET /health, GET/POST /conductor/rooms, DELETE /conductor/rooms/:id
+   - `BOOT_ROOMS` 默认 `demo-final` (env `ORCHESTRA_BOOT_ROOMS=foo` 可换)
+   - inject 到非 boot 房间时, orchestra-http 会 POST /conductor/rooms 懒接管 (`notifyConductor`)
+   - 端到端验证: e2e/orchestra-conductor-verify.spec.js (8.8s 跑通, mock 4s + dispatcher tick 5s)
+
+**2. start-orchestra.bat / stop-orchestra.bat** — 切 3 进程模型
+   - 旧: yws + dispatcher + hermes-worker + orchestra-http + vite (5 进程)
+   - 新: yws + conductor + orchestra-http + vite (4 进程)
+   - 默认 ROOM 从 `demo-orch` 改成 `demo-final`
+   - 启动时浏览器自动开 `http://localhost:5180/` (JoinRoom 页) 而非直接进房间
+
+**3. src/pages/JoinRoom.jsx** — 加「快速进入主房间」按钮
+   - 黑底暖色圆点黑色按钮, 视觉最高优先级, 一键进 `demo-final`
+   - 原有"进入自定义房间" / "新建随机房间"保留, OR 分隔线分组
+   - 三人 demo 时不用约定输什么房间名, 共点同一按钮 → 同一 room
+
+**4. 修浏览器端 yjsSync race (原本是你 ui-cc 的地盘, boss 当面允许我直接改)**
+
+   **根因**: `src/stores/useCanvasStore.js` 用了 `zustand persist` middleware,
+   `partialize` 包含了 `nodes` + `edges`, 把画布数据写 localStorage。
+   多人协作时这造成 race —— 浏览器启动时 `yjsSync.attachYjsSync()` 暂存
+   `stashedNodes = [...localState.nodes]` (从 localStorage hydrate 来的旧数据),
+   sync 完成后若 `pushLocalToYjs` 触发, `yNodes.forEach delete` 会**主动删除**
+   yjs 上别人刚 inject 的节点。
+
+   **改动** (useCanvasStore.js partialize): 把 `nodes` + `edges` 从 persist 排除,
+   只保留 `viewMode/showMiniMap/showChineseLabels` 三个 UI 偏好。多人协作下
+   nodes/edges 永远走 yjs (黑板权威), localStorage 不再缓存。同时删了配套的
+   `migrateNodes` + `merge` 函数 (没人用了)。
+
+   **影响范围**:
+   - 用户单机用知识画布 (没进协作房间) 的人, 关页面再开会 *丢* 之前画的节点。
+     这跟"协作画布"的定位冲突 —— 真要支持单机持久化, 应该是另一条路径
+     (本地存导出/IndexedDB), 不能跟 yjs 协作混用同一个 store key。
+   - 协作 (room 模式) 用户不受影响, 因为 yjs 服务端 LevelDB 持久化。
+   - 你 ui-cc 之前 22:00 那个 dev/aletheia 分支没动 useCanvasStore 这块, 应该不冲突。
+
+**5. server/orchestra-base.js / orchestra-dispatcher.js / orchestra-hermes-worker.js**
+   去掉所有日志里的中文 task title 输出, 避免 Windows cmd GBK 渲染 UTF-8 乱码。
+   CLI usage 文案也改英文。worker `claimed ${nodeId}` 不再带 title。
+
+### 跟你 ui-cc 22:00 那波的协同情况
+- ✓ 没动 BottomAIBar / OntologyNode / ChallengeNode / aiService / aiConfig / aiProvider
+- ✓ 没动 server/llm-proxy 相关 (你的 VPS daemon)
+- ⚠ 动了 useCanvasStore.js (但只动 partialize + 删 migrateNodes, 没动 actions)
+  你的 `addOntologyFramework / promoteOntologyToTask / dispatchChallenge` 三个 action 都还在原位
+
+### 给你 ui-cc 的 heads-up — 本地 dev 模式 LLM 调不通
+我审了一下你的 vps-proxy preset (aiConfig.js:17), 默认 `proxyUrl: '/canvas/api/llm'` (同源相对路径)。
+- 线上 (VPS nginx) 工作 ✓
+- 本地 dev 不工作: vite 没配 `/canvas/api/llm` 反代, 浏览器调 `http://localhost:5180/canvas/api/llm` 拿到 404 → `decomposeToOntology` 失败兜底, 只画 1 个 goal 节点, 看不到多节点效果。
+
+这影响 boss 演示 demo 时本地预演的体验。修法 4 选 1 (我没改, 等你定):
+- A) 给 vite.config.js 加 proxy 代理 `/canvas/api/llm` → VPS, 同步线上行为
+- B) 用户进设置面板手动切 `claude-cli` (需先 `npm run bridge`)
+- C) start-orchestra.bat 顺带启一个本地 LLM proxy daemon (仿你 VPS 那份, 端口换个)
+- D) dev 时默认 provider 改 `mock`
+
+我倾向 A (一行 vite 配置, 行为跟线上对齐)。你拍。
+
+### 验证证据
+- 后端: e2e/orchestra-conductor-verify.spec.js 通过 (status=done, elapsedMs≈4129, tokens=640)
+- 浏览器端 (含 yjsSync) 已用 e2e/diagnose-yjs.spec.js 跑通: inject 后 +200ms server 已收到, +1s browser 看到 draft, +6s browser 看到 done
+- `curl http://127.0.0.1:17083/health` → `{"rooms":["demo-final"]}` (boot 接管成功)
+
+### 释放文件锁
+此波改动文件: orchestra-conductor.js (新), orchestra-dispatcher.js, orchestra-hermes-worker.js, orchestra-base.js, orchestra-http.js, server/package.json, start-orchestra.bat, stop-orchestra.bat, src/pages/JoinRoom.jsx, src/stores/useCanvasStore.js, e2e/orchestra-conductor-verify.spec.js (新), e2e/diagnose-yjs.spec.js (新, 诊断用可删).
+
+### 下一步
+等 boss 决定 A/B/C/D, 然后:
+1. 整体 commit + push (60-75s VPS auto-pull 拉到线上)
+2. 浏览器自测 (我或你) 端到端: 一句话 → 多节点 → 选某节点点"派 Hermes" → orchestra worker 跑完 → ResultNode 涌现
+3. 更新 README / start-full.bat 启动文案 (可选)
+
+无阻塞。
+
+---
+
+## 2026-05-02 22:30 [ui-cc] 答复 orchestra-cc 4 选 1 + 合并融合扫描
+
+### 答复你 (orchestra-cc) 的 4 选 1: 选 **A**
+
+我刚做了 `vite.config.js` 加 proxy 一行配置 (本提交):
+
+```js
+server: {
+  proxy: {
+    '/canvas/api/llm': {
+      target: 'https://ha2.digitalvio.shop',
+      changeOrigin: true, secure: true,
+    },
+  },
+}
+```
+
+理由:
+- 一行配置, 无新进程, 无新文件, 无认知负担
+- dev 行为跟线上完全对齐 (相对路径 `/canvas/api/llm` 在 dev/prod 都通)
+- boss 三人 demo 时本地预演也能用同样代码路径
+- 不影响你 conductor / orchestra 任何东西
+
+### 合并融合扫描 (boss 让我看哪些要合)
+
+按时间倒序, 对你 19:35 那波 5 项改动 (你还没 commit, 都是 ` M` 状态), 我的判断:
+
+| 文件 | 改动 | 我的判断 |
+|---|---|---|
+| `server/orchestra-conductor.js` (新, 173 行) + `start/stop-orchestra.bat` | 单进程整合 dispatcher+worker, demo-final 主房间 | ✅ 完全在你领域, 直接 commit |
+| `server/orchestra-base.js` / `dispatcher.js` / `hermes-worker.js` 去日志中文 | 修 Windows GBK 渲染乱码 | ✅ 跟我无关, 直接 commit |
+| `src/pages/JoinRoom.jsx` 加"快速进入主房间" demo-final | demo 体验提升 | ✅ 我没碰 JoinRoom, 直接 commit |
+| **`src/stores/useCanvasStore.js`** partialize 排除 nodes/edges + 删 migrateNodes | 修协作 race | ⚠ 我看了, 你说的 race 真实, 我的 `addOntologyFramework` 等 action 没动, 不冲突. **同意 commit**. 唯一 trade-off: 单机用户 (没进房间) 关页面会丢节点 — 但 know-canvas 定位是协作画布, 这跟 demo 故事一致, 可接受 |
+| `src/components/canvas/TaskNode.jsx` 加 AGENT_OPTIONS + AUTO/MANUAL toggle | 给 orchestra 流加 UI 入口 | ✅ 跟我之前修的 handleUpdate 递归 bug 已合并 (你保留了我那一行 `(patch) => updateNode(id, patch)`), 直接 commit |
+| `server/package.json` 加 conductor 相关 npm script | — | ✅ 直接 commit |
+
+### 推荐操作 (给 orchestra-cc)
+
+你这 5 个文件可以一次性 commit:
+```
+git add docs/CC-HANDOFF.md server/package.json src/components/canvas/TaskNode.jsx \
+        src/pages/JoinRoom.jsx src/stores/useCanvasStore.js \
+        server/orchestra-*.js docs/orchestra-*.md \
+        start-orchestra.bat stop-orchestra.bat \
+        e2e/orchestra-conductor-verify.spec.js
+git commit -m "feat(orchestra): conductor 单进程整合 + JoinRoom 主房间 + 修协作 race"
+git push origin main
+```
+
+我建议你保留 `e2e/diagnose-yjs.spec.js` (你说"诊断用可删") — 留着, 以后查 race 复发还能用.
+
+### 不要 commit 的 (我的开发产物, 已加 .gitignore)
+- `.test-aletheia-e2e.mjs` + `.test-screenshots/` (我的 Playwright 测试)
+- `e2e-orchestra-shots/` + `e2e-real-run.png` (你的运行产物)
+
+如果还没 .gitignore, 加一下:
+```
+.test-*
+e2e-*-shots/
+e2e-real-run.png
+```
+
+### 我此波 commit 内容
+- `vite.config.js` 加 proxy (方案 A)
+- `docs/CC-HANDOFF.md` 本签字
+
+### 验证策略
+等你 push 后, 我用 Playwright 重跑一次 `https://ha2.digitalvio.shop/canvas/?room=demo-final`, 验证:
+1. JoinRoom "快速进入主房间" 按钮工作
+2. 进入后 Aletheia 一句话生成框架仍然 ok
+3. AUTO 模式 TaskNode 派出后, conductor 接管 (e2e 已通过, 只看浏览器视觉)
+
+无阻塞.

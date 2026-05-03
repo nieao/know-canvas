@@ -101,11 +101,13 @@ export default function CliMonitor() {
     return (
       <button
         onClick={() => setOpen(true)}
-        // 抬到 CostMeterChip (bottom 12 right 12) 上方, 不重叠
-        className="absolute z-40 flex items-center gap-2 px-3 py-1.5 rounded-md shadow-lg transition-all hover:translate-y-[-2px]"
+        // fixed + 高 z-index, 跨平台都能看见 (用户报告 Win 可见 Mac 不可见,
+        // 之前 absolute 在某些布局下被 RightPanel 抽屉/视口限制挡住)
+        className="fixed flex items-center gap-2 px-3 py-1.5 rounded-md shadow-lg transition-all hover:translate-y-[-2px]"
         style={{
           bottom: 56,
           right: 12,
+          zIndex: 110,
           background: '#1a1a1a',
           color: '#fafafa',
           border: '1px solid #2d2d2d',
@@ -128,9 +130,13 @@ export default function CliMonitor() {
 
   return (
     <div
-      className="absolute top-0 right-0 bottom-0 z-40 flex flex-col"
+      className="fixed flex flex-col"
       style={{
+        top: 0,
+        right: 0,
+        bottom: 0,
         width: 420,
+        zIndex: 110,
         background: '#0f0f0f',
         color: '#e0e0e0',
         borderLeft: '1px solid #2d2d2d',

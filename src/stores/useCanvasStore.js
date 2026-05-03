@@ -44,6 +44,62 @@ function getStepIdByIndex(idx) {
   return META_STEP_ORDER[idx] || META_STEP_ORDER[0]
 }
 
+// 元认知 5 步中文标签 (用于回放系统的 commit label)
+const META_STEP_LABEL_CN = {
+  intent: '意图',
+  decompose: '拆解',
+  execute: '执行',
+  reflect: '反思',
+  synthesize: '综合',
+}
+
+// 由任意画布节点向上找到所属项目库的 projectId
+//   - 节点 → parentNode → projectGroup → 兄弟 ontologyNode 项目根 → libraryId
+//   - 找不到时返回 null (调用方可 fallback 到 projects[0]?.id)
+function _findActiveProjectIdFromNode(nodes, srcNode) {
+  if (!srcNode || !Array.isArray(nodes)) return null
+  let cur = srcNode
+  // 最多向上找 4 层 parentNode (projectGroup 通常是 src 的直接父)
+  for (let i = 0; i < 4 && cur; i++) {
+    const pgId = cur.parentNode
+    if (!pgId) break
+    const pg = nodes.find((n) => n.id === pgId)
+    if (!pg) break
+    if (pg.data?.isProjectGroup) {
+      const root = nodes.find(
+        (n) => n.parentNode === pg.id && n.type === 'ontologyNode' && n.data?.projectMode,
+      )
+      if (root?.data?.libraryId) return root.data.libraryId
+      // 项目根尚未入库 — 没有 libraryId 时返回 null, 让调用方决定 fallback
+      return null
+    }
+    cur = pg
+  }
+  return null
+}
+
+// 关键 action 完成后追加一帧到项目库 commits[] (回放系统用)
+//   - projectId 优先使用调用方算出来的; 取不到时 fallback 到 projects[0]?.id (最新项目)
+//   - 失败仅 warn, 不阻塞主流程
+//   - getSnapshot() 由调用方提供, 默认从 useCanvasStore 抓 nodes/edges
+async function _commitProjectSnapshot({ projectId, label, getSnapshot }) {
+  try {
+    const mod = await import('./useProjectLibraryStore')
+    const lib = mod?.default
+    if (!lib?.getState) return
+    const s = lib.getState()
+    if (typeof s.addProjectCommit !== 'function') return
+    let pid = projectId
+    if (!pid) pid = Array.isArray(s.projects) && s.projects.length > 0 ? s.projects[0]?.id : null
+    if (!pid) return  // 没有任何项目可挂, 静默跳过
+    const snapshot = (typeof getSnapshot === 'function' ? getSnapshot() : null)
+      || { nodes: [], edges: [] }
+    s.addProjectCommit(pid, { label: label || '快照', snapshot })
+  } catch (e) {
+    console.warn('[commit-snapshot]', e?.message || e)
+  }
+}
+
 // 知识关系类型
 export const RELATION_TYPES = {
   RELATED: { id: 'related', label: 'Related', labelCn: '相关', color: '#6b7280', style: 'dashed' },
@@ -994,6 +1050,23 @@ const useCanvasStore = create(
           if (!node || node.type !== 'metaStepNode') return
           Object.assign(node.data, patch)
         })
+        // 元认知 5 步埋点: 每完成一步追加一帧 commit, 让回放系统能看到推进过程
+        // metaStepNode 在自由画布上 (无 parentNode 链), 用 fallback 到 projects[0] (最新项目)
+        if (patch && patch.status === 'done') {
+          try {
+            const stepNode = get().nodes.find((n) => n.id === stepNodeId)
+            const stepId = stepNode?.data?.stepId
+            const labelCn = META_STEP_LABEL_CN[stepId] || stepId || '步骤'
+            _commitProjectSnapshot({
+              projectId: null,  // metaStepNode 没有 projectGroup 关联, 走 fallback
+              label: `元认知-${labelCn}`,
+              getSnapshot: () => {
+                const ex = get().exportCanvasData
+                return typeof ex === 'function' ? ex() : { nodes: get().nodes, edges: get().edges }
+              },
+            })
+          } catch (e) { console.warn('[commit-snapshot:meta-step]', e?.message) }
+        }
       },
 
       // 任务清单 — 添加项，返回 itemId
@@ -2455,6 +2528,20 @@ const useCanvasStore = create(
           }
         })
 
+        // 反驳生成完成 — 追加一帧 commit (回放埋点)
+        // 项目 id 来源: src 节点向上查 projectGroup 的项目根 libraryId; 找不到 fallback projects[0]
+        try {
+          const pid = _findActiveProjectIdFromNode(get().nodes, src)
+          _commitProjectSnapshot({
+            projectId: pid,
+            label: '反驳完成',
+            getSnapshot: () => {
+              const ex = get().exportCanvasData
+              return typeof ex === 'function' ? ex() : { nodes: get().nodes, edges: get().edges }
+            },
+          })
+        } catch (e) { console.warn('[commit-snapshot:challenge]', e?.message) }
+
         return challenges
       },
 
@@ -2583,6 +2670,21 @@ const useCanvasStore = create(
             if (grp) grp.style = { ...grp.style, width: containerW }
           }
         })
+
+        // 二次拆解完成 — 追加一帧 commit (回放埋点)
+        // 项目 id 来源: src 节点向上查 projectGroup 的项目根 libraryId; 找不到 fallback projects[0]
+        try {
+          const pid = _findActiveProjectIdFromNode(get().nodes, src)
+          _commitProjectSnapshot({
+            projectId: pid,
+            label: '再次拆解',
+            getSnapshot: () => {
+              const ex = get().exportCanvasData
+              return typeof ex === 'function' ? ex() : { nodes: get().nodes, edges: get().edges }
+            },
+          })
+        } catch (e) { console.warn('[commit-snapshot:decompose]', e?.message) }
+
         return subitems
       },
 
@@ -2984,12 +3086,14 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
         // 整个 6-stage 流程异步跑 — 立即返回 rootId, 让 BottomAIBar 解锁 submitting
         ;(async () => {
 
-        // 项目模式 stage 同组配色 — 用 accent-bg 偏色调区分 parallel stage
+        // 项目模式 stage 同组配色 — 用户反馈 (图 49 后): 从上到下深浅梯度更易读
+        // 同一暖色 hue, 从上往下 alpha 递减 (顶层 stage 1 最深, 底层 stage N 最浅)
+        // 让用户一眼看出层级关系: 越深越靠主干顶端
         const stageGroupColors = [
-          'rgba(200,168,130,0.10)', // 暖
-          'rgba(124,158,178,0.10)', // 蓝灰
-          'rgba(139,158,124,0.10)', // 绿灰
-          'rgba(158,124,178,0.08)', // 紫灰
+          'rgba(200,168,130,0.28)', // L1 stage 1 (DECOMPOSE 拆解层) — 最深
+          'rgba(200,168,130,0.18)', // L2 stage 2 (EMERGE 涌现层) — 中
+          'rgba(200,168,130,0.10)', // L3 stage 3 (EXECUTE 执行层) — 较浅
+          'rgba(200,168,130,0.05)', // L4 stage 4 (REFLECT 反思层) — 最浅
         ]
 
         try {
@@ -3344,6 +3448,21 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
 
           // 入项目库 — snapshot 含整个 structure + decision + 创建的所有节点 id
           await get()._saveProjectFromMetaProject(rootId)
+
+          // Aletheia 综合阶段完成 — 追加一帧 commit (回放埋点)
+          // _saveProjectFromMetaProject 之后 root 已带 libraryId, 直接读它
+          try {
+            const root = get().nodes.find((n) => n.id === rootId)
+            const pid = root?.data?.libraryId || null
+            _commitProjectSnapshot({
+              projectId: pid,
+              label: 'Aletheia 综合',
+              getSnapshot: () => {
+                const ex = get().exportCanvasData
+                return typeof ex === 'function' ? ex() : { nodes: get().nodes, edges: get().edges }
+              },
+            })
+          } catch (e) { console.warn('[commit-snapshot:aletheia]', e?.message) }
         } catch (err) {
           console.error('[askAndStartMetaProject] failed:', err)
           updateNode(rootId, {

@@ -796,6 +796,43 @@ export default function KnowledgeGraph() {
         <CostMeterChip />
         <TimelineDock />
         <PlaybackScrubber />
+
+        {/* 回放视觉边框 — 让用户一眼看出"在回放" */}
+        {isPlayback && (
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              boxShadow: 'inset 0 0 0 3px rgba(200,168,130,0.55), inset 0 0 32px rgba(200,168,130,0.18)',
+              zIndex: 50,
+              animation: 'playbackPulse 2.4s ease-in-out infinite',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 70,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'rgba(200,168,130,0.95)',
+                color: '#fff',
+                padding: '4px 14px',
+                fontSize: 10,
+                letterSpacing: '0.35em',
+                borderRadius: 2,
+                fontFamily: '"Noto Sans SC", system-ui, sans-serif',
+                boxShadow: '0 4px 12px rgba(200,168,130,0.4)',
+              }}
+            >
+              PLAYBACK · 回放模式
+            </div>
+            <style>{`
+              @keyframes playbackPulse {
+                0%, 100% { box-shadow: inset 0 0 0 3px rgba(200,168,130,0.55), inset 0 0 32px rgba(200,168,130,0.18); }
+                50% { box-shadow: inset 0 0 0 3px rgba(200,168,130,0.75), inset 0 0 48px rgba(200,168,130,0.28); }
+              }
+            `}</style>
+          </div>
+        )}
       </div>
 
       {showRightPanel && (

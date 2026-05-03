@@ -11,7 +11,9 @@ import CostMeterPanel from './CostMeterPanel';
  * - 暖色脉冲圆点 + 总价 + 上下箭头
  */
 export default function CostMeterChip() {
-  const [open, setOpen] = useState(true);
+  // 默认折叠 — 之前 open=true 会让面板覆盖右下角的 CliMonitor 折叠条 / 主按钮,
+  // 用户可点 chip 主动展开
+  const [open, setOpen] = useState(false);
 
   // 安全读取 cost meter store
   const totalCny = useCostMeterStore

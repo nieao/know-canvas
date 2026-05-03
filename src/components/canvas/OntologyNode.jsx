@@ -551,16 +551,33 @@ function OntologyNodeImpl({ id, data, selected }) {
           </div>
         )}
 
-        {/* 元认知分析结果 inline 折叠区 — 共享组件 */}
-        {metaAnalysis && metaExpanded && (
+      </div>
+
+      {/* 元认知分析结果 浮层 — absolute 不撑节点高度, 避免挤压下方 ROLE/AGENT 节点
+          浮在节点下方, 自带背景边框, z 层高于普通节点 */}
+      {metaAnalysis && metaExpanded && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: 0,
+            width: meta.width,
+            background: 'var(--surface)',
+            border: `1px solid ${meta.accent}`,
+            borderRadius: 4,
+            boxShadow: '0 6px 20px rgba(0,0,0,0.10)',
+            zIndex: 5,
+            padding: '0 16px 12px',
+          }}
+        >
           <MetaAnalysisInline
             analysis={metaAnalysis}
             textColor={meta.color}
             onReanalyze={onReanalyze}
             isAnalyzing={isAnalyzing}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

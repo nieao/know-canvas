@@ -1,0 +1,59 @@
+# Know Canvas LLM Proxy systemd unit
+#
+# 把前端 /canvas/api/llm/* 请求转发到 DeepSeek (或其它 OpenAI 兼容 endpoint)
+# 凭据保管在 /etc/know-canvas/llm.env, 不暴露给浏览器
+#
+# 安装:
+#   sudo mkdir -p /etc/know-canvas
+#   sudo tee /etc/know-canvas/llm.env >/dev/null <<'EOF'
+#   LLM_API_KEY=sk-xxxxxxxxxxxx
+#   LLM_BASE_URL=https://api.deepseek.com/v1
+#   LLM_MODEL=deepseek-chat
+#   EOF
+#   sudo chmod 600 /etc/know-canvas/llm.env
+#
+#   sudo cp deploy/know-canvas-llm-proxy.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable know-canvas-llm-proxy
+#   sudo systemctl start know-canvas-llm-proxy
+#   sudo systemctl status know-canvas-llm-proxy
+#
+# 查看日志:
+#   sudo journalctl -u know-canvas-llm-proxy -f
+#
+# 更换 API key:
+#   sudo nano /etc/know-canvas/llm.env
+#   sudo systemctl restart know-canvas-llm-proxy
+
+[Unit]
+Description=Know Canvas LLM Proxy (DeepSeek / OpenAI compatible)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/know-canvas/server
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=17080
+EnvironmentFile=/etc/know-canvas/llm.env
+
+ExecStart=/usr/bin/node /opt/know-canvas/server/vps-llm-proxy.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 资源限制 (LLM 转发不需要太多内存)
+MemoryMax=256M
+CPUQuota=30%
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

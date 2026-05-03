@@ -80,6 +80,59 @@ const LAYOUT = {
   CATEGORY_SPACING: 600,
 }
 
+// === 遮挡检测 ===
+// 计算节点的 absolute bbox (考虑 parentNode 嵌套)
+function getNodeAbsoluteBox(node, allNodes) {
+  let x = node.position?.x || 0
+  let y = node.position?.y || 0
+  let parentId = node.parentNode
+  while (parentId) {
+    const parent = allNodes.find((n) => n.id === parentId)
+    if (!parent) break
+    x += parent.position?.x || 0
+    y += parent.position?.y || 0
+    parentId = parent.parentNode
+  }
+  // 节点尺寸: group 用 style.width/height, 普通节点估算
+  const w = Number(node.style?.width) || node.width || node.measured?.width
+    || (node.type === 'group' ? 800 : node.type === 'challengeNode' ? 280 : node.type === 'ontologyNode' ? 220 : 200)
+  const h = Number(node.style?.height) || node.height || node.measured?.height
+    || (node.type === 'group' ? 600 : node.type === 'challengeNode' ? 200 : 120)
+  return { x, y, w, h }
+}
+
+// 判断两 box 是否撞 (留 SAFE_GAP 间距)
+function boxOverlap(a, b, gap = 30) {
+  return !(a.x + a.w + gap <= b.x || b.x + b.w + gap <= a.x || a.y + a.h + gap <= b.y || b.y + b.h + gap <= a.y)
+}
+
+/**
+ * 在已有节点旁边找一个不撞的位置. 优先按 strategy 偏移
+ * @param {{x,y,w,h}} desired 期望的 box
+ * @param {Array} allNodes 所有节点
+ * @param {Array<string>} excludeIds 排除自身/同时新增的节点 ids
+ * @param {'down'|'right'} strategy 撞了之后向哪个方向偏移
+ * @returns {{x,y}} 不撞的目标位置
+ */
+function findFreePosition(desired, allNodes, excludeIds = [], strategy = 'down') {
+  const STEP = strategy === 'down' ? 80 : 120
+  const MAX_TRIES = 50
+  let { x, y } = desired
+  for (let i = 0; i < MAX_TRIES; i++) {
+    const cur = { x, y, w: desired.w, h: desired.h }
+    const collided = allNodes.find((n) => {
+      if (excludeIds.includes(n.id)) return false
+      if (n.parentNode) return false  // 子节点的位置已经体现在父级 bbox 内, 跳过避免重复检测
+      const box = getNodeAbsoluteBox(n, allNodes)
+      return boxOverlap(cur, box)
+    })
+    if (!collided) return { x, y }
+    if (strategy === 'down') y += STEP
+    else x += STEP
+  }
+  return { x, y }  // 兜底, 50 次还撞就只能这样
+}
+
 // 通用节点工厂，确保创建一致性
 const createNodeFactory = (get, set) => (type, idPrefix, data, position = null) => {
   const pos = position || get().getNextGridPosition()
@@ -2266,6 +2319,17 @@ const useCanvasStore = create(
         }
 
         const existing = nodes.find((n) => n.id === challengeGroupId)
+
+        // 遮挡检测: 新建容器时避开已有节点 (PDF / 别的 challengeGroup / 其他 projectGroup)
+        // 仅对新建容器做; 复用已存在的不动 (用户可能已经手动调过位置)
+        if (!existing) {
+          const containerH = CHALLENGE_GROUP_PAD * 2 + Math.max(challenges.length, 3) * CHALLENGE_CARD_H
+          const free = findFreePosition(
+            { x: challengeGroupPos.x, y: challengeGroupPos.y, w: CHALLENGE_GROUP_W, h: containerH },
+            nodes, [], 'down',
+          )
+          challengeGroupPos = free
+        }
         // 已有反驳卡片数 (用于 append 时的 y 偏移)
         const existingChallenges = nodes.filter((n) => n.parentNode === challengeGroupId && n.type === 'challengeNode')
         const startIdx = existingChallenges.length
@@ -2404,6 +2468,16 @@ const useCanvasStore = create(
         }
 
         const existing = nodes.find((n) => n.id === dgId)
+
+        // 遮挡检测: 新建 decompose 容器时避开已有内容
+        if (!existing) {
+          const tentativeW = Math.max(COL_W * 5 + PAD * 2, COL_W * subitems.length + PAD * 2)
+          const free = findFreePosition(
+            { x: dgPos.x, y: dgPos.y, w: tentativeW, h: CARD_H + PAD * 2 + 24 },
+            nodes, [], 'down',
+          )
+          dgPos = free
+        }
         const existingChildren = nodes.filter((n) => n.parentNode === dgId && n.type === 'ontologyNode')
         const startIdx = existingChildren.length
         const totalAfter = startIdx + subitems.length

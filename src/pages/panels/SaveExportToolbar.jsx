@@ -10,7 +10,7 @@ import { logAction } from '../../utils/actionLog'
 
 function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCanvasData }) {
   const [showSaveMenu, setShowSaveMenu] = useState(false)
-  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
@@ -76,11 +76,6 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
     }
     useCanvasStore.getState().clearCanvas()
     setConfirmClear(false)
-  }
-
-  // 加载黑金 02 演示数据：6 节点 + 4 边的"产品方案对抗"模板
-  const handleLoadDemo = () => {
-    useCanvasStore.getState().loadDemoBlackgold()
   }
 
   // 下载文件辅助函数
@@ -154,7 +149,6 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
     }
 
     downloadFile(md, `know-canvas-${Date.now()}.md`, 'text/markdown')
-    setShowExportMenu(false)
   }
 
   // 导出为 JSON-LD
@@ -188,7 +182,6 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
 
     const jsonStr = JSON.stringify(jsonld, null, 2)
     downloadFile(jsonStr, `know-canvas-${Date.now()}.jsonld`, 'application/ld+json')
-    setShowExportMenu(false)
   }
 
   // 导出为 PNG（需要 html-to-image）
@@ -218,7 +211,6 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
     }
 
     setIsExporting(false)
-    setShowExportMenu(false)
   }
 
   // 导入 JSON
@@ -254,7 +246,7 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
       {/* 保存按钮 */}
       <div className="relative">
         <button
-          onClick={() => { setShowSaveMenu(!showSaveMenu); setShowExportMenu(false) }}
+          onClick={() => { setShowSaveMenu(!showSaveMenu); setShowSettingsMenu(false) }}
           className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover"
           style={{
             background: 'var(--white)',
@@ -288,153 +280,17 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
         )}
       </div>
 
-      {/* 导出按钮 */}
-      <div className="relative">
-        <button
-          onClick={() => { setShowExportMenu(!showExportMenu); setShowSaveMenu(false) }}
-          disabled={isExporting}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover disabled:opacity-50"
-          style={{
-            background: 'var(--white)',
-            border: '1px solid var(--gray-100)',
-            color: 'var(--dark)',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--warm)'}
-          onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--gray-100)'}
-        >
-          {isExporting ? (
-            <svg className="w-4 h-4 animate-spin" style={{ color: 'var(--warm)' }} fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-          )}
-          <span className="text-xs font-medium">{isExporting ? '导出中...' : '导出'}</span>
-        </button>
-
-        {showExportMenu && !isExporting && (
-          <div className="absolute top-full left-0 mt-2 w-52 rounded-lg shadow-lg py-1.5 z-50" style={{ background: 'var(--white)', border: '1px solid var(--gray-100)' }}>
-            <button
-              onClick={handleExportMarkdown}
-              className="w-full px-4 py-2 text-left text-xs flex items-center gap-2 transition-colors"
-              style={{ color: 'var(--dark)' }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--warm-bg)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-            >
-              <svg className="w-3.5 h-3.5" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
-              </svg>
-              导出为 Markdown
-            </button>
-            <button
-              onClick={handleExportJSONLD}
-              className="w-full px-4 py-2 text-left text-xs flex items-center gap-2 transition-colors"
-              style={{ color: 'var(--dark)' }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--warm-bg)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-            >
-              <svg className="w-3.5 h-3.5" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-              </svg>
-              导出为 JSON-LD
-            </button>
-            <button
-              onClick={handleExportPNG}
-              className="w-full px-4 py-2 text-left text-xs flex items-center gap-2 transition-colors"
-              style={{ color: 'var(--dark)' }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--warm-bg)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-            >
-              <svg className="w-3.5 h-3.5" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              导出为 PNG
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* 导入按钮 */}
-      <div className="relative">
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isImporting}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover disabled:opacity-50"
-          style={{
-            background: 'var(--white)',
-            border: '1px solid var(--gray-100)',
-            color: 'var(--dark)',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--warm)'}
-          onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--gray-100)'}
-        >
-          {isImporting ? (
-            <svg className="w-4 h-4 animate-spin" style={{ color: 'var(--warm)' }} fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-          )}
-          <span className="text-xs font-medium">{isImporting ? '导入中...' : '导入'}</span>
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          onChange={handleImportJSON}
-          className="hidden"
-        />
-      </div>
+      {/* 隐藏的文件 input — 给设置菜单用 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        onChange={handleImportJSON}
+        className="hidden"
+      />
 
       {/* 折叠分级开关 — 仅主干 / 显示全部 */}
       <CollapseModeSwitch />
-
-      {/* 横竖切换分段按钮 (像 iOS Segmented Control) */}
-      <div
-        className="flex rounded-lg overflow-hidden shadow-sm"
-        style={{ border: '1px solid var(--gray-100)', background: 'var(--white)' }}
-        title="自动排序方向"
-      >
-        <button
-          onClick={() => handleToggleDirection('LR')}
-          className="px-3 py-2 text-xs font-medium transition-colors duration-200"
-          style={{
-            background: layoutDirection === 'LR' ? 'var(--warm-bg)' : 'transparent',
-            color: layoutDirection === 'LR' ? 'var(--warm)' : 'var(--gray-700)',
-            borderRight: '1px solid var(--gray-100)',
-          }}
-          title="横排 (Left to Right)"
-        >
-          <span className="flex items-center gap-1">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-            横排
-          </span>
-        </button>
-        <button
-          onClick={() => handleToggleDirection('TB')}
-          className="px-3 py-2 text-xs font-medium transition-colors duration-200"
-          style={{
-            background: layoutDirection === 'TB' ? 'var(--warm-bg)' : 'transparent',
-            color: layoutDirection === 'TB' ? 'var(--warm)' : 'var(--gray-700)',
-          }}
-          title="竖排 (Top to Bottom)"
-        >
-          <span className="flex items-center gap-1">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 5v14M6 13l6 6 6-6" />
-            </svg>
-            竖排
-          </span>
-        </button>
-      </div>
 
       {/* 一键自动排序按钮 (smartLayout: 有边走 dagre, 无边走分类) */}
       <div className="relative">
@@ -466,53 +322,132 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
         </button>
       </div>
 
-      {/* 清空画布按钮（二次确认） */}
+      {/* ⚙ 设置下拉 — 收纳次要操作: 横竖切换/导入/导出/清空 */}
       <div className="relative">
         <button
-          onClick={handleClearCanvas}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover"
-          style={{
-            background: confirmClear ? 'var(--severity-critical)' : 'var(--surface)',
-            border: `1px solid ${confirmClear ? 'var(--severity-critical)' : 'var(--border-subtle)'}`,
-            color: confirmClear ? '#fff' : 'var(--text-secondary)',
-          }}
-          onMouseEnter={(e) => { if (!confirmClear) e.currentTarget.style.borderColor = 'var(--severity-critical)' }}
-          onMouseLeave={(e) => { if (!confirmClear) e.currentTarget.style.borderColor = 'var(--border-subtle)' }}
-          title={confirmClear ? '再点一次确认清空' : '清空画布所有节点和连线（不可撤销）'}
-        >
-          <svg className="w-4 h-4" style={{ color: confirmClear ? '#fff' : 'var(--severity-critical)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          <span className="text-xs font-medium">{confirmClear ? '再点确认' : '清空'}</span>
-        </button>
-      </div>
-
-      {/* 加载 Demo 按钮 — 金色钻石图标，调 loadDemoBlackgold 预填演示数据 */}
-      <div className="relative">
-        <button
-          onClick={handleLoadDemo}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover"
+          onClick={() => { setShowSettingsMenu(!showSettingsMenu); setShowSaveMenu(false) }}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover"
           style={{
             background: 'var(--white)',
             border: '1px solid var(--gray-100)',
             color: 'var(--dark)',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#d4af37')}
-          onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--gray-100)')}
-          title="加载黑金 02 演示模板（6 节点 + 4 边的产品方案对抗）"
+          onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--warm)'}
+          onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--gray-100)'}
+          title="更多设置: 排序方向 / 导入 / 导出 / 清空"
         >
-          <svg className="w-4 h-4" style={{ color: '#d4af37' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          <svg className="w-4 h-4" style={{ color: 'var(--gray-700)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          <span className="text-xs font-medium">加载 Demo</span>
         </button>
+
+        {showSettingsMenu && (
+          <div className="absolute top-full right-0 mt-2 w-56 rounded-lg shadow-lg py-1.5 z-50" style={{ background: 'var(--white)', border: '1px solid var(--gray-100)' }}>
+            {/* 排序方向 — 嵌入式分段 */}
+            <div className="px-3 py-2" style={{ borderBottom: '1px solid var(--gray-100)' }}>
+              <div style={{ fontSize: 10, color: 'var(--gray-500)', letterSpacing: '0.15em', marginBottom: 6 }}>排序方向</div>
+              <div className="flex rounded overflow-hidden" style={{ border: '1px solid var(--gray-100)' }}>
+                <button
+                  onClick={() => handleToggleDirection('LR')}
+                  className="flex-1 py-1 text-xs font-medium"
+                  style={{
+                    background: layoutDirection === 'LR' ? 'var(--warm-bg)' : 'transparent',
+                    color: layoutDirection === 'LR' ? 'var(--warm)' : 'var(--gray-700)',
+                  }}
+                >横排</button>
+                <button
+                  onClick={() => handleToggleDirection('TB')}
+                  className="flex-1 py-1 text-xs font-medium"
+                  style={{
+                    background: layoutDirection === 'TB' ? 'var(--warm-bg)' : 'transparent',
+                    color: layoutDirection === 'TB' ? 'var(--warm)' : 'var(--gray-700)',
+                    borderLeft: '1px solid var(--gray-100)',
+                  }}
+                >竖排</button>
+              </div>
+            </div>
+
+            {/* 导入 */}
+            <button
+              onClick={() => { fileInputRef.current?.click(); setShowSettingsMenu(false) }}
+              disabled={isImporting}
+              className="w-full px-4 py-2 text-left text-xs flex items-center gap-2 transition-colors disabled:opacity-50"
+              style={{ color: 'var(--dark)' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--warm-bg)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <svg className="w-3.5 h-3.5" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              {isImporting ? '导入中...' : '导入 JSON'}
+            </button>
+
+            <div style={{ height: 1, background: 'var(--gray-100)', margin: '4px 0' }} />
+
+            {/* 导出三种格式 */}
+            <button
+              onClick={() => { handleExportMarkdown(); setShowSettingsMenu(false) }}
+              className="w-full px-4 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+              style={{ color: 'var(--dark)' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--warm-bg)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <svg className="w-3.5 h-3.5" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+              </svg>
+              导出 Markdown
+            </button>
+            <button
+              onClick={() => { handleExportJSONLD(); setShowSettingsMenu(false) }}
+              className="w-full px-4 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+              style={{ color: 'var(--dark)' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--warm-bg)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <svg className="w-3.5 h-3.5" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+              导出 JSON-LD
+            </button>
+            <button
+              onClick={() => { handleExportPNG(); setShowSettingsMenu(false) }}
+              disabled={isExporting}
+              className="w-full px-4 py-2 text-left text-xs flex items-center gap-2 transition-colors disabled:opacity-50"
+              style={{ color: 'var(--dark)' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--warm-bg)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <svg className="w-3.5 h-3.5" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {isExporting ? '导出中...' : '导出 PNG'}
+            </button>
+
+            <div style={{ height: 1, background: 'var(--gray-100)', margin: '4px 0' }} />
+
+            {/* 清空 — 二次确认 */}
+            <button
+              onClick={handleClearCanvas}
+              className="w-full px-4 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+              style={{ color: confirmClear ? 'var(--severity-critical)' : 'var(--dark)' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <svg className="w-3.5 h-3.5" style={{ color: 'var(--severity-critical)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              {confirmClear ? '再点确认清空' : '清空画布'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 点击外部关闭菜单 */}
-      {(showSaveMenu || showExportMenu) && (
+      {(showSaveMenu || showSettingsMenu) && (
         <div
           className="fixed inset-0 z-40"
-          onClick={() => { setShowSaveMenu(false); setShowExportMenu(false) }}
+          onClick={() => { setShowSaveMenu(false); setShowSettingsMenu(false) }}
         />
       )}
     </div>

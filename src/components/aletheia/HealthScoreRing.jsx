@@ -1,4 +1,5 @@
 // 健康分圆环 - 显示对抗收敛后的综合健康分（0-100），含数字爬升动画
+// 默认折叠成右上角小 chip（避免遮挡画布），点击 chip 才展开完整圆环
 import React, { useEffect, useRef, useState } from 'react';
 import { useAletheiaStore } from '../../stores/useAletheiaStore';
 
@@ -18,13 +19,16 @@ function pickStrokeColor(score) {
  * 健康分圆环
  * - 从 useAletheiaStore 读取 healthScore（fallback 0）
  * - 数字爬升动画 800ms，easeOutCubic
- * - 圆环 SVG ≥ 160px，背景细线 + 前景按分数色
+ * - 默认折叠为 chip（数字 + ▾），点击展开为 180px 圆环
  */
 export default function HealthScoreRing() {
   // 安全读取 store；store 还没就绪时 fallback 0
   const healthScore = useAletheiaStore
     ? useAletheiaStore((s) => (typeof s?.healthScore === 'number' ? s.healthScore : 0))
     : 0;
+
+  // 折叠状态 — 默认折叠（避免大圆环遮挡画布右侧节点）
+  const [expanded, setExpanded] = useState(false);
 
   // 数字爬升动画 - 显示中的分数
   const [displayScore, setDisplayScore] = useState(healthScore || 0);
@@ -59,9 +63,9 @@ export default function HealthScoreRing() {
     };
   }, [healthScore]);
 
-  // 圆环几何参数
-  const size = 180; // 总尺寸（≥160）
-  const stroke = 6; // 线条宽度
+  // 圆环几何参数（展开态）
+  const size = 180;
+  const stroke = 6;
   const radius = (size - stroke) / 2;
   const cx = size / 2;
   const cy = size / 2;
@@ -70,7 +74,60 @@ export default function HealthScoreRing() {
   const clamped = Math.max(0, Math.min(100, displayScore));
   const dashOffset = circumference * (1 - clamped / 100);
   const strokeColor = pickStrokeColor(clamped);
+  const rounded = Math.round(clamped);
 
+  // === 折叠态: 小 chip ===
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        title={`健康度 ${rounded} · 点击展开圆环`}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '5px 12px 5px 8px',
+          background: 'var(--surface)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 999,
+          fontFamily: '"Noto Sans SC", system-ui, sans-serif',
+          fontSize: 11,
+          letterSpacing: '0.1em',
+          color: 'var(--text-faint)',
+          cursor: 'pointer',
+          userSelect: 'none',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}
+      >
+        {/* 迷你圆环 28x28 */}
+        <svg width={28} height={28} viewBox="0 0 28 28" style={{ flexShrink: 0 }}>
+          <circle cx={14} cy={14} r={12} fill="none" stroke="var(--border-subtle)" strokeWidth={1} />
+          <circle
+            cx={14} cy={14} r={12}
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeDasharray={2 * Math.PI * 12}
+            strokeDashoffset={2 * Math.PI * 12 * (1 - clamped / 100)}
+            transform="rotate(-90 14 14)"
+            style={{ transition: 'stroke 0.4s cubic-bezier(0.22, 1, 0.36, 1)' }}
+          />
+        </svg>
+        <span style={{ fontFamily: '"Noto Serif SC", Georgia, serif', fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>
+          {rounded}
+        </span>
+        <span style={{ fontSize: 9, letterSpacing: '0.2em', color: 'var(--text-faint)' }}>
+          HEALTH ▾
+        </span>
+      </button>
+    );
+  }
+
+  // === 展开态: 完整圆环 ===
   return (
     <div
       style={{
@@ -79,8 +136,37 @@ export default function HealthScoreRing() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '8px',
+        position: 'relative',
+        background: 'var(--surface)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderRadius: 8,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
       }}
     >
+      {/* 收起按钮 (右上角小 ×) */}
+      <button
+        type="button"
+        onClick={() => setExpanded(false)}
+        title="收起健康度"
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 8,
+          width: 18,
+          height: 18,
+          padding: 0,
+          background: 'transparent',
+          border: 'none',
+          color: 'var(--text-faint)',
+          cursor: 'pointer',
+          fontSize: 14,
+          lineHeight: 1,
+        }}
+      >
+        ×
+      </button>
+
       <div style={{ position: 'relative', width: size, height: size }}>
         <svg
           width={size}
@@ -88,16 +174,9 @@ export default function HealthScoreRing() {
           viewBox={`0 0 ${size} ${size}`}
           style={{ display: 'block' }}
         >
-          {/* 背景圆环 - 1px 细线 */}
-          <circle
-            cx={cx}
-            cy={cy}
-            r={radius}
-            fill="none"
-            stroke="var(--border-subtle)"
-            strokeWidth={1}
-          />
-          {/* 前景填充圆环 - 旋转到 12 点方向起始 */}
+          {/* 背景圆环 */}
+          <circle cx={cx} cy={cy} r={radius} fill="none" stroke="var(--border-subtle)" strokeWidth={1} />
+          {/* 前景填充圆环 */}
           <circle
             cx={cx}
             cy={cy}
@@ -109,9 +188,7 @@ export default function HealthScoreRing() {
             strokeDasharray={circumference}
             strokeDashoffset={dashOffset}
             transform={`rotate(-90 ${cx} ${cy})`}
-            style={{
-              transition: 'stroke 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
-            }}
+            style={{ transition: 'stroke 0.5s cubic-bezier(0.22, 1, 0.36, 1)' }}
           />
         </svg>
 
@@ -137,7 +214,7 @@ export default function HealthScoreRing() {
               letterSpacing: '0.02em',
             }}
           >
-            {Math.round(clamped)}
+            {rounded}
           </div>
           <div
             style={{

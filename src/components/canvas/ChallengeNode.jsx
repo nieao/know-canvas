@@ -29,12 +29,22 @@ function ChallengeNodeImpl({ id, data, selected }) {
   const evidence = Array.isArray(data.evidence) ? data.evidence : []
   const todos = Array.isArray(data.todos) ? data.todos : []
   const chainRunning = data.chainRunning === true
+  const verifyRunning = data.verifyRunning === true
+  const verification = data.verification || null  // { score, verdict, reason }
 
   const onChainTodos = (e) => {
     e.stopPropagation()
     if (chainRunning || todos.length === 0) return
     window.dispatchEvent(new CustomEvent('challenge:chain-todos', {
       detail: { challengeId: id, todos, claim, sourceTitle },
+    }))
+  }
+
+  const onVerify = (e) => {
+    e.stopPropagation()
+    if (verifyRunning) return
+    window.dispatchEvent(new CustomEvent('challenge:verify-hermes', {
+      detail: { challengeId: id, claim, angle, severity, sourceTitle },
     }))
   }
 
@@ -151,6 +161,54 @@ function ChallengeNodeImpl({ id, data, selected }) {
             </ul>
           </div>
         )}
+
+        {/* === 二次验证: Hermes sanity check === */}
+        {/* 让 LLM 做"反思"判断这个反驳是否切合实际 (用户图 43 反馈反驳脱离实际, 比如说 PDF 超 1GB) */}
+        <div className="mt-2.5 pt-2" style={{ borderTop: `1px dashed ${meta.color}30` }}>
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className="text-[9px]"
+              style={{ color: 'var(--text-muted)', letterSpacing: '0.15em' }}
+            >
+              {verification ? `验证 · ${verification.verdict || '已审'}` : '反驳是否成立?'}
+            </span>
+            <button
+              type="button"
+              onClick={onVerify}
+              disabled={verifyRunning}
+              className="text-[9px] px-2 py-0.5 rounded transition-all duration-300"
+              style={{
+                border: '1px solid var(--accent)',
+                color: verifyRunning ? 'var(--text-faint)' : 'var(--accent)',
+                background: verification ? 'var(--accent-bg, rgba(245,240,235,0.4))' : 'transparent',
+                cursor: verifyRunning ? 'wait' : 'pointer',
+                letterSpacing: '0.05em',
+              }}
+              title="让 LLM 二次审查这个反驳: 是否切合实际, 给可信度评分"
+            >
+              {verifyRunning ? '审中…' : verification ? '重审' : '⚖ 二次验证'}
+            </button>
+          </div>
+          {verification && (
+            <div className="mt-1.5 p-1.5 rounded" style={{
+              background: verification.score >= 70 ? 'rgba(123,196,127,0.08)' : verification.score >= 40 ? 'rgba(200,168,130,0.08)' : 'rgba(178,124,139,0.08)',
+              border: `1px solid ${verification.score >= 70 ? '#7bc47f55' : verification.score >= 40 ? '#c8a88255' : '#b27c8b55'}`,
+            }}>
+              <div className="flex items-center gap-1.5" style={{ marginBottom: 3 }}>
+                <span style={{
+                  fontSize: 12,
+                  fontFamily: '"Noto Serif SC", Georgia, serif',
+                  color: verification.score >= 70 ? '#3a8a3e' : verification.score >= 40 ? 'var(--accent)' : '#7a3a4a',
+                  fontWeight: 600,
+                }}>{Math.round(verification.score)}</span>
+                <span style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: '0.15em' }}>可信度 / 100</span>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                {verification.reason}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* 攻击对象 (源节点) */}
         {sourceTitle && (

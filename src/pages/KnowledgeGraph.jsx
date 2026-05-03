@@ -509,6 +509,42 @@ export default function KnowledgeGraph() {
       }
     }
 
+    // 反驳节点的"二次验证"按钮 — 让 LLM 反思这个反驳是否切合实际, 给可信度评分
+    // (用户图 43 反馈: 反驳脱离实际, 比如 PDF 不会超 1GB 但反驳照搬 OOM 风险)
+    const onVerifyHermes = async (e) => {
+      const { challengeId, claim, angle, severity, sourceTitle } = e.detail || {}
+      if (!challengeId || !claim) return
+      const store = useCanvasStore.getState()
+      store.updateNode(challengeId, { verifyRunning: true })
+      try {
+        const { callLLM } = await import('../services/aiProvider')
+        const { tryParseLLMJson } = await import('../services/aiService')
+        const system = `你是 Hermes 二次审查官. 给定一个对原方案的反驳, 你要判断这个反驳是否站得住脚 — 是否切合实际语境 (避免 LLM 编造不切实际的论点, 比如假设 PDF 超 1GB 之类).
+按 JSON 输出: { "score": 0-100 整数 (反驳的可信度), "verdict": "成立"|"勉强"|"不成立", "reason": "一句话理由 (50 字内)" }`
+        const prompt = `原方案 (针对): ${sourceTitle || '未知'}
+反驳角度: ${angle || ''}
+反驳论点: ${claim}
+反驳严重度: ${severity || 'medium'}
+
+请审视这个反驳是否切合实际, 还是 LLM 想当然脱离场景的臆测? 评分 + 一句话理由.`
+        const raw = await callLLM({ system, prompt, jsonMode: true })
+        const parsed = tryParseLLMJson(raw)
+        const score = typeof parsed?.score === 'number' ? Math.max(0, Math.min(100, parsed.score)) : 50
+        const verdict = parsed?.verdict || (score >= 70 ? '成立' : score >= 40 ? '勉强' : '不成立')
+        const reason = parsed?.reason || '审查官未给出理由'
+        useCanvasStore.getState().updateNode(challengeId, {
+          verifyRunning: false,
+          verification: { score, verdict, reason, ts: Date.now() },
+        })
+      } catch (err) {
+        console.error('[verify-hermes] 失败:', err)
+        useCanvasStore.getState().updateNode(challengeId, {
+          verifyRunning: false,
+          verification: { score: 0, verdict: '审查失败', reason: err?.message || String(err) },
+        })
+      }
+    }
+
     // 反驳节点的"下一步"按钮 — 把 todos 派给元认知, 串成下一轮可执行项目
     const onChainTodos = (e) => {
       const { challengeId, todos = [], claim = '', sourceTitle = '' } = e.detail || {}
@@ -543,6 +579,7 @@ export default function KnowledgeGraph() {
     window.addEventListener('node-change-type', onNodeChangeType)
     window.addEventListener('group-color-change', onGroupColorChange)
     window.addEventListener('challenge:chain-todos', onChainTodos)
+    window.addEventListener('challenge:verify-hermes', onVerifyHermes)
     window.addEventListener('canvas-auto-save', onAutoSave)
 
     return () => {
@@ -557,6 +594,8 @@ export default function KnowledgeGraph() {
       window.removeEventListener('node-change-type', onNodeChangeType)
       window.removeEventListener('group-color-change', onGroupColorChange)
       window.removeEventListener('challenge:chain-todos', onChainTodos)
+      window.removeEventListener('challenge:verify-hermes', onVerifyHermes)
+      window.removeEventListener('canvas-auto-save', onAutoSave)
     }
   }, [handleFileDrop, addBookmarkNode, addConceptNode, addNoteNode, addImageNode, addVideoNode, addFileNode, onNodesChange])
 

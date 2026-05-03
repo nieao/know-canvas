@@ -138,6 +138,8 @@ const LAYOUT = {
 
 // === 遮挡检测 ===
 // 计算节点的 absolute bbox (考虑 parentNode 嵌套)
+// 不同 group 类型的 fallback width/height 必须分别给, 否则 collision 检测假阴性
+// (用户反馈: projectGroup 实际 1600+ 但 fallback 800 → 新 group 放进去看起来不撞实际撞了 → 整个组团跑很远找空位)
 function getNodeAbsoluteBox(node, allNodes) {
   let x = node.position?.x || 0
   let y = node.position?.y || 0
@@ -149,11 +151,20 @@ function getNodeAbsoluteBox(node, allNodes) {
     y += parent.position?.y || 0
     parentId = parent.parentNode
   }
-  // 节点尺寸: group 用 style.width/height, 普通节点估算
-  const w = Number(node.style?.width) || node.width || node.measured?.width
-    || (node.type === 'group' ? 800 : node.type === 'challengeNode' ? 280 : node.type === 'ontologyNode' ? 220 : 200)
-  const h = Number(node.style?.height) || node.height || node.measured?.height
-    || (node.type === 'group' ? 600 : node.type === 'challengeNode' ? 200 : 120)
+  // 按 group 子类型给精确尺寸
+  let fallbackW, fallbackH
+  if (node.type === 'group') {
+    if (node.data?.isChallengeGroup) { fallbackW = 380; fallbackH = 800 }
+    else if (node.data?.isDecomposeGroup) { fallbackW = 1260; fallbackH = 260 }
+    else if (node.data?.isProjectGroup || node.data?.isProject) { fallbackW = 1600; fallbackH = 1100 }
+    else if (node.data?.isOrphanFallback) { fallbackW = 0; fallbackH = 0 }  // 隐形 fallback root, 不参与 collision
+    else { fallbackW = 800; fallbackH = 600 }
+  } else if (node.type === 'challengeNode') { fallbackW = 280; fallbackH = 200 }
+  else if (node.type === 'ontologyNode') { fallbackW = 220; fallbackH = 140 }
+  else { fallbackW = 200; fallbackH = 120 }
+
+  const w = Number(node.style?.width) || node.width || node.measured?.width || fallbackW
+  const h = Number(node.style?.height) || node.height || node.measured?.height || fallbackH
   return { x, y, w, h }
 }
 
@@ -163,7 +174,12 @@ function boxOverlap(a, b, gap = 30) {
 }
 
 /**
- * 在已有节点旁边找一个不撞的位置. 优先按 strategy 偏移
+ * 在已有节点旁边找一个不撞的位置. 优先按 strategy 偏移.
+ *
+ * MAX_TRIES 限制 16 次, STEP 100 — 最大偏移 ~1600px 内, 不会跑到天涯.
+ * 16 次还找不到说明画布拥挤, 不再死磕"完美不撞", 回到第 4 次的位置(局部已偏开但还在视野内).
+ * (用户反馈: 之前 50 次×80px = 4000px 偏移, 节点跑很远视野外, 必须手动找回)
+ *
  * @param {{x,y,w,h}} desired 期望的 box
  * @param {Array} allNodes 所有节点
  * @param {Array<string>} excludeIds 排除自身/同时新增的节点 ids
@@ -171,22 +187,28 @@ function boxOverlap(a, b, gap = 30) {
  * @returns {{x,y}} 不撞的目标位置
  */
 function findFreePosition(desired, allNodes, excludeIds = [], strategy = 'down') {
-  const STEP = strategy === 'down' ? 80 : 120
-  const MAX_TRIES = 50
+  const STEP = strategy === 'down' ? 100 : 140
+  const MAX_TRIES = 16
+  const FALLBACK_TRY = 4  // 找不到完美位置时, 回这一步 (~400-560px 偏移, 仍在视野内)
   let { x, y } = desired
+  let fallbackPos = null
   for (let i = 0; i < MAX_TRIES; i++) {
     const cur = { x, y, w: desired.w, h: desired.h }
     const collided = allNodes.find((n) => {
       if (excludeIds.includes(n.id)) return false
       if (n.parentNode) return false  // 子节点的位置已经体现在父级 bbox 内, 跳过避免重复检测
+      if (n.data?.isOrphanFallback) return false  // 隐形 fallback root 不参与
       const box = getNodeAbsoluteBox(n, allNodes)
+      if (box.w === 0 || box.h === 0) return false
       return boxOverlap(cur, box)
     })
     if (!collided) return { x, y }
+    if (i === FALLBACK_TRY) fallbackPos = { x, y }
     if (strategy === 'down') y += STEP
     else x += STEP
   }
-  return { x, y }  // 兜底, 50 次还撞就只能这样
+  console.warn('[findFreePosition] 16 次尝试都撞, 回退到 fallback 位置 (~400px 偏移). 画布可能需要手动整理')
+  return fallbackPos || { x: desired.x, y: desired.y }
 }
 
 // 通用节点工厂，确保创建一致性
@@ -2585,9 +2607,15 @@ const useCanvasStore = create(
           const groupX = projectGroup.position?.x || 0
           const groupY = projectGroup.position?.y || 0
           const groupH = Number(projectGroup.style?.height) || 1100
-          // 同一 projectGroup 下方按已有 decompose 容器数量错开 Y
+          // 落在所有兄弟 dg 的最低边下方 — 而不是按 existingDgs.length 计数偏移.
+          // (按 length 偏移在删除中间 dg 后会与剩下的撞, 用户图反馈)
+          let baseY = groupY + groupH + 60
           const existingDgs = nodes.filter((n) => n.type === 'group' && n.data?.isDecomposeGroup && n.data?.relatedProjectGroupId === projectGroup.id)
-          dgPos = { x: groupX, y: groupY + groupH + 60 + existingDgs.length * (CARD_H + PAD * 2 + 40) }
+          for (const dg of existingDgs) {
+            const box = getNodeAbsoluteBox(dg, nodes)
+            baseY = Math.max(baseY, box.y + box.h + 40)
+          }
+          dgPos = { x: groupX, y: baseY }
         } else {
           dgId = `decomposeGroup-floating-${ontoNodeId}`
           dgPos = { x: (src.position?.x || 0), y: (src.position?.y || 0) + 320 }

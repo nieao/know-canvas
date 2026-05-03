@@ -6,7 +6,7 @@
 
 import { memo, useState } from 'react'
 
-// 知识关系类型
+// 知识关系类型 (语义色: 关系类型色板, 不随主题切换)
 const RELATION_TYPES = {
   causal: { id: 'causal', label: '因果', color: '#c8a882' },
   compose: { id: 'compose', label: '组成', color: '#7c9eb2' },
@@ -18,7 +18,7 @@ const RELATION_TYPES = {
   sequence: { id: 'sequence', label: '顺序', color: '#a8a87c' },
 }
 
-// 标记颜色
+// 标记颜色 (语义色: 用户自选标记色板, 不随主题切换)
 const MARK_COLORS = [
   { color: '#c8a882', name: '暖色' },
   { color: '#b27c8b', name: '粉灰' },
@@ -96,8 +96,8 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
         left: position.x,
         top: position.y,
         transform: 'translateX(-50%)',
-        backgroundColor: '#fafafa',
-        border: '1px solid #e8e8e8',
+        backgroundColor: 'var(--surface)',
+        border: '1px solid var(--border-subtle)',
         fontFamily: '"Noto Sans SC", system-ui, sans-serif',
       }}
     >
@@ -105,7 +105,7 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
         {/* 选中数量 */}
         <div
           className="px-2 py-1 rounded-lg text-sm font-medium mr-2"
-          style={{ backgroundColor: '#f5f0eb', color: '#c8a882' }}
+          style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent)' }}
         >
           {selectedCount} 已选
         </div>
@@ -114,7 +114,7 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
         <button
           onClick={handleCreateGroup}
           className={btnClass}
-          style={{ backgroundColor: '#f5f0eb', color: '#c8a882' }}
+          style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent)' }}
           title="创建分组"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -128,7 +128,7 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
           <button
             onClick={() => { closeAllMenus(); setShowLinkMenu(!showLinkMenu) }}
             className={btnClass}
-            style={{ backgroundColor: '#f0f4f8', color: '#7c9eb2' }}
+            style={{ backgroundColor: 'var(--accent-bg)', color: '#7c9eb2' }}
             title="连接节点"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,9 +140,9 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
           {showLinkMenu && (
             <div
               className="absolute top-full left-0 mt-1 rounded-lg shadow-xl py-2 min-w-[160px] z-60"
-              style={{ backgroundColor: '#fafafa', border: '1px solid #e8e8e8' }}
+              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
             >
-              <div className="px-3 py-1 text-xs font-medium" style={{ color: '#bbb', letterSpacing: '0.1em' }}>选择关系类型</div>
+              <div className="px-3 py-1 text-xs font-medium" style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}>选择关系类型</div>
               {Object.values(RELATION_TYPES).map((relation) => (
                 <button
                   key={relation.id}
@@ -165,7 +165,7 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
           <button
             onClick={() => { closeAllMenus(); setShowMarkMenu(!showMarkMenu) }}
             className={btnClass}
-            style={{ backgroundColor: '#f5f0eb', color: '#b2917c' }}
+            style={{ backgroundColor: 'var(--accent-bg)', color: '#b2917c' }}
             title="标记颜色"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -177,9 +177,9 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
           {showMarkMenu && (
             <div
               className="absolute top-full left-0 mt-1 rounded-lg shadow-xl py-2 min-w-[140px] z-60"
-              style={{ backgroundColor: '#fafafa', border: '1px solid #e8e8e8' }}
+              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
             >
-              <div className="px-3 py-1 text-xs font-medium" style={{ color: '#bbb', letterSpacing: '0.1em' }}>选择颜色</div>
+              <div className="px-3 py-1 text-xs font-medium" style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}>选择颜色</div>
               <div className="flex flex-wrap gap-2 px-3 py-2">
                 {MARK_COLORS.map((item) => (
                   <button
@@ -200,7 +200,7 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
                   setShowMarkMenu(false)
                 }}
                 className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                style={{ color: '#888' }}
+                style={{ color: 'var(--text-muted)' }}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -212,14 +212,14 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
         </div>
 
         {/* 分隔线 */}
-        <div className="w-px h-6 mx-1" style={{ backgroundColor: '#e8e8e8' }} />
+        <div className="w-px h-6 mx-1" style={{ backgroundColor: 'var(--border-subtle)' }} />
 
         {/* 批量设置分类 */}
         <div className="relative">
           <button
             onClick={() => { closeAllMenus(); setShowCategoryMenu(!showCategoryMenu) }}
             className={btnClass}
-            style={{ backgroundColor: '#f5f0eb', color: '#9e7cb2' }}
+            style={{ backgroundColor: 'var(--accent-bg)', color: '#9e7cb2' }}
             title="批量设置分类"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,15 +231,15 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
           {showCategoryMenu && (
             <div
               className="absolute top-full left-0 mt-1 rounded-lg shadow-xl py-2 min-w-[120px] z-60"
-              style={{ backgroundColor: '#fafafa', border: '1px solid #e8e8e8' }}
+              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
             >
-              <div className="px-3 py-1 text-xs font-medium" style={{ color: '#bbb', letterSpacing: '0.1em' }}>选择分类</div>
+              <div className="px-3 py-1 text-xs font-medium" style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}>选择分类</div>
               {CATEGORIES.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => handleBatchCategory(cat)}
                   className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-50"
-                  style={{ color: '#2d2d2d' }}
+                  style={{ color: 'var(--text-secondary)' }}
                 >
                   {cat}
                 </button>
@@ -253,7 +253,7 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
           <button
             onClick={() => { closeAllMenus(); setShowTagInput(!showTagInput) }}
             className={btnClass}
-            style={{ backgroundColor: '#f0f4f8', color: '#7cb2a8' }}
+            style={{ backgroundColor: 'var(--accent-bg)', color: '#7cb2a8' }}
             title="批量添加标签"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -265,9 +265,9 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
           {showTagInput && (
             <div
               className="absolute top-full left-0 mt-1 rounded-lg shadow-xl p-3 min-w-[220px] z-60"
-              style={{ backgroundColor: '#fafafa', border: '1px solid #e8e8e8' }}
+              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
             >
-              <div className="text-xs font-medium mb-2" style={{ color: '#bbb', letterSpacing: '0.1em' }}>
+              <div className="text-xs font-medium mb-2" style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
                 输入标签（逗号分隔）
               </div>
               <div className="flex gap-2">
@@ -280,9 +280,9 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
                   placeholder="标签1, 标签2..."
                   className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-1"
                   style={{
-                    borderColor: '#e8d5c0',
-                    color: '#2d2d2d',
-                    ringColor: '#c8a882',
+                    borderColor: 'var(--accent-soft)',
+                    color: 'var(--text-secondary)',
+                    ringColor: 'var(--accent)',
                     fontFamily: '"Noto Sans SC", system-ui, sans-serif',
                   }}
                   onClick={(e) => e.stopPropagation()}
@@ -290,7 +290,7 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
                 <button
                   onClick={handleBatchTag}
                   className="px-3 py-1.5 text-sm font-medium rounded"
-                  style={{ backgroundColor: '#c8a882', color: '#fafafa' }}
+                  style={{ backgroundColor: 'var(--accent)', color: 'var(--surface)' }}
                 >
                   添加
                 </button>
@@ -300,9 +300,9 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
         </div>
 
         {/* 分隔线 */}
-        <div className="w-px h-6 mx-1" style={{ backgroundColor: '#e8e8e8' }} />
+        <div className="w-px h-6 mx-1" style={{ backgroundColor: 'var(--border-subtle)' }} />
 
-        {/* 删除按钮 */}
+        {/* 删除按钮: severity-high 粉灰 (跨主题保持警示语义) */}
         <button
           onClick={handleDelete}
           className={btnClass}

@@ -765,10 +765,11 @@ function KnowledgeCanvasInner({
                 setContextMenu({ visible: false, x: 0, y: 0 })
               }}
               className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors"
-              style={{ color: '#2d2d2d' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f0eb'}
+              style={{ color: 'var(--text-secondary)' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--accent-bg)'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             >
+              {/* 链式图标色: 装饰青, 跨主题保持 */}
               <svg className="w-4 h-4" style={{ color: '#06b6d4' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
               </svg>

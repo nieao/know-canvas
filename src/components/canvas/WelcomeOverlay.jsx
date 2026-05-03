@@ -27,7 +27,7 @@ export default function WelcomeOverlay({ onShowShortcuts }) {
         <h1 className="heading-serif text-2xl font-light mb-4" style={{ color: 'var(--text-primary)' }}>
           知识图谱
         </h1>
-        <p className="text-sm leading-relaxed mb-8" style={{ color: 'var(--gray-700)' }}>
+        <p className="text-sm leading-relaxed mb-8" style={{ color: 'var(--text-muted)' }}>
           将文档、链接和文本导入画布，<br />
           AI 自动提取概念、发现关系，<br />
           构建你的知识网络。
@@ -41,12 +41,12 @@ export default function WelcomeOverlay({ onShowShortcuts }) {
               className="flex items-start gap-3 p-3 rounded-md transition-all duration-300"
               style={{ border: '1px solid var(--border-subtle)', background: 'var(--surface)' }}
             >
-              <span className="text-xs font-light mt-0.5" style={{ color: 'var(--warm)', fontFamily: 'var(--font-serif)' }}>
+              <span className="text-xs font-light mt-0.5" style={{ color: 'var(--accent)', fontFamily: 'var(--font-serif)' }}>
                 {item.step}
               </span>
               <div>
-                <p className="text-xs font-medium" style={{ color: 'var(--dark)' }}>{item.text}</p>
-                <p className="text-[10px] mt-0.5" style={{ color: 'var(--gray-500)' }}>{item.desc}</p>
+                <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{item.text}</p>
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{item.desc}</p>
               </div>
             </div>
           ))}
@@ -54,19 +54,19 @@ export default function WelcomeOverlay({ onShowShortcuts }) {
 
         {/* 拖拽提示 */}
         <div className="mt-8 py-6 px-8 rounded-lg border-dashed" style={{ border: '2px dashed var(--border-subtle)', background: 'rgba(250,250,250,0.8)' }}>
-          <svg className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--gray-300)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--text-faint)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
           </svg>
-          <p className="text-xs" style={{ color: 'var(--gray-500)' }}>拖拽文件到此处开始</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>拖拽文件到此处开始</p>
         </div>
 
         {/* 快捷键提示 */}
         <button
           onClick={onShowShortcuts}
           className="mt-6 text-[10px] tracking-wider transition-colors duration-300 pointer-events-auto"
-          style={{ color: 'var(--gray-300)' }}
-          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--warm)'}
-          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--gray-300)'}
+          style={{ color: 'var(--text-faint)' }}
+          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent)'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-faint)'}
         >
           按 ? 查看快捷键
         </button>

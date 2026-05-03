@@ -208,7 +208,7 @@ function MetaStepNodeImpl({ data, selected }) {
               top: -1.5, left: -1.5, right: -1.5,
               height: 2,
               borderRadius: 4,
-              background: 'linear-gradient(90deg, transparent 0%, #c8a882 50%, transparent 100%)',
+              background: 'linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%)',
               backgroundSize: '200% 100%',
               animation: 'metaStepFlow 1.6s linear infinite',
               pointerEvents: 'none',
@@ -301,7 +301,7 @@ function MetaStepNodeImpl({ data, selected }) {
           </div>
         )}
 
-        {/* Failed — error */}
+        {/* Failed — error: severity-critical 红 + 淡红底 (跨主题保持错误语义) */}
         {isFailed && data.error && (
           <div style={{ fontSize: 10, color: '#9b3a4c', background: '#fdf3f3', padding: 6, borderRadius: 3, lineHeight: 1.5 }}>
             {data.error}

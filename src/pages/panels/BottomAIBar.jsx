@@ -118,6 +118,21 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
       }
       text = `${text}${attachBlock}`
     }
+    // 多轮对话: 自动把上一轮的 conclusion 节点拼到新 prompt 当上下文
+    // (用户图 47/48 反馈"二次对话给指令但没执行" — 实际新 project 落到了远处, 视口没跟过去
+    //  且没有上下文衔接, 视觉上像没响应)
+    try {
+      const allNodes = useCanvasStore.getState().nodes || []
+      const conclusions = allNodes
+        .filter((n) => n.type === 'ontologyNode' && n.data?.isConclusion && n.data?.conclusion)
+        .sort((a, b) => (b.data?.created_at || 0) - (a.data?.created_at || 0))
+        .slice(0, 1)
+      if (conclusions.length > 0) {
+        const last = conclusions[0]
+        text = `${text}\n\n=== 上一轮决策结论 (供二次对话参考) ===\n${last.data.conclusion}`
+      }
+    } catch {}
+
     setSubmitting(true)
     try {
       let nodeId
@@ -134,6 +149,15 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
       setLastNodeId(nodeId)
       setInput('')
       setImportedFiles([])  // 提交后清空附件
+
+      // 自动跳视口到新 root 节点, 让用户立刻看到新项目落到哪
+      // (askAndStartMetaProject 同步返回 rootId, 新 projectGroup 因避让被推到远处时
+      //  用户看不到, 以为没执行)
+      if (nodeId) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('canvas-focus-node', { detail: { nodeId } }))
+        }, 200)
+      }
     } catch (err) {
       console.error('[BottomAIBar] submit failed:', err)
       alert(`提交失败: ${err?.message || err}`)

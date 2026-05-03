@@ -339,6 +339,27 @@ function KnowledgeCanvasInner({
       duration: 600,
     })
   }, [reactFlowInstance])
+
+  // 监听 canvas-focus-node — BottomAIBar 提交完毕后让视口跳到新项目位置
+  // (新 projectGroup 因为遮挡检测被推到远处, 用户看不到以为没响应)
+  useEffect(() => {
+    const onFocus = (e) => {
+      const id = e?.detail?.nodeId
+      if (!id) return
+      // 等节点真正落到 react-flow 内部 store, 给 250ms 窗口
+      setTimeout(() => {
+        const internal = reactFlowInstance.getNode?.(id)
+        if (!internal) return
+        const absX = internal?.positionAbsolute?.x ?? internal?.position?.x ?? 0
+        const absY = internal?.positionAbsolute?.y ?? internal?.position?.y ?? 0
+        const w = internal.width || internal.measured?.width || 280
+        const h = internal.height || internal.measured?.height || 160
+        reactFlowInstance.setCenter(absX + w / 2, absY + h / 2, { zoom: 0.7, duration: 800 })
+      }, 250)
+    }
+    window.addEventListener('canvas-focus-node', onFocus)
+    return () => window.removeEventListener('canvas-focus-node', onFocus)
+  }, [reactFlowInstance])
   const [quickAddMenu, setQuickAddMenu] = useState({ visible: false, x: 0, y: 0 })
   const { zoom } = useViewport()
 

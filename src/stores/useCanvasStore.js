@@ -2430,6 +2430,7 @@ const useCanvasStore = create(
           })
         }
 
+        const srcDepth = typeof src.data?.depth === 'number' ? src.data.depth : 0
         subitems.forEach((s, i) => {
           const cid = `onto-${ts}-${rand()}`
           const slotIdx = startIdx + i
@@ -2445,6 +2446,7 @@ const useCanvasStore = create(
               description: s.description,
               parent_node: ontoNodeId,
               parent_goal: src.data?.parent_goal || src.data?.title,
+              depth: srcDepth + 1,  // 拆解深度 +1, OntologyNode 用 MAX_DEPTH=3 截断
               created_at: ts,
             },
           })

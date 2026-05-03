@@ -241,6 +241,10 @@ function OntologyNodeImpl({ id, data, selected }) {
   const title = data.title || ''
   const description = data.description || ''
   const isChallenging = data.challenging === true
+  // 拆解深度限制: 用户反馈"一直点会无止境拆下去" — 超过 3 层禁用拆解按钮
+  const MAX_DEPTH = 3
+  const depth = typeof data.depth === 'number' ? data.depth : 0
+  const depthExceeded = depth >= MAX_DEPTH
   // 拆解 用本地 state 即可 (不需要持久化 — 失败可以重试, 成功后子节点已落地)
   const [isDecomposing, setIsDecomposing] = useState(false)
   // 元认知状态来自 data — analyzing/分析完后的结果都要持久化 + yjs 同步
@@ -396,18 +400,26 @@ function OntologyNodeImpl({ id, data, selected }) {
           <div className="grid grid-cols-3 gap-1.5 mt-3">
             <button
               onClick={onDecompose}
-              disabled={!title.trim() || isDecomposing}
+              disabled={!title.trim() || isDecomposing || depthExceeded}
               className="text-[10px] py-1 px-2 rounded-sm border transition-all"
               style={{
-                borderColor: title.trim() ? 'var(--accent-soft, var(--accent))' : 'var(--border-subtle)',
-                color: title.trim() ? 'var(--accent)' : 'var(--text-faint)',
-                background: title.trim() ? 'var(--accent-bg, rgba(245,240,235,0.4))' : 'transparent',
-                cursor: title.trim() && !isDecomposing ? 'pointer' : 'not-allowed',
-                opacity: isDecomposing ? 0.6 : 1,
+                borderColor: depthExceeded
+                  ? 'var(--border-subtle)'
+                  : (title.trim() ? 'var(--accent-soft, var(--accent))' : 'var(--border-subtle)'),
+                color: depthExceeded
+                  ? 'var(--text-faint)'
+                  : (title.trim() ? 'var(--accent)' : 'var(--text-faint)'),
+                background: depthExceeded
+                  ? 'transparent'
+                  : (title.trim() ? 'var(--accent-bg, rgba(245,240,235,0.4))' : 'transparent'),
+                cursor: depthExceeded ? 'not-allowed' : (title.trim() && !isDecomposing ? 'pointer' : 'not-allowed'),
+                opacity: isDecomposing ? 0.6 : (depthExceeded ? 0.5 : 1),
               }}
-              title="把这个节点再拆成 3-5 个子实体"
+              title={depthExceeded
+                ? `已达最大拆解深度 (${MAX_DEPTH} 层) — 不再拆下去, 避免节点爆炸`
+                : '把这个节点再拆成 3-5 个子实体'}
             >
-              {isDecomposing ? '拆解中' : '🔧 拆解'}
+              {isDecomposing ? '拆解中' : depthExceeded ? '已到底' : '🔧 拆解'}
             </button>
             <button
               onClick={onAnalyzeMeta}

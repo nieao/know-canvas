@@ -39,7 +39,7 @@ Environment=HOST=127.0.0.1
 Environment=PORT=17080
 EnvironmentFile=/etc/know-canvas/llm.env
 
-ExecStart=/usr/bin/node /opt/know-canvas/server/vps-llm-proxy.js
+ExecStart=/usr/bin/node /opt/know-canvas/server/vps-llm-proxy.mjs
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

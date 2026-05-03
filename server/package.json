@@ -9,7 +9,7 @@
     "yws": "node y-ws-server.js",
     "bridge": "node claude-bridge.js",
     "hermes": "node hermes-proxy.js",
-    "llm-proxy": "node vps-llm-proxy.js",
+    "llm-proxy": "node vps-llm-proxy.mjs",
     "dispatcher": "node orchestra-dispatcher.js",
     "worker:hermes": "node orchestra-hermes-worker.js",
     "conductor": "node orchestra-conductor.js",

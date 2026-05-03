@@ -38,7 +38,6 @@ fi
 
 REMOTE="${REMOTE_USER}@${REMOTE_HOST}"
 SSH_OPTS="-p ${REMOTE_PORT} -o StrictHostKeyChecking=accept-new"
-RSYNC_SSH="ssh -p ${REMOTE_PORT} -o StrictHostKeyChecking=accept-new"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "[deploy-newvps] 项目根: $PROJECT_ROOT"
@@ -75,15 +74,24 @@ echo "[probe] node: $(node -v)"
 # Caddy
 if ! command -v caddy >/dev/null 2>&1; then
   echo "[probe] 装 Caddy..."
-  apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  # 清 /tmp 防止 tmpfs 满 (apt extract debian-keyring 需要 ~50MB)
+  rm -rf /tmp/camoufox* /tmp/uv-* 2>/dev/null || true
+  apt install -y debian-keyring debian-archive-keyring apt-transport-https curl gnupg
+  # --batch --yes 避免 ssh 无 tty 时 gpg 报错
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
   apt update
   apt install -y caddy
 fi
 echo "[probe] caddy: $(caddy version | head -1)"
 
-# rsync
+# UFW 开 80 (公网访问入口)
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+  ufw allow 80/tcp 2>/dev/null || true
+  ufw allow 443/tcp 2>/dev/null || true
+fi
+
+# rsync (本脚本用 rsync, 远端也得装才能反向同步)
 if ! command -v rsync >/dev/null 2>&1; then
   apt install -y rsync
 fi
@@ -94,18 +102,18 @@ chown -R www-data:www-data /opt/know-canvas /var/www/know-canvas
 echo "[probe] 目录就绪"
 REMOTE_PROBE
 
-# 3. 上传前端
+# 3. 上传前端 (用 tar+ssh, Windows Git Bash 没 rsync 也能跑)
 echo ""
-echo "==> 3/8  rsync dist/ → /var/www/know-canvas/"
-rsync -az --delete -e "$RSYNC_SSH" "$PROJECT_ROOT/dist/" "$REMOTE:/var/www/know-canvas/"
-ssh $SSH_OPTS "$REMOTE" "chown -R www-data:www-data /var/www/know-canvas"
+echo "==> 3/8  tar dist/ → /var/www/know-canvas/"
+tar -czf - -C "$PROJECT_ROOT/dist" . | ssh $SSH_OPTS "$REMOTE" \
+  'cd /var/www/know-canvas && tar -xzf - && chown -R www-data:www-data /var/www/know-canvas'
 
 # 4. 上传 server + 装依赖
 echo ""
-echo "==> 4/8  rsync server/ → /opt/know-canvas/server/"
-rsync -az --delete --exclude='node_modules' --exclude='yjs-data' \
-  -e "$RSYNC_SSH" \
-  "$PROJECT_ROOT/server/" "$REMOTE:/opt/know-canvas/server/"
+echo "==> 4/8  tar server/ → /opt/know-canvas/server/"
+tar -czf - --exclude='node_modules' --exclude='yjs-data' --exclude='package-lock.json' \
+  -C "$PROJECT_ROOT/server" . | ssh $SSH_OPTS "$REMOTE" \
+  'cd /opt/know-canvas/server && tar -xzf -'
 
 ssh $SSH_OPTS "$REMOTE" 'set -e
 cd /opt/know-canvas/server
@@ -143,10 +151,13 @@ systemctl daemon-reload
 systemctl enable know-canvas-yws know-canvas-llm-proxy
 systemctl restart know-canvas-yws know-canvas-llm-proxy
 sleep 2
+# is-active / status 在 activating 时返回非零, 用 || true 避免 set -e 早退
 echo "--- yws ---"
-systemctl status know-canvas-yws --no-pager -l | head -15
+systemctl is-active know-canvas-yws || true
+journalctl -u know-canvas-yws -n 5 --no-pager || true
 echo "--- llm-proxy ---"
-systemctl status know-canvas-llm-proxy --no-pager -l | head -15
+systemctl is-active know-canvas-llm-proxy || true
+journalctl -u know-canvas-llm-proxy -n 5 --no-pager || true
 '
 
 # 7. 装 Caddyfile

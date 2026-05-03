@@ -572,6 +572,54 @@ export async function decomposeToOntology(sentence) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 节点级"元认知分析" — 一次 LLM 调用返回 5 维度简版分析
+// 用在 OntologyNode 的"⚡ 元认知"按钮: 不长 5 个步骤节点, 直接 inline 显示在节点内
+// ─────────────────────────────────────────────────────────────────────────────
+const META_ANALYSIS_SYSTEM_PROMPT = `你是元认知分析引擎. 给定一个本体节点, 一次性输出 5 维度简版分析, 让用户立刻看清这个节点的全貌.
+
+5 维度认知规范:
+1. core_intent (核心意图): 这个节点真正想解决什么问题, 一句话 30 字内, 不要复读节点描述
+2. implicit_goals (隐含目标): 用户没明说但想要的, 2-3 条, 每条 20 字内
+3. key_risks (关键风险): 这个节点最容易翻车的点, 2-3 条, 必须具体 (不要"风险大""不确定"这种空话)
+4. dependencies (前置依赖): 推进这个节点之前必须先确认/完成的, 2-3 条
+5. next_actions (下一步行动): 接下来该做什么, 1-3 条具体动作 (不是抽象建议)
+
+输出严格 JSON, 不要 markdown 围栏, 不要前言后语:
+{
+  "core_intent": "一句话",
+  "implicit_goals": ["目标1", "目标2"],
+  "key_risks": ["风险1", "风险2"],
+  "dependencies": ["依赖1", "依赖2"],
+  "next_actions": ["行动1", "行动2"]
+}`
+
+/**
+ * 节点级元认知分析 — 一次调用返回 5 维度
+ * @param {{title:string, description?:string, variant?:string}} node
+ * @returns {Promise<{core_intent:string, implicit_goals:string[], key_risks:string[], dependencies:string[], next_actions:string[]} | null>}
+ */
+export async function analyzeNodeMeta(node) {
+  if (!node?.title) return null
+  const variant = node.variant ? ` (${node.variant})` : ''
+  const prompt = `请对下列本体节点${variant}做 5 维度元认知分析:
+
+标题: ${node.title}
+${node.description ? '描述: ' + node.description : ''}
+
+按 schema 输出 JSON.`
+  const raw = await callLLM({ system: META_ANALYSIS_SYSTEM_PROMPT, prompt, jsonMode: true })
+  const parsed = tryParseLLMJson(raw)
+  if (!parsed) return null
+  return {
+    core_intent: parsed.core_intent || '',
+    implicit_goals: Array.isArray(parsed.implicit_goals) ? parsed.implicit_goals.filter(Boolean).slice(0, 4) : [],
+    key_risks: Array.isArray(parsed.key_risks) ? parsed.key_risks.filter(Boolean).slice(0, 4) : [],
+    dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies.filter(Boolean).slice(0, 4) : [],
+    next_actions: Array.isArray(parsed.next_actions) ? parsed.next_actions.filter(Boolean).slice(0, 4) : [],
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 节点级"拆解" — 把单个节点 (entity/constraint/assumption) 进一步拆成 3-5 个子实体
 // 用在 OntologyNode 的"拆解"按钮: 用户觉得某个节点还太抽象, 让 LLM 再下一层
 // ─────────────────────────────────────────────────────────────────────────────

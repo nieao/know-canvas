@@ -2291,37 +2291,45 @@ const useCanvasStore = create(
         return subitems
       },
 
-      // 节点级元认知 — 把节点 title+description 当 prompt, 跑 5 步元认知
-      // (复用 addLocalTask + runMetaCognitiveTask, 节点上长 5 个 metaStepNode)
-      runMetaCognitiveOnNode: async (nodeId) => {
-        const { nodes, addLocalTask, updateLocalTaskStatus } = get()
+      // 节点级元认知分析 — 一次 LLM 调用, 5 维度简版结果直接 inline 写到节点 data
+      // (不长 metaStepNode, 不开右侧任务面板, 节点自身展开就能看)
+      analyzeNodeMetaCognitive: async (nodeId) => {
+        const { nodes, updateNode } = get()
         const src = nodes.find((n) => n.id === nodeId)
-        if (!src) throw new Error(`runMetaCognitiveOnNode: 找不到节点 ${nodeId}`)
+        if (!src) throw new Error(`analyzeNodeMetaCognitive: 找不到节点 ${nodeId}`)
         const title = src.data?.title || ''
-        const description = src.data?.description || ''
-        if (!title) throw new Error('节点没有标题, 无法启动元认知')
+        if (!title.trim()) throw new Error('节点没有标题, 无法分析')
 
-        const prompt = description ? `${title}\n\n${description}` : title
-        const taskId = addLocalTask(nodeId, {
-          prompt,
-          target: 'local',
-          routerReason: '节点元认知按钮触发',
-        })
+        // 标记 analyzing 状态让 UI 显示 loading
+        updateNode(nodeId, { metaAnalyzing: true, metaAnalysisError: null })
 
-        const { runMetaCognitiveTask } = await import('../services/metaCognitiveExecutor')
-        // 不 await — 节点级动作让用户立刻看到"已派"反馈, 5 步进度通过 metaStepNode 实时呈现
-        runMetaCognitiveTask({
-          nodeId,
-          taskId,
-          prompt,
-          onUpdate: (patch) => updateLocalTaskStatus(nodeId, taskId, patch),
-        }).catch((err) => {
-          console.error('[runMetaCognitiveOnNode] failed:', err)
-          updateLocalTaskStatus(nodeId, taskId, {
-            status: 'failed', error: err?.message || String(err), finishedAt: Date.now(),
+        try {
+          const svc = await import('../services/aiService')
+          const result = await svc.analyzeNodeMeta({
+            title,
+            description: src.data?.description || '',
+            variant: src.data?.variant,
           })
-        })
-        return taskId
+          if (!result) {
+            updateNode(nodeId, { metaAnalyzing: false, metaAnalysisError: 'LLM 输出无法解析' })
+            return null
+          }
+          updateNode(nodeId, {
+            metaAnalysis: { ...result, analyzedAt: Date.now() },
+            metaAnalyzing: false,
+            metaAnalysisError: null,
+            // 自动展开元认知折叠区, 让用户立刻看到结果
+            metaExpanded: true,
+          })
+          return result
+        } catch (err) {
+          console.error('[analyzeNodeMetaCognitive] failed:', err)
+          updateNode(nodeId, {
+            metaAnalyzing: false,
+            metaAnalysisError: err?.message || String(err),
+          })
+          throw err
+        }
       },
 
       // 内部: 给一个 done 任务在右侧建 ResultNode + 自动连线

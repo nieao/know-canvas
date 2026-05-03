@@ -58,7 +58,7 @@ function OntologyNodeImpl({ id, data, selected }) {
   const promoteToTask = useCanvasStore((s) => s.promoteOntologyToTask)
   const challenge = useCanvasStore((s) => s.dispatchChallenge)
   const decomposeFurther = useCanvasStore((s) => s.decomposeOntologyFurther)
-  const runMeta = useCanvasStore((s) => s.runMetaCognitiveOnNode)
+  const analyzeMeta = useCanvasStore((s) => s.analyzeNodeMetaCognitive)
   const updateNode = useCanvasStore((s) => s.updateNode)
 
   const variant = data.variant || 'entity'
@@ -66,9 +66,13 @@ function OntologyNodeImpl({ id, data, selected }) {
   const title = data.title || ''
   const description = data.description || ''
   const isChallenging = data.challenging === true
-  // 拆解 / 元认知 用本地 state 即可 (不需要持久化 — 失败可以重试, 成功后子节点已落地)
+  // 拆解 用本地 state 即可 (不需要持久化 — 失败可以重试, 成功后子节点已落地)
   const [isDecomposing, setIsDecomposing] = useState(false)
-  const [isRunningMeta, setIsRunningMeta] = useState(false)
+  // 元认知状态来自 data — analyzing/分析完后的结果都要持久化 + yjs 同步
+  const isAnalyzing = data.metaAnalyzing === true
+  const metaAnalysis = data.metaAnalysis
+  const metaError = data.metaAnalysisError
+  const metaExpanded = data.metaExpanded === true
 
   const onPromoteToTask = (e) => {
     e.stopPropagation()
@@ -95,14 +99,27 @@ function OntologyNodeImpl({ id, data, selected }) {
       .finally(() => setIsDecomposing(false))
   }
 
-  const onRunMeta = (e) => {
+  const onAnalyzeMeta = (e) => {
     e.stopPropagation()
-    if (isRunningMeta || !title.trim()) return
-    setIsRunningMeta(true)
-    // 元认知是异步长任务 — store action 内部不 await, 这里只标记按钮 1.5s 防抖即可
-    runMeta(id)
-      .catch((err) => console.error('[OntologyNode] meta failed:', err))
-      .finally(() => setTimeout(() => setIsRunningMeta(false), 1500))
+    if (isAnalyzing || !title.trim()) return
+    // 已经分析过 → 切换折叠/展开
+    if (metaAnalysis) {
+      updateNode(id, { metaExpanded: !metaExpanded })
+      return
+    }
+    // 没分析过 → 调 LLM, 完成后 store action 自动 set metaExpanded: true
+    analyzeMeta(id).catch((err) => console.error('[OntologyNode] analyze failed:', err))
+  }
+
+  const onToggleMetaExpand = (e) => {
+    e.stopPropagation()
+    updateNode(id, { metaExpanded: !metaExpanded })
+  }
+
+  const onReanalyze = (e) => {
+    e.stopPropagation()
+    if (isAnalyzing) return
+    analyzeMeta(id).catch((err) => console.error('[OntologyNode] reanalyze failed:', err))
   }
 
   return (
@@ -170,19 +187,26 @@ function OntologyNodeImpl({ id, data, selected }) {
               {isDecomposing ? '拆解中…' : '🔧 拆解'}
             </button>
             <button
-              onClick={onRunMeta}
-              disabled={!title.trim() || isRunningMeta}
+              onClick={onAnalyzeMeta}
+              disabled={!title.trim() || isAnalyzing}
               className="text-[10px] py-1 px-2 rounded-sm border transition-all"
               style={{
-                borderColor: title.trim() ? 'var(--accent-soft, var(--accent))' : 'var(--border-subtle)',
+                borderColor: title.trim() ? (metaAnalysis ? 'var(--accent)' : 'var(--accent-soft, var(--accent))') : 'var(--border-subtle)',
                 color: title.trim() ? 'var(--accent)' : 'var(--text-faint)',
-                background: title.trim() ? 'var(--accent-bg, rgba(245,240,235,0.4))' : 'transparent',
-                cursor: title.trim() && !isRunningMeta ? 'pointer' : 'not-allowed',
-                opacity: isRunningMeta ? 0.6 : 1,
+                background: metaAnalysis
+                  ? 'var(--accent-bg, rgba(245,240,235,0.7))'
+                  : (title.trim() ? 'var(--accent-bg, rgba(245,240,235,0.4))' : 'transparent'),
+                cursor: title.trim() && !isAnalyzing ? 'pointer' : 'not-allowed',
+                opacity: isAnalyzing ? 0.6 : 1,
+                fontWeight: metaAnalysis ? 500 : 400,
               }}
-              title="走 5 步元认知 (意图/拆解/执行/反思/综合) — 长出 5 个步骤节点"
+              title={
+                isAnalyzing ? '正在分析中…' :
+                metaAnalysis ? `点击${metaExpanded ? '收起' : '展开'}元认知分析` :
+                '一次 LLM 调用 → 5 维度分析 (意图/隐含目标/风险/依赖/下一步)'
+              }
             >
-              {isRunningMeta ? '已派…' : '⚡ 元认知'}
+              {isAnalyzing ? '分析中…' : metaAnalysis ? `⚡ 元认知 ${metaExpanded ? '▴' : '▾'}` : '⚡ 元认知'}
             </button>
             {/* 第 2 行: 派 Hermes (远端 worker) + 反驳 (Devil's Advocate) */}
             <button
@@ -221,6 +245,81 @@ function OntologyNodeImpl({ id, data, selected }) {
         {variant === 'goal' && (
           <div className="text-[10px] mt-2 opacity-50" style={{ color: meta.color }}>
             ↓ 已自动拆解 · 点下方节点上的按钮继续推进
+          </div>
+        )}
+
+        {/* 元认知错误显示 */}
+        {metaError && !metaAnalysis && (
+          <div className="text-[10px] mt-2 px-2 py-1 rounded-sm" style={{
+            color: '#7a3a4a',
+            background: 'rgba(245,235,237,0.6)',
+            border: '1px solid #b27c8b',
+          }}>
+            元认知分析失败: {metaError}
+            <button onClick={onReanalyze} className="ml-2 underline" style={{ color: '#7a3a4a' }}>重试</button>
+          </div>
+        )}
+
+        {/* 元认知分析结果 inline 折叠区 */}
+        {metaAnalysis && metaExpanded && (
+          <div className="mt-3 pt-2" style={{ borderTop: '1px dashed var(--border-subtle)' }}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] font-semibold" style={{ color: 'var(--accent)', letterSpacing: '0.2em' }}>
+                META-COGNITIVE
+              </span>
+              <button
+                onClick={onReanalyze}
+                disabled={isAnalyzing}
+                className="text-[9px] underline"
+                style={{ color: 'var(--text-muted)', cursor: isAnalyzing ? 'wait' : 'pointer' }}
+                title="重新分析"
+              >
+                {isAnalyzing ? '...' : '↻ 重跑'}
+              </button>
+            </div>
+
+            {metaAnalysis.core_intent && (
+              <div className="mb-2">
+                <div className="text-[9px] font-medium mb-0.5" style={{ color: 'var(--accent)' }}>核心意图</div>
+                <div className="text-[11px] leading-relaxed" style={{ color: meta.color }}>{metaAnalysis.core_intent}</div>
+              </div>
+            )}
+
+            {metaAnalysis.implicit_goals?.length > 0 && (
+              <div className="mb-2">
+                <div className="text-[9px] font-medium mb-0.5" style={{ color: 'var(--accent)' }}>隐含目标</div>
+                <ul className="text-[10.5px] leading-snug pl-3" style={{ color: meta.color, opacity: 0.85, listStyleType: 'disc' }}>
+                  {metaAnalysis.implicit_goals.map((g, i) => <li key={i}>{g}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {metaAnalysis.key_risks?.length > 0 && (
+              <div className="mb-2">
+                <div className="text-[9px] font-medium mb-0.5" style={{ color: '#7a3a4a' }}>关键风险</div>
+                <ul className="text-[10.5px] leading-snug pl-3" style={{ color: meta.color, opacity: 0.85, listStyleType: 'disc' }}>
+                  {metaAnalysis.key_risks.map((r, i) => <li key={i}>{r}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {metaAnalysis.dependencies?.length > 0 && (
+              <div className="mb-2">
+                <div className="text-[9px] font-medium mb-0.5" style={{ color: 'var(--accent)' }}>前置依赖</div>
+                <ul className="text-[10.5px] leading-snug pl-3" style={{ color: meta.color, opacity: 0.85, listStyleType: 'disc' }}>
+                  {metaAnalysis.dependencies.map((d, i) => <li key={i}>{d}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {metaAnalysis.next_actions?.length > 0 && (
+              <div>
+                <div className="text-[9px] font-medium mb-0.5" style={{ color: 'var(--accent)' }}>下一步行动</div>
+                <ol className="text-[10.5px] leading-snug pl-3" style={{ color: meta.color, listStyleType: 'decimal' }}>
+                  {metaAnalysis.next_actions.map((a, i) => <li key={i}>{a}</li>)}
+                </ol>
+              </div>
+            )}
           </div>
         )}
       </div>

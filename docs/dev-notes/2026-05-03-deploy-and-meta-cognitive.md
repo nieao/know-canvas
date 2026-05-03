@@ -6,9 +6,10 @@
 
 | 项 | 值 |
 |---|---|
-| 线上地址 | http://66.245.216.250/canvas/ |
+| 线上地址 | **http://66.245.216.250:8081/canvas/** (独立 caddy 实例 :8081) |
 | LLM | DeepSeek (`deepseek-chat`),凭据保管在 `/etc/know-canvas/llm.env` |
-| 上线 commits | `67c1f0f` → `929c8d2` (8 个 commit) |
+| 主 :80 | 由 Hermes Agent 控制 (`Hermes Agent is online`) — 我们完全不插手 |
+| 上线 commits | `67c1f0f` → `929c8d2` + 独立 caddy 切换 |
 
 ---
 
@@ -154,22 +155,41 @@ analyzeGroupMetaCognitive: async (nodeIds) => {
 | ufw 默认不开 80 / 443 | 自动 `ufw allow 80/tcp 443/tcp` |
 | caddy 包安装会 `Caddyfile` 默认配置覆盖,需后置装我们的 | step 顺序:先 systemd 后 Caddyfile |
 
-### 4.1.1 Caddyfile 被覆盖事件 ⚠
+### 4.1.1 Caddyfile 被覆盖事件 ⚠ + 最终方案
 
 **症状**:用户报告"画布看不到了",访问 `/canvas/` 返回 "Hermes Agent is online" 文本。
 
-**根因**:Hermes Agent 部署进程(`hermes_cli.main gateway run --replace`)把 `/etc/caddy/Caddyfile` 整个覆盖成自己的配置,我们的 4 条路由全没了。文件本身在,只是不路由。
+**根因调查**:
+1. 看进程发现 `hermes_cli.main gateway run --replace` —— 但读 `hermes gateway --help` 知道 `--replace` 是替换**同名 gateway 进程**,**不动 Caddyfile**。Hermes Agent 项目本身(`/usr/local/lib/hermes-agent`)代码里也没动 Caddyfile 的逻辑。
+2. 那个 Caddyfile 是 **lichang 部署 `ha2.digitalvio.shop` 静态站时手动覆盖的**,跟 hermes-agent 项目无关。
+3. 也就是说,共享主机上任何邻居都可能直接 `cat > /etc/caddy/Caddyfile`,我们插队 :80 永远危险。
 
-**新机的 Caddyfile 是 know-canvas + Hermes 共用的**,任何一方独占覆盖会冲掉对方。
+**第一版 (尝试,已撤掉) — 自愈方案**:写 Python `restore-canvas-caddy.py` + systemd path unit 监听 `/etc/caddy/Caddyfile` 变化,Hermes 一覆盖就自动 patch 回 + restart caddy。Idempotent (marker 在就不动)。
 
-**修复**:合并版 Caddyfile —— 保留 Hermes 的 `ha2.digitalvio.shop` 域名 site + `:80` 默认 respond,在 `:80` block 里恢复 know-canvas 的 4 条路由 + 根路径 302 → `/canvas/`。
+测试通过:覆盖 → path 触发 → service 跑 → patch + restart → 服务恢复 ~3s 内。
 
-**坑点**:全局配置里 Hermes 设了 `admin off`,导致 `caddy reload` 不能用(走 admin API 推新配置)。改用 `systemctl restart caddy` 直接重启。
+**为什么撤掉**:仍是"插队 + 抢占"的方案,跟邻居持续打架。用户提议:**换位置 + 换端口,完全解耦**。
 
-**长期方案**:
-- 跟 Hermes 同事约定:Caddyfile 不互相覆盖,都通过 merge 改
-- 或者 Hermes 用 `import /etc/caddy/conf.d/*.caddy` 模式,know-canvas 单独占一个文件
-- 或者新机改回 `admin localhost:2019`(本地可用,外网不可达)
+**最终方案 — 独立 caddy 实例**:
+
+```
+系统 caddy        (Hermes 控制)        :80 / :443     — 我们不动
+know-canvas-caddy (独立 systemd unit)  :8081           — 我们独占
+```
+
+- `/opt/know-canvas/Caddyfile` (我们独占,Hermes 永远不会覆盖)
+- `XDG_DATA_HOME=/opt/know-canvas/caddy-data` 隔离 storage,两个 caddy 进程互不打架
+- `admin localhost:2020` 避开默认 2019 (Hermes 的 caddy 设了 admin off)
+- ufw allow 8081
+
+测试关键场景:Hermes 把主 `/etc/caddy/Caddyfile` 整个覆盖成 `respond "Hermes redeploy 2.0"` → 主 caddy 重启后这样 → **我们的 :8081 完全不受影响,/canvas/ + LLM 健康检查都 200 OK**。
+
+**线上地址变了**:`http://66.245.216.250:8081/canvas/` (端口 8081)
+
+**坑点沉淀**:
+- caddy 多实例需要不同的 storage 目录(否则 ACME 锁竞争)→ XDG_DATA_HOME 隔离
+- caddy admin API 默认 `:2019`,要避开占用 → 用 `:2020`
+- ufw 默认不开 8081 → 部署脚本自动 `ufw allow 8081/tcp`
 
 ### 4.2 SSH key
 

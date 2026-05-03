@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Know Canvas — 一键部署到新 VPS (66.245.216.250:8765)
 #
+# 设计原则: 独立 caddy 实例 + 独立端口 (默认 :8081), 跟同机其他 caddy/服务完全解耦.
+# 这样邻居 (比如 Hermes Agent) 怎么覆盖主 Caddyfile 都不影响我们.
+#
 # 用法 (本地开发机):
 #   DEEPSEEK_API_KEY=sk-xxx bash deploy/deploy-newvps.sh
 #
@@ -8,6 +11,7 @@
 #   REMOTE_USER  默认 root
 #   REMOTE_HOST  默认 66.245.216.250
 #   REMOTE_PORT  默认 8765
+#   CANVAS_PORT  默认 8081 (独立 caddy 监听端口)
 #   DEEPSEEK_API_KEY  必填; 写入远端 /etc/know-canvas/llm.env (不进 git)
 #   LLM_BASE_URL      默认 https://api.deepseek.com/v1
 #   LLM_MODEL         默认 deepseek-chat
@@ -15,18 +19,19 @@
 # 干什么:
 #   1. 本地 npm run build:canvas
 #   2. SSH 远端: 检查 / 安装 caddy + node 22
-#   3. rsync dist/ → /var/www/know-canvas/
-#   4. rsync server/ → /opt/know-canvas/server/  + npm install --production
+#   3. tar dist/ → /var/www/know-canvas/
+#   4. tar server/ → /opt/know-canvas/server/  + npm install --production
 #   5. 写 /etc/know-canvas/llm.env (LLM_API_KEY + base url + model)
-#   6. 装 systemd unit (yws + llm-proxy), enable + start
-#   7. 装 Caddyfile, reload caddy
-#   8. 健康检查 /canvas/ + /canvas/api/llm/health
+#   6. 装 systemd unit (yws + llm-proxy + know-canvas-caddy), enable + start
+#   7. 不动主 /etc/caddy/Caddyfile — 我们跑独立 caddy 实例监听 CANVAS_PORT
+#   8. 健康检查 http://host:CANVAS_PORT/canvas/ + .../api/llm/health
 
 set -euo pipefail
 
 REMOTE_USER="${REMOTE_USER:-root}"
 REMOTE_HOST="${REMOTE_HOST:-66.245.216.250}"
 REMOTE_PORT="${REMOTE_PORT:-8765}"
+CANVAS_PORT="${CANVAS_PORT:-8081}"
 LLM_BASE_URL="${LLM_BASE_URL:-https://api.deepseek.com/v1}"
 LLM_MODEL="${LLM_MODEL:-deepseek-chat}"
 
@@ -57,10 +62,11 @@ fi
 # 2. 远端环境探测 + 安装依赖
 echo ""
 echo "==> 2/8  探测远端环境 (caddy / node)"
-ssh $SSH_OPTS "$REMOTE" 'bash -s' <<'REMOTE_PROBE'
+ssh $SSH_OPTS "$REMOTE" "CANVAS_PORT=${CANVAS_PORT} bash -s" <<'REMOTE_PROBE'
 set -e
 echo "[probe] OS: $(. /etc/os-release && echo $PRETTY_NAME)"
 echo "[probe] uname: $(uname -a)"
+echo "[probe] CANVAS_PORT=${CANVAS_PORT}"
 
 # Node
 if ! command -v node >/dev/null 2>&1; then
@@ -85,20 +91,15 @@ if ! command -v caddy >/dev/null 2>&1; then
 fi
 echo "[probe] caddy: $(caddy version | head -1)"
 
-# UFW 开 80 (公网访问入口)
+# UFW 开独立 caddy 监听端口 (默认 8081)
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
-  ufw allow 80/tcp 2>/dev/null || true
-  ufw allow 443/tcp 2>/dev/null || true
+  ufw allow ${CANVAS_PORT}/tcp 2>/dev/null || true
 fi
 
-# rsync (本脚本用 rsync, 远端也得装才能反向同步)
-if ! command -v rsync >/dev/null 2>&1; then
-  apt install -y rsync
-fi
-
-# 准备目录
-mkdir -p /opt/know-canvas/server /var/www/know-canvas /etc/know-canvas
-chown -R www-data:www-data /opt/know-canvas /var/www/know-canvas
+# 独立 caddy 实例的目录 (跟系统 caddy 完全隔离, 不共享 storage)
+mkdir -p /opt/know-canvas/server /opt/know-canvas/caddy-data /var/www/know-canvas /etc/know-canvas
+chown -R caddy:caddy /opt/know-canvas/caddy-data 2>/dev/null || true
+chown -R www-data:www-data /opt/know-canvas/server /var/www/know-canvas
 echo "[probe] 目录就绪"
 REMOTE_PROBE
 
@@ -136,66 +137,65 @@ chown root:root /etc/know-canvas/llm.env
 echo '[llm.env] 已写入'
 "
 
-# 6. 装 systemd units
+# 6. 装 systemd units (yws + llm-proxy + 独立 caddy 实例)
 echo ""
-echo "==> 6/8  装 systemd unit (yws + llm-proxy)"
+echo "==> 6/8  装 systemd unit (yws + llm-proxy + know-canvas-caddy)"
 scp -P "$REMOTE_PORT" \
   "$PROJECT_ROOT/deploy/know-canvas-yws.service" \
   "$PROJECT_ROOT/deploy/know-canvas-llm-proxy.service" \
+  "$PROJECT_ROOT/deploy/know-canvas-caddy.service" \
+  "$PROJECT_ROOT/deploy/know-canvas-caddy.Caddyfile" \
   "$REMOTE:/tmp/"
 
 ssh $SSH_OPTS "$REMOTE" 'set -e
 mv /tmp/know-canvas-yws.service /etc/systemd/system/
 mv /tmp/know-canvas-llm-proxy.service /etc/systemd/system/
+mv /tmp/know-canvas-caddy.service /etc/systemd/system/
+mv /tmp/know-canvas-caddy.Caddyfile /opt/know-canvas/Caddyfile
+chown caddy:caddy /opt/know-canvas/Caddyfile 2>/dev/null || true
 systemctl daemon-reload
-systemctl enable know-canvas-yws know-canvas-llm-proxy
-systemctl restart know-canvas-yws know-canvas-llm-proxy
+systemctl enable know-canvas-yws know-canvas-llm-proxy know-canvas-caddy
+systemctl restart know-canvas-yws know-canvas-llm-proxy know-canvas-caddy
 sleep 2
-# is-active / status 在 activating 时返回非零, 用 || true 避免 set -e 早退
 echo "--- yws ---"
 systemctl is-active know-canvas-yws || true
-journalctl -u know-canvas-yws -n 5 --no-pager || true
 echo "--- llm-proxy ---"
 systemctl is-active know-canvas-llm-proxy || true
-journalctl -u know-canvas-llm-proxy -n 5 --no-pager || true
+echo "--- know-canvas-caddy ---"
+systemctl is-active know-canvas-caddy || true
 '
 
-# 7. 装 Caddyfile
+# 7. 推 dist (前端)
 echo ""
-echo "==> 7/8  装 Caddyfile + reload"
-scp -P "$REMOTE_PORT" "$PROJECT_ROOT/deploy/Caddyfile.newvps" "$REMOTE:/tmp/Caddyfile"
-ssh $SSH_OPTS "$REMOTE" 'set -e
-mv /tmp/Caddyfile /etc/caddy/Caddyfile
-caddy validate --config /etc/caddy/Caddyfile
-systemctl reload caddy || systemctl restart caddy
-sleep 1
-systemctl status caddy --no-pager -l | head -10
-'
+echo "==> 7/8  推 dist 已在 step 3 完成 (这一步无操作, 跳过)"
 
-# 8. 健康检查
+# 8. 健康检查 (用独立端口 CANVAS_PORT)
 echo ""
-echo "==> 8/8  健康检查"
-ssh $SSH_OPTS "$REMOTE" 'set +e
-echo "--- 本机 yws health ---"
+echo "==> 8/8  健康检查 (端口 ${CANVAS_PORT})"
+ssh $SSH_OPTS "$REMOTE" "CANVAS_PORT=${CANVAS_PORT} bash -s" <<'HEALTHCHECK'
+set +e
+echo "--- 内部 yws ---"
 curl -sf http://127.0.0.1:1234/health && echo
-echo "--- 本机 llm-proxy health ---"
+echo "--- 内部 llm-proxy ---"
 curl -sf http://127.0.0.1:17080/health && echo
-echo "--- 通过 caddy /canvas/ ---"
-curl -sI http://127.0.0.1/canvas/ | head -3
-echo "--- 通过 caddy /canvas/api/llm/health ---"
-curl -sf http://127.0.0.1/canvas/api/llm/health && echo
-'
+echo "--- 通过独立 caddy /canvas/ ---"
+curl -sI http://127.0.0.1:${CANVAS_PORT}/canvas/ | head -3
+echo "--- /canvas/api/llm/health ---"
+curl -sf http://127.0.0.1:${CANVAS_PORT}/canvas/api/llm/health && echo
+HEALTHCHECK
 
 echo ""
 echo "============================================================"
 echo "部署完成。访问:"
 echo ""
-echo "  http://${REMOTE_HOST}/canvas/"
+echo "  http://${REMOTE_HOST}:${CANVAS_PORT}/canvas/"
+echo ""
+echo "(独立 caddy 监听 :${CANVAS_PORT}, 完全跟系统 caddy/Hermes 解耦)"
 echo ""
 echo "排查:"
 echo "  ssh -p ${REMOTE_PORT} ${REMOTE} 'journalctl -u know-canvas-yws -n 50'"
 echo "  ssh -p ${REMOTE_PORT} ${REMOTE} 'journalctl -u know-canvas-llm-proxy -n 50'"
-echo "  ssh -p ${REMOTE_PORT} ${REMOTE} 'journalctl -u caddy -n 50'"
+echo "  ssh -p ${REMOTE_PORT} ${REMOTE} 'journalctl -u know-canvas-caddy -n 50'"
 echo ""
 echo "更换 API key:"
 echo "  ssh -p ${REMOTE_PORT} ${REMOTE} 'nano /etc/know-canvas/llm.env'"

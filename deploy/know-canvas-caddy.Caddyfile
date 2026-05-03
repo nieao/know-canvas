@@ -1,0 +1,62 @@
+# Know Canvas 独立 Caddy 实例配置 — 监听 :8081
+#
+# 跟系统 caddy (Hermes 占的 :80/:443) 完全独立, 互不打架.
+# 通过 systemd unit know-canvas-caddy.service 启动 (见 deploy/).
+#
+# 部署位置: /opt/know-canvas/Caddyfile
+# admin 端口 2020 (避开默认 2019, 不跟 Hermes 抢)
+
+{
+	admin localhost:2020
+	# 独立 storage, 跟系统 caddy 隔离 (虽然 :8081 不需要 cert, 防御性)
+	storage file_system /opt/know-canvas/caddy-data
+	log {
+		output stderr
+		level INFO
+	}
+}
+
+:8081 {
+	# 根路径自动跳到画布
+	@root path /
+	redir @root /canvas/ 302
+
+	# === LLM 代理 (转 vps-llm-proxy daemon) ===
+	handle_path /canvas/api/llm/* {
+		reverse_proxy 127.0.0.1:17080 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# === Action Log 服务 ===
+	handle_path /canvas/api/log {
+		reverse_proxy 127.0.0.1:18091/log
+	}
+	handle_path /canvas/api/log/* {
+		reverse_proxy 127.0.0.1:18091
+	}
+
+	# === Yjs 协作 WebSocket ===
+	handle_path /yws/* {
+		reverse_proxy 127.0.0.1:1234 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up Connection {>Connection}
+			header_up Upgrade {>Upgrade}
+		}
+	}
+
+	# === 前端静态资源 ===
+	handle_path /canvas/* {
+		root * /var/www/know-canvas
+		try_files {path} /index.html
+		file_server
+		encode gzip
+	}
+
+	# 兜底
+	handle {
+		respond "know-canvas at /canvas/" 200
+	}
+}

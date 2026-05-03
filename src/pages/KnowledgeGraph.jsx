@@ -233,19 +233,41 @@ export default function KnowledgeGraph() {
   }, [onConnect])
 
   // ========== 处理多媒体文件 ==========
+  // 文件 → dataURL (base64) 让 yjs 跨客户端同步可见.
+  // 大文件 (> 限制) 退回 blob URL — 本地可见, 远端用户不可见 (yjs 体积控制)
+  const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+
   const handleFileDrop = useCallback(async (files, position) => {
+    // 体积阈值: yjs 协作场景下大文件会拖慢 sync, 仅小文件入云 (内嵌 dataURL)
+    // 图片 4MB / 视频 8MB / 其他文档 6MB
+    const LIMIT_IMG = 4 * 1024 * 1024
+    const LIMIT_VIDEO = 8 * 1024 * 1024
+    const LIMIT_DOC = 6 * 1024 * 1024
+
     for (const file of files) {
       const ext = getFileExtension(file.name)
+      const inlineable = (limit) => file.size <= limit
 
       if (IMAGE_EXTENSIONS.includes(ext)) {
-        const blobUrl = URL.createObjectURL(file)
-        addImageNode(blobUrl, file.name, position)
+        const url = inlineable(LIMIT_IMG)
+          ? await fileToDataUrl(file).catch(() => URL.createObjectURL(file))
+          : URL.createObjectURL(file)
+        addImageNode(url, file.name, position)
       } else if (VIDEO_EXTENSIONS.includes(ext)) {
-        const blobUrl = URL.createObjectURL(file)
-        addVideoNode(blobUrl, file.name, '', position, false, { format: ext })
+        const url = inlineable(LIMIT_VIDEO)
+          ? await fileToDataUrl(file).catch(() => URL.createObjectURL(file))
+          : URL.createObjectURL(file)
+        addVideoNode(url, file.name, '', position, false, { format: ext })
       } else if (DOC_EXTENSIONS.includes(ext)) {
-        const blobUrl = URL.createObjectURL(file)
-        addFileNode(file.name, blobUrl, file.size, position)
+        const url = inlineable(LIMIT_DOC)
+          ? await fileToDataUrl(file).catch(() => URL.createObjectURL(file))
+          : URL.createObjectURL(file)
+        addFileNode(file.name, url, file.size, position)
       } else if (TEXT_EXTENSIONS.includes(ext)) {
         const content = await file.text()
         const source = {
@@ -259,10 +281,15 @@ export default function KnowledgeGraph() {
         addSource(source)
         handleSelectSource(source)
       } else {
-        const blobUrl = URL.createObjectURL(file)
-        addFileNode(file.name, blobUrl, file.size, position)
+        const url = inlineable(LIMIT_DOC)
+          ? await fileToDataUrl(file).catch(() => URL.createObjectURL(file))
+          : URL.createObjectURL(file)
+        addFileNode(file.name, url, file.size, position)
       }
     }
+
+    // 上传完自动保存 — 触发 SaveExportToolbar 的快照 (yjs 已自动同步, 这里给本地持久化兜底)
+    window.dispatchEvent(new CustomEvent('canvas-auto-save', { detail: { trigger: 'file-upload' } }))
   }, [addImageNode, addVideoNode, addFileNode, addSource, handleSelectSource])
 
   // ========== 监听画布自定义事件 ==========
@@ -463,6 +490,25 @@ export default function KnowledgeGraph() {
       useCanvasStore.getState().updateNode(e.detail.groupId, { color: e.detail.color })
     }
 
+    // 自动保存 — 上传文件后或其他触发点, 直接写入项目库 (yjs 已自动同步, 这里给本地项目库做归档)
+    // 节流 5s, 避免短时间多次触发产生大量重复快照
+    let _lastAutoSaveTs = 0
+    const onAutoSave = async (e) => {
+      const now = Date.now()
+      if (now - _lastAutoSaveTs < 5000) return
+      _lastAutoSaveTs = now
+      try {
+        const { saveCurrentCanvasAsProject } = await import('../services/projectLibraryActions')
+        const trigger = e?.detail?.trigger || 'auto'
+        const titlePrefix = trigger === 'file-upload' ? '文件上传后归档' : '自动归档'
+        const title = `${titlePrefix} · ${new Date().toLocaleString('zh-CN', { hour12: false })}`
+        saveCurrentCanvasAsProject({ title, source: 'manual', tags: ['auto', trigger] })
+        console.log('[auto-save] 已写入项目库:', title)
+      } catch (err) {
+        console.warn('[auto-save] 失败:', err?.message || err)
+      }
+    }
+
     // 反驳节点的"下一步"按钮 — 把 todos 派给元认知, 串成下一轮可执行项目
     const onChainTodos = (e) => {
       const { challengeId, todos = [], claim = '', sourceTitle = '' } = e.detail || {}
@@ -497,6 +543,7 @@ export default function KnowledgeGraph() {
     window.addEventListener('node-change-type', onNodeChangeType)
     window.addEventListener('group-color-change', onGroupColorChange)
     window.addEventListener('challenge:chain-todos', onChainTodos)
+    window.addEventListener('canvas-auto-save', onAutoSave)
 
     return () => {
       window.removeEventListener('canvas-file-drop', onCanvasFileDrop)

@@ -1,0 +1,177 @@
+{
+  "version": "2026-05-03",
+  "exchangeRate": {
+    "usd_to_cny": 7.2,
+    "source": "约定汇率（黑客松简化）"
+  },
+  "models": {
+    "deepseek-chat": {
+      "provider": "deepseek",
+      "inputUsdPer1M": 0.27,
+      "outputUsdPer1M": 1.10,
+      "source": "https://api-docs.deepseek.com/quick_start/pricing"
+    },
+    "deepseek-reasoner": {
+      "provider": "deepseek",
+      "inputUsdPer1M": 0.55,
+      "outputUsdPer1M": 2.19,
+      "source": "https://api-docs.deepseek.com/quick_start/pricing"
+    },
+    "claude-opus-4-7": {
+      "provider": "anthropic",
+      "inputUsdPer1M": 15.0,
+      "outputUsdPer1M": 75.0,
+      "source": "https://www.anthropic.com/pricing"
+    },
+    "claude-opus-4-5": {
+      "provider": "anthropic",
+      "inputUsdPer1M": 15.0,
+      "outputUsdPer1M": 75.0,
+      "source": "https://www.anthropic.com/pricing"
+    },
+    "claude-sonnet-4-6": {
+      "provider": "anthropic",
+      "inputUsdPer1M": 3.0,
+      "outputUsdPer1M": 15.0,
+      "source": "https://www.anthropic.com/pricing"
+    },
+    "claude-sonnet-4-5-20250514": {
+      "provider": "anthropic",
+      "inputUsdPer1M": 3.0,
+      "outputUsdPer1M": 15.0,
+      "source": "https://www.anthropic.com/pricing"
+    },
+    "claude-haiku-4-5-20251001": {
+      "provider": "anthropic",
+      "inputUsdPer1M": 1.0,
+      "outputUsdPer1M": 5.0,
+      "source": "https://www.anthropic.com/pricing"
+    },
+    "claude-3-5-sonnet-20241022": {
+      "provider": "anthropic",
+      "inputUsdPer1M": 3.0,
+      "outputUsdPer1M": 15.0,
+      "source": "https://www.anthropic.com/pricing"
+    },
+    "claude-3-5-haiku-20241022": {
+      "provider": "anthropic",
+      "inputUsdPer1M": 0.80,
+      "outputUsdPer1M": 4.0,
+      "source": "https://www.anthropic.com/pricing"
+    },
+    "claude-3-opus-20240229": {
+      "provider": "anthropic",
+      "inputUsdPer1M": 15.0,
+      "outputUsdPer1M": 75.0,
+      "source": "https://www.anthropic.com/pricing"
+    },
+    "gpt-4o": {
+      "provider": "openai",
+      "inputUsdPer1M": 2.5,
+      "outputUsdPer1M": 10.0,
+      "source": "https://openai.com/api/pricing/"
+    },
+    "gpt-4o-mini": {
+      "provider": "openai",
+      "inputUsdPer1M": 0.15,
+      "outputUsdPer1M": 0.60,
+      "source": "https://openai.com/api/pricing/"
+    },
+    "gpt-4-turbo": {
+      "provider": "openai",
+      "inputUsdPer1M": 10.0,
+      "outputUsdPer1M": 30.0,
+      "source": "https://openai.com/api/pricing/"
+    },
+    "gpt-4.1": {
+      "provider": "openai",
+      "inputUsdPer1M": 2.0,
+      "outputUsdPer1M": 8.0,
+      "source": "https://openai.com/api/pricing/"
+    },
+    "gpt-4.1-mini": {
+      "provider": "openai",
+      "inputUsdPer1M": 0.40,
+      "outputUsdPer1M": 1.60,
+      "source": "https://openai.com/api/pricing/"
+    },
+    "o1": {
+      "provider": "openai",
+      "inputUsdPer1M": 15.0,
+      "outputUsdPer1M": 60.0,
+      "source": "https://openai.com/api/pricing/"
+    },
+    "o1-mini": {
+      "provider": "openai",
+      "inputUsdPer1M": 3.0,
+      "outputUsdPer1M": 12.0,
+      "source": "https://openai.com/api/pricing/"
+    },
+    "gemini-2.0-flash": {
+      "provider": "google",
+      "inputUsdPer1M": 0.10,
+      "outputUsdPer1M": 0.40,
+      "source": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    "gemini-1.5-pro": {
+      "provider": "google",
+      "inputUsdPer1M": 1.25,
+      "outputUsdPer1M": 5.0,
+      "source": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    "gemini-1.5-flash": {
+      "provider": "google",
+      "inputUsdPer1M": 0.075,
+      "outputUsdPer1M": 0.30,
+      "source": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    "glm-4-plus": {
+      "provider": "zhipu",
+      "inputUsdPer1M": 6.94,
+      "outputUsdPer1M": 6.94,
+      "source": "https://open.bigmodel.cn/pricing"
+    },
+    "glm-4-air": {
+      "provider": "zhipu",
+      "inputUsdPer1M": 0.07,
+      "outputUsdPer1M": 0.07,
+      "source": "https://open.bigmodel.cn/pricing"
+    },
+    "qwen-max": {
+      "provider": "alibaba",
+      "inputUsdPer1M": 2.78,
+      "outputUsdPer1M": 8.33,
+      "source": "https://help.aliyun.com/zh/model-studio/getting-started/models"
+    },
+    "qwen-plus": {
+      "provider": "alibaba",
+      "inputUsdPer1M": 0.11,
+      "outputUsdPer1M": 0.28,
+      "source": "https://help.aliyun.com/zh/model-studio/getting-started/models"
+    },
+    "qwen-turbo": {
+      "provider": "alibaba",
+      "inputUsdPer1M": 0.04,
+      "outputUsdPer1M": 0.17,
+      "source": "https://help.aliyun.com/zh/model-studio/getting-started/models"
+    },
+    "moonshot-v1-8k": {
+      "provider": "moonshot",
+      "inputUsdPer1M": 1.67,
+      "outputUsdPer1M": 1.67,
+      "source": "https://platform.moonshot.cn/docs/pricing"
+    },
+    "moonshot-v1-32k": {
+      "provider": "moonshot",
+      "inputUsdPer1M": 3.33,
+      "outputUsdPer1M": 3.33,
+      "source": "https://platform.moonshot.cn/docs/pricing"
+    },
+    "claude-cli-local": {
+      "provider": "claude-cli",
+      "inputUsdPer1M": 0,
+      "outputUsdPer1M": 0,
+      "source": "本地 CLI 计 0 元（复用本地已认证 claude）"
+    }
+  }
+}

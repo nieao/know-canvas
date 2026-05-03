@@ -1,16 +1,23 @@
 /**
  * Aletheia 共识对抗状态管理 (Zustand + Immer)
- * 不使用 persist：避免污染 yjs 协作流；运行时状态短暂、跟随会话
+ * 运行时态（debateStream / lastSynthesis 等）不持久化：避免污染 yjs 协作流；
+ * 仅持久化用户级"成本反馈"偏好（costWeight / costFeedbackHistory），见底部 partialize。
  */
 
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
 
 // 默认权重：逻辑 / 合规 / 商业 三维度均衡
 const DEFAULT_WEIGHTS = { logic: 1, compliance: 1, business: 1 }
 
+// 成本反馈相关常量
+const COST_FEEDBACK_STEP = 0.15 * 0.5 // 0.075，每次反馈对 costWeight 的 delta 绝对值
+const COST_FEEDBACK_HISTORY_MAX = 50 // history 上限
+
 const useAletheiaStore = create(
-  immer((set, get) => ({
+  persist(
+    immer((set, get) => ({
     // ========== 模式开关 ==========
 
     // Aletheia 模式: false = 画布默认视图 (左右 panel 正常显示, AletheiaLayer 只显示右下角入口按钮)
@@ -132,7 +139,98 @@ const useAletheiaStore = create(
         state.isRunning = false
         state.lastSynthesis = null
       }),
-  }))
+
+    // ========== 成本反馈回路 (cost balance feedback loop) ==========
+    // costWeight ∈ [0, 1]：用户对"成本"维度的敏感度
+    //   0.5 = 中性；越大表示越在乎成本（贵→负反馈）；越小表示越愿意烧钱换质量
+    costWeight: 0.5,
+
+    // 反馈历史：用于审计 + UI 时间线
+    // [{ taskId, type: 'expensive'|'worth_it', costAtTime, ts, costWeightAfter }]
+    costFeedbackHistory: [],
+
+    /**
+     * 用户对某次任务给出"贵了"或"值"的反馈，调整 costWeight
+     * @param {{ taskId: string, type: 'expensive'|'worth_it', costAtTime: number }} payload
+     */
+    pushCostFeedback: ({ taskId, type, costAtTime }) =>
+      set((state) => {
+        let delta = 0
+        if (type === 'expensive') delta = +COST_FEEDBACK_STEP
+        else if (type === 'worth_it') delta = -COST_FEEDBACK_STEP
+        else return // 未知 type，静默丢弃
+
+        const next = Math.max(0, Math.min(1, state.costWeight + delta))
+        state.costWeight = next
+
+        state.costFeedbackHistory.push({
+          taskId: String(taskId || 'unknown'),
+          type,
+          costAtTime: Number(costAtTime) || 0,
+          ts: Date.now(),
+          costWeightAfter: next,
+        })
+
+        if (state.costFeedbackHistory.length > COST_FEEDBACK_HISTORY_MAX) {
+          state.costFeedbackHistory.splice(
+            0,
+            state.costFeedbackHistory.length - COST_FEEDBACK_HISTORY_MAX
+          )
+        }
+
+        // 调试日志（产线噪音可控，反馈频率本就低）
+        // eslint-disable-next-line no-console
+        console.log('[Aletheia] costWeight 更新为:', next)
+      }),
+
+    /**
+     * 把 costWeight 注入"成本/效率"维度后返回新的 weights 对象（纯函数，不修改 store）
+     *
+     * 行为：
+     *   1. 若 rawWeights 存在成本相关键（reduceCost / efficiency / costAware / cost），
+     *      把 costWeight 作为系数乘上去（保留原始 0 值不被吃掉，乘 0 仍 0 是合理语义）
+     *   2. 都没有的话，在返回对象里加一个新字段 _costBias: costWeight，让下游决策器自己解读
+     *
+     * @param {object} rawWeights - 当前 weights 快照
+     * @returns {object} 新对象，不破坏入参
+     */
+    applyCostBiasToWeights: (rawWeights) => {
+      const cw = get().costWeight
+      const src = rawWeights && typeof rawWeights === 'object' ? rawWeights : {}
+      const next = { ...src }
+
+      const COST_KEYS = ['reduceCost', 'efficiency', 'costAware', 'cost']
+      let hit = false
+      for (const k of COST_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(src, k)) {
+          next[k] = Number(src[k]) * cw
+          hit = true
+        }
+      }
+      if (!hit) {
+        next._costBias = cw
+      }
+      return next
+    },
+
+    /**
+     * 重置成本反馈到中性（0.5）并清空历史
+     */
+    resetCostBalance: () =>
+      set((state) => {
+        state.costWeight = 0.5
+        state.costFeedbackHistory = []
+      }),
+  })),
+    {
+      name: 'know_canvas_aletheia_cost_balance',
+      // 仅持久化用户对成本的偏好，不持久化 debateStream / weights 等运行时/协作态
+      partialize: (state) => ({
+        costWeight: state.costWeight,
+        costFeedbackHistory: state.costFeedbackHistory,
+      }),
+    }
+  )
 )
 
 // 同时导出 default 和命名 — 各 agent 写组件时风格不一,

@@ -16,6 +16,11 @@ import CollabHeader from '../collab/CollabHeader'
 import { CursorAwarenessLayer, useRemoteSelections } from '../collab/PresenceLayer'
 import AiSettingsPanel from '../components/AiSettingsPanel'
 import CliMonitor from '../components/CliMonitor'
+import CostMeterChip from '../components/cost/CostMeterChip'
+import TimelineDock from '../components/timeline/TimelineDock'
+import ProjectLibraryButton from '../components/project-library/ProjectLibraryButton'
+import ProjectLibraryPanel from '../components/project-library/ProjectLibraryPanel'
+import { loadProjectToCanvas } from '../services/projectLibraryActions'
 import { pushLog } from '../utils/logBus'
 
 // 文件类型扩展名分组
@@ -56,6 +61,7 @@ export default function KnowledgeGraph() {
   const [selectedNode, setSelectedNode] = useState(null)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showAiSettings, setShowAiSettings] = useState(false)
+  const [showProjectLibrary, setShowProjectLibrary] = useState(false)
 
   // 协作会话（启动 Yjs sync + 提供 room/username/exitSession）
   const { room, username, exitSession } = useCollabSession()
@@ -65,6 +71,42 @@ export default function KnowledgeGraph() {
   const handleNodeClick = useCallback((_event, node) => {
     setSelectedNode(node)
     if (!showRightPanel) setShowRightPanel(true)
+  }, [showRightPanel])
+
+  // === 来自 LeftPanel 项目 tab 的"载入"回调 ===
+  const handleLoadProjectFromTab = useCallback((project) => {
+    if (!project?.id) return
+    const r = loadProjectToCanvas(project.id)
+    if (r?.ok) {
+      pushLog({
+        level: 'info',
+        source: 'project-library',
+        msg: `已载入: ${project.title || project.id}`,
+      })
+    } else {
+      pushLog({
+        level: 'warn',
+        source: 'project-library',
+        msg: `载入项目失败: ${r?.reason || 'unknown'}`,
+      })
+    }
+  }, [])
+
+  // === 来自 LeftPanel 节点 tab 的"聚焦"回调 ===
+  // 简版实现: 把目标节点作为 selectedNode 推到 RightPanel,
+  // 并通过自定义事件让画布尝试聚焦 (KnowledgeCanvas 监听 canvas-focus-node 时会 setCenter)
+  const handleFocusNode = useCallback((nodeId) => {
+    if (!nodeId) return
+    const node = useCanvasStore.getState().nodes.find((n) => n.id === nodeId)
+    if (!node) {
+      console.warn('[LeftPanel.focusNode] 节点不存在:', nodeId)
+      return
+    }
+    setSelectedNode(node)
+    if (!showRightPanel) setShowRightPanel(true)
+    // 派一个事件让画布(若已实现 listener)尝试 fitView/setCenter
+    window.dispatchEvent(new CustomEvent('canvas-focus-node', { detail: { nodeId, node } }))
+    pushLog({ level: 'debug', source: 'left-panel', msg: `聚焦节点: ${nodeId}` })
   }, [showRightPanel])
 
   // 选中边（预留扩展）
@@ -434,6 +476,8 @@ export default function KnowledgeGraph() {
           onAddSource={addSource}
           onRemoveSource={removeSource}
           onSelectSource={handleSelectSource}
+          onLoadProject={handleLoadProjectFromTab}
+          onFocusNode={handleFocusNode}
         />
       )}
 
@@ -475,8 +519,8 @@ export default function KnowledgeGraph() {
           <div
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg shadow-sm"
             style={{
-              background: 'rgba(250,250,250,0.95)',
-              border: '1px solid #e8e8e8',
+              background: 'var(--surface)',
+              border: '1px solid var(--border-subtle)',
               backdropFilter: 'blur(8px)',
               fontFamily: '"Noto Serif SC", Georgia, serif',
             }}
@@ -484,18 +528,19 @@ export default function KnowledgeGraph() {
           >
             <span
               className="inline-block w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: '#c8a882' }}
+              style={{ backgroundColor: 'var(--accent)' }}
             />
             <span
               className="text-xs font-medium"
-              style={{ color: '#1a1a1a', letterSpacing: '0.35em' }}
+              style={{ color: 'var(--text-primary)', letterSpacing: '0.35em' }}
             >
               ALETHEIA
             </span>
           </div>
         </div>
 
-        <div className="absolute top-4 right-4 z-30 flex gap-2">
+        <div className="absolute top-4 right-4 z-30 flex gap-2 items-center">
+          <ProjectLibraryButton onOpen={() => setShowProjectLibrary(true)} />
           <button
             onClick={() => setShowRightPanel(prev => !prev)}
             className="p-2 rounded-lg shadow-sm transition-all duration-300"
@@ -533,6 +578,9 @@ export default function KnowledgeGraph() {
           onSuggestRelations={handleSuggestRelations}
           concepts={conceptsForAI}
         />
+
+        <CostMeterChip />
+        <TimelineDock />
       </div>
 
       {showRightPanel && (
@@ -554,6 +602,21 @@ export default function KnowledgeGraph() {
 
       <AiSettingsPanel open={showAiSettings} onClose={() => setShowAiSettings(false)} />
       <ShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+      {showProjectLibrary && (
+        <ProjectLibraryPanel
+          open={showProjectLibrary}
+          onClose={() => setShowProjectLibrary(false)}
+          onLoadProject={(project) => {
+            const r = loadProjectToCanvas(project.id)
+            setShowProjectLibrary(false)
+            if (r?.ok) {
+              pushLog({ level: 'info', source: 'project-library', msg: `已载入项目: ${project.title || ''}` })
+            } else {
+              pushLog({ level: 'warn', source: 'project-library', msg: `载入项目失败: ${r?.reason || 'unknown'}` })
+            }
+          }}
+        />
+      )}
       <CliMonitor />
     </div>
   )

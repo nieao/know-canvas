@@ -49,12 +49,22 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
     setIsLayouting(false)
   }
 
-  // 切换横竖排
-  const handleToggleDirection = (dir) => {
-    if (dir !== layoutDirection) {
-      setLayoutDirection(dir)
-      logAction('toolbar.setLayoutDirection', { direction: dir })
+  // 切换横竖排 — 切换后立即自动排序, 不需要再点"排序"按钮
+  const handleToggleDirection = async (dir) => {
+    if (dir === layoutDirection || isLayouting) return
+    setLayoutDirection(dir)
+    logAction('toolbar.setLayoutDirection', { direction: dir })
+    setIsLayouting(true)
+    try {
+      const result = await applyAutoLayout()
+      logAction('toolbar.autoLayoutOnToggle', {
+        direction: result.direction,
+        nodeCount: result.count,
+      })
+    } catch (e) {
+      console.error('切换方向后自动排序失败:', e)
     }
+    setIsLayouting(false)
   }
 
   // 清空画布（带二次确认）
@@ -459,15 +469,15 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
           onClick={handleClearCanvas}
           className="flex items-center gap-2 px-4 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover"
           style={{
-            background: confirmClear ? '#9b3a3a' : 'var(--white)',
-            border: `1px solid ${confirmClear ? '#9b3a3a' : 'var(--gray-100)'}`,
-            color: confirmClear ? '#fafafa' : 'var(--dark)',
+            background: confirmClear ? 'var(--severity-critical)' : 'var(--surface)',
+            border: `1px solid ${confirmClear ? 'var(--severity-critical)' : 'var(--border-subtle)'}`,
+            color: confirmClear ? '#fff' : 'var(--text-secondary)',
           }}
-          onMouseEnter={(e) => { if (!confirmClear) e.currentTarget.style.borderColor = '#9b3a3a' }}
-          onMouseLeave={(e) => { if (!confirmClear) e.currentTarget.style.borderColor = 'var(--gray-100)' }}
+          onMouseEnter={(e) => { if (!confirmClear) e.currentTarget.style.borderColor = 'var(--severity-critical)' }}
+          onMouseLeave={(e) => { if (!confirmClear) e.currentTarget.style.borderColor = 'var(--border-subtle)' }}
           title={confirmClear ? '再点一次确认清空' : '清空画布所有节点和连线（不可撤销）'}
         >
-          <svg className="w-4 h-4" style={{ color: confirmClear ? '#fafafa' : '#9b3a3a' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" style={{ color: confirmClear ? '#fff' : 'var(--severity-critical)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
           <span className="text-xs font-medium">{confirmClear ? '再点确认' : '清空'}</span>

@@ -47,7 +47,7 @@ export default function LoopStatusBar({ onOpenAdvanced }) {
   // 是否已收敛：当前 delta < exitDelta 且 round > 0
   const isConverged = currentRound > 0 && lastDelta > 0 && lastDelta < exitDelta;
   const statusText = isConverged ? '收敛' : '继续';
-  const statusColor = isConverged ? '#c8a882' : '#888';
+  const statusColor = isConverged ? 'var(--accent)' : 'var(--text-faint)';
 
   // 显示百分比的 delta（exitDelta 是 0-1 小数，乘 100 显示）
   const deltaPct = (lastDelta * 100).toFixed(2);
@@ -59,13 +59,13 @@ export default function LoopStatusBar({ onOpenAdvanced }) {
         alignItems: 'center',
         gap: '16px',
         padding: '10px 24px',
-        background: 'rgba(250, 250, 250, 0.85)',
+        background: 'var(--surface)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        borderTop: '1px solid #e8e8e8',
+        borderTop: '1px solid var(--border-subtle)',
         fontFamily: '"Noto Sans SC", system-ui, sans-serif',
         fontSize: '0.78rem',
-        color: '#555',
+        color: 'var(--text-muted)',
         userSelect: 'none',
       }}
     >
@@ -86,20 +86,20 @@ export default function LoopStatusBar({ onOpenAdvanced }) {
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            background: isRunning ? '#c8a882' : '#bbb',
+            background: isRunning ? 'var(--accent)' : 'var(--text-faint)',
             transition: 'background 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
           }}
         />
         <span style={{ letterSpacing: '0.1em' }}>
           Round{' '}
-          <span style={{ color: '#1a1a1a', fontWeight: 500 }}>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
             {currentRound}/{maxRounds}
           </span>
         </span>
-        <span style={{ color: '#bbb' }}>·</span>
+        <span style={{ color: 'var(--text-faint)' }}>·</span>
         <span style={{ letterSpacing: '0.1em' }}>
           Δ={' '}
-          <span style={{ color: '#1a1a1a', fontWeight: 500 }}>{deltaPct}%</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{deltaPct}%</span>
         </span>
       </div>
 
@@ -108,7 +108,7 @@ export default function LoopStatusBar({ onOpenAdvanced }) {
         style={{
           flex: 1,
           height: '2px',
-          background: '#e8e8e8',
+          background: 'var(--border-subtle)',
           position: 'relative',
           overflow: 'hidden',
         }}
@@ -117,7 +117,7 @@ export default function LoopStatusBar({ onOpenAdvanced }) {
           style={{
             height: '100%',
             width: `${progressPct}%`,
-            background: '#c8a882',
+            background: 'var(--accent)',
             transition: 'width 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
           }}
         />
@@ -158,20 +158,20 @@ export default function LoopStatusBar({ onOpenAdvanced }) {
             alignItems: 'center',
             justifyContent: 'center',
             background: 'transparent',
-            border: '1px solid #e8e8e8',
+            border: '1px solid var(--border-subtle)',
             borderRadius: '4px',
             cursor: 'pointer',
-            color: '#555',
+            color: 'var(--text-muted)',
             transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
             padding: 0,
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = '#c8a882';
-            e.currentTarget.style.color = '#c8a882';
+            e.currentTarget.style.borderColor = 'var(--accent)';
+            e.currentTarget.style.color = 'var(--accent)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = '#e8e8e8';
-            e.currentTarget.style.color = '#555';
+            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+            e.currentTarget.style.color = 'var(--text-muted)';
           }}
         >
           {/* 齿轮 SVG */}

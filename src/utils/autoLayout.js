@@ -105,6 +105,10 @@ export function autoLayout(nodes, edges, {
 
   dagre.layout(g)
 
+  // 横排时连线从节点右侧出 / 左侧入; 竖排时从底部出 / 顶部入
+  const sourcePosition = direction === 'LR' ? 'right' : 'bottom'
+  const targetPosition = direction === 'LR' ? 'left' : 'top'
+
   // dagre 返回的是节点中心点, react-flow 需要左上角
   return nodes.map((n) => {
     const dn = g.node(n.id)
@@ -116,6 +120,8 @@ export function autoLayout(nodes, edges, {
         x: Math.round(dn.x - width / 2),
         y: Math.round(dn.y - height / 2),
       },
+      sourcePosition,
+      targetPosition,
     }
   })
 }
@@ -188,9 +194,13 @@ export function categorizedLayout(nodes, {
     })
   }
 
+  // 横排连线右出 / 左入; 竖排底出 / 顶入 — 与 dagre 路径保持一致
+  const sourcePosition = direction === 'LR' ? 'right' : 'bottom'
+  const targetPosition = direction === 'LR' ? 'left' : 'top'
+
   return nodes.map((n) => {
     const p = idToPos.get(n.id)
-    return p ? { ...n, position: p } : n
+    return p ? { ...n, position: p, sourcePosition, targetPosition } : n
   })
 }
 

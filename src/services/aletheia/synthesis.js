@@ -65,16 +65,31 @@ function parseLLMJson(raw) {
   }
 }
 
+// 成本偏置：根据 costWeight ∈ [0,1] 决定 actionItem 排序倾向
+// 0.0~0.3 偏效果不计成本 / 0.3~0.6 中性 / 0.6~1.0 偏低成本
+function describeCostBias(costWeight) {
+  if (typeof costWeight !== 'number' || Number.isNaN(costWeight)) return null
+  if (costWeight >= 0.6) {
+    return `【成本偏好 cw=${costWeight.toFixed(2)}】用户已多次反馈"贵了": 在 actionItems 里把"低成本/高 ROI"的条目排在 P0/P1, 主动提出可降本的替代方案 (例如复用现有资产/小步试跑/低预算 MVP), 删减昂贵的并行实验.`
+  }
+  if (costWeight <= 0.3) {
+    return `【成本偏好 cw=${costWeight.toFixed(2)}】用户已多次反馈"值这个价": 在 actionItems 里把"出效果优先"的条目排在 P0/P1, 不要因成本顾虑稀释方案锋芒, 该上 high-touch / high-quality 的工序就上.`
+  }
+  return null
+}
+
 /**
  * 共识综合主函数
  * @param {Array} nodes - 当前画布节点（含 proposer + refuter）
  * @param {Array} edges - 节点之间的关系
  * @param {{ logic: number, compliance: number, business: number }} weights - 三维度权重
+ * @param {{ taskId?: string, costWeight?: number }} meta - 可选, taskId 用于 cost 事件归属, costWeight 用于成本偏置
  * @returns {Promise<{ actionPlan: string, healthScore: number, summary: string, ts: number }>}
  */
-export async function synthesize(nodes = [], edges = [], weights = { logic: 1, compliance: 1, business: 1 }) {
+export async function synthesize(nodes = [], edges = [], weights = { logic: 1, compliance: 1, business: 1 }, meta = {}) {
   const ts = Date.now()
   const { proposers, refuters, links } = compactGraph(nodes, edges)
+  const costBiasLine = describeCostBias(meta.costWeight)
 
   // 没东西可综合的情况
   if (proposers.length === 0 && refuters.length === 0) {
@@ -132,6 +147,7 @@ export async function synthesize(nodes = [], edges = [], weights = { logic: 1, c
     '',
     '硬要求: actionItems 必须 3-5 条, 必须含 priority/action/owner/deadline/validation 五个字段, 不能为空.',
     'risks 必须 2-4 条, 直接对应反驳节点中最严重的反驳点.',
+    ...(costBiasLine ? ['', costBiasLine] : []),
   ].join('\n')
 
   let actionItems = []
@@ -141,12 +157,15 @@ export async function synthesize(nodes = [], edges = [], weights = { logic: 1, c
   let healthHint = null
 
   try {
-    const raw = await callLLM({
-      system,
-      prompt: userPrompt,
-      temperature: 0.4,
-      jsonMode: true,
-    })
+    const raw = await callLLM(
+      {
+        system,
+        prompt: userPrompt,
+        temperature: 0.4,
+        jsonMode: true,
+      },
+      { taskId: meta.taskId || 'aletheia.synthesize', stage: 'aletheia.synthesize' }
+    )
     const parsed = parseLLMJson(raw)
     if (parsed) {
       summary = parsed.summary || summary

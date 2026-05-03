@@ -25,14 +25,14 @@ export default function ThresholdSliders() {
           appearance: none;
           width: 100%;
           height: 2px;
-          background: #e8e8e8;
+          background: var(--border-subtle);
           outline: none;
           border-radius: 1px;
           cursor: pointer;
         }
         .aletheia-range-2::-webkit-slider-runnable-track {
           height: 2px;
-          background: #e8e8e8;
+          background: var(--border-subtle);
           border-radius: 1px;
         }
         .aletheia-range-2::-webkit-slider-thumb {
@@ -42,9 +42,9 @@ export default function ThresholdSliders() {
           height: 14px;
           margin-top: -6px;
           border-radius: 50%;
-          background: #c8a882;
-          border: 2px solid #fafafa;
-          box-shadow: 0 0 0 1px #c8a882;
+          background: var(--accent);
+          border: 2px solid var(--surface);
+          box-shadow: 0 0 0 1px var(--accent);
           cursor: pointer;
           transition: transform 0.2s ease;
         }
@@ -53,16 +53,16 @@ export default function ThresholdSliders() {
         }
         .aletheia-range-2::-moz-range-track {
           height: 2px;
-          background: #e8e8e8;
+          background: var(--border-subtle);
           border-radius: 1px;
         }
         .aletheia-range-2::-moz-range-thumb {
           width: 14px;
           height: 14px;
           border-radius: 50%;
-          background: #c8a882;
-          border: 2px solid #fafafa;
-          box-shadow: 0 0 0 1px #c8a882;
+          background: var(--accent);
+          border: 2px solid var(--surface);
+          box-shadow: 0 0 0 1px var(--accent);
           cursor: pointer;
         }
       `}</style>
@@ -74,7 +74,7 @@ export default function ThresholdSliders() {
             className="text-xs uppercase"
             style={{
               letterSpacing: '0.15em',
-              color: '#555',
+              color: 'var(--text-muted)',
               fontFamily: 'Noto Sans SC, system-ui, sans-serif',
             }}
           >
@@ -83,7 +83,7 @@ export default function ThresholdSliders() {
           <span
             className="text-sm tabular-nums"
             style={{
-              color: '#1a1a1a',
+              color: 'var(--text-primary)',
               fontFamily: 'Noto Serif SC, Georgia, serif',
             }}
           >
@@ -99,7 +99,7 @@ export default function ThresholdSliders() {
           value={maxRounds}
           onChange={(e) => setMaxRounds && setMaxRounds(Number(e.target.value))}
         />
-        <span className="text-[11px]" style={{ color: '#888' }}>
+        <span className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
           推荐 5 轮
         </span>
       </div>
@@ -111,7 +111,7 @@ export default function ThresholdSliders() {
             className="text-xs uppercase"
             style={{
               letterSpacing: '0.15em',
-              color: '#555',
+              color: 'var(--text-muted)',
               fontFamily: 'Noto Sans SC, system-ui, sans-serif',
             }}
           >
@@ -120,7 +120,7 @@ export default function ThresholdSliders() {
           <span
             className="text-sm tabular-nums"
             style={{
-              color: '#1a1a1a',
+              color: 'var(--text-primary)',
               fontFamily: 'Noto Serif SC, Georgia, serif',
             }}
           >
@@ -140,7 +140,7 @@ export default function ThresholdSliders() {
             if (setExitDelta) setExitDelta(Math.max(0.005, Math.min(0.1, pct / 100)));
           }}
         />
-        <span className="text-[11px]" style={{ color: '#888' }}>
+        <span className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
           推荐 1%
         </span>
       </div>
@@ -149,8 +149,8 @@ export default function ThresholdSliders() {
       <div
         className="mt-1 pt-3 text-[11px] leading-relaxed"
         style={{
-          borderTop: '1px solid #e8e8e8',
-          color: '#888',
+          borderTop: '1px solid var(--border-subtle)',
+          color: 'var(--text-faint)',
           fontFamily: 'Noto Sans SC, system-ui, sans-serif',
         }}
       >

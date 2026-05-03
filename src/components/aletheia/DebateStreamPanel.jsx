@@ -6,7 +6,7 @@ import { useAletheiaStore } from '../../stores/useAletheiaStore';
 const ROLE_META = {
   PROPOSER: { color: '#3a6ea5', bg: 'rgba(58,110,165,0.08)', label: 'PROPOSER' },
   REFUTER: { color: '#b27c8b', bg: 'rgba(178,124,139,0.08)', label: 'REFUTER' },
-  SUPERVISOR: { color: '#c8a882', bg: 'rgba(200,168,130,0.10)', label: 'SUPERVISOR' },
+  SUPERVISOR: { color: 'var(--accent)', bg: 'rgba(200,168,130,0.10)', label: 'SUPERVISOR' },
   SYNTHESIS: { color: '#a07cb8', bg: 'rgba(160,124,184,0.10)', label: 'SYNTHESIS' },
 };
 
@@ -21,9 +21,9 @@ function formatTs(ts) {
 
 // 取角色 meta，未知角色 fallback 灰色
 function getRoleMeta(role) {
-  if (!role) return { color: '#888', bg: 'rgba(136,136,136,0.08)', label: 'AGENT' };
+  if (!role) return { color: 'var(--text-faint)', bg: 'rgba(136,136,136,0.08)', label: 'AGENT' };
   const upper = String(role).toUpperCase();
-  return ROLE_META[upper] || { color: '#888', bg: 'rgba(136,136,136,0.08)', label: upper };
+  return ROLE_META[upper] || { color: 'var(--text-faint)', bg: 'rgba(136,136,136,0.08)', label: upper };
 }
 
 // 单条弹幕项 - 处理首次渲染滑入动画
@@ -63,7 +63,7 @@ function StreamItem({ item, isNew }) {
         >
           {meta.label}
         </span>
-        <span style={{ fontSize: '10px', color: '#bbb', fontFamily: 'Georgia, serif' }}>
+        <span style={{ fontSize: '10px', color: 'var(--text-faint)', fontFamily: 'Georgia, serif' }}>
           {formatTs(item.ts)}
         </span>
       </div>
@@ -71,7 +71,7 @@ function StreamItem({ item, isNew }) {
         style={{
           fontSize: '12px',
           lineHeight: 1.55,
-          color: '#3a3a3a',
+          color: 'var(--text-secondary)',
           display: '-webkit-box',
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
@@ -127,10 +127,10 @@ export default function DebateStreamPanel() {
         left: 0,
         bottom: 0,
         width: '320px',
-        background: 'rgba(250,250,250,0.92)',
+        background: 'var(--surface)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        borderRight: '1px solid #e8e8e8',
+        borderRight: '1px solid var(--border-subtle)',
         display: 'flex',
         flexDirection: 'column',
         zIndex: 30,
@@ -138,14 +138,14 @@ export default function DebateStreamPanel() {
       }}
     >
       {/* 顶部 */}
-      <div style={{ padding: '20px 20px 14px', borderBottom: '1px solid #e8e8e8' }}>
+      <div style={{ padding: '20px 20px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <div>
             <div
               style={{
                 fontFamily: '"Noto Serif SC", Georgia, serif',
                 fontSize: '18px',
-                color: '#1a1a1a',
+                color: 'var(--text-primary)',
                 letterSpacing: '0.05em',
               }}
             >
@@ -156,7 +156,7 @@ export default function DebateStreamPanel() {
                 marginTop: '4px',
                 width: '32px',
                 height: '1px',
-                background: '#c8a882',
+                background: 'var(--accent)',
               }}
             />
           </div>
@@ -164,7 +164,7 @@ export default function DebateStreamPanel() {
             style={{
               fontSize: '10px',
               letterSpacing: '0.25em',
-              color: '#888',
+              color: 'var(--text-faint)',
             }}
           >
             ROUND {round}
@@ -184,7 +184,7 @@ export default function DebateStreamPanel() {
           <div
             style={{
               fontSize: '12px',
-              color: '#bbb',
+              color: 'var(--text-faint)',
               textAlign: 'center',
               marginTop: '40px',
               fontStyle: 'italic',
@@ -203,7 +203,7 @@ export default function DebateStreamPanel() {
       </div>
 
       {/* 底部清空按钮 */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid #e8e8e8' }}>
+      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)' }}>
         <button
           onClick={() => {
             if (typeof clearDebate === 'function') clearDebate();
@@ -214,9 +214,9 @@ export default function DebateStreamPanel() {
             padding: '8px 12px',
             fontSize: '11px',
             letterSpacing: '0.25em',
-            color: reversed.length === 0 ? '#bbb' : '#555',
+            color: reversed.length === 0 ? 'var(--text-faint)' : 'var(--text-muted)',
             background: 'transparent',
-            border: '1px solid #e8e8e8',
+            border: '1px solid var(--border-subtle)',
             borderRadius: '2px',
             cursor: !clearDebate || reversed.length === 0 ? 'not-allowed' : 'pointer',
             transition: 'all 0.3s cubic-bezier(0.22,1,0.36,1)',
@@ -224,12 +224,12 @@ export default function DebateStreamPanel() {
           }}
           onMouseEnter={(e) => {
             if (reversed.length === 0) return;
-            e.currentTarget.style.borderColor = '#c8a882';
-            e.currentTarget.style.color = '#c8a882';
+            e.currentTarget.style.borderColor = 'var(--accent)';
+            e.currentTarget.style.color = 'var(--accent)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = '#e8e8e8';
-            e.currentTarget.style.color = reversed.length === 0 ? '#bbb' : '#555';
+            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+            e.currentTarget.style.color = reversed.length === 0 ? 'var(--text-faint)' : 'var(--text-muted)';
           }}
         >
           清空

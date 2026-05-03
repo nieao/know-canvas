@@ -13,6 +13,12 @@ import {
 } from 'reactflow'
 import { fetchLinkMetadata, detectVideoUrl } from '../utils/linkPreview'
 
+// 元认知 5 步顺序 (与 services/metaCognitiveExecutor STEP_DEFS 同步, 避免循环 import)
+const META_STEP_ORDER = ['intent', 'decompose', 'execute', 'reflect', 'synthesize']
+function getStepIdByIndex(idx) {
+  return META_STEP_ORDER[idx] || META_STEP_ORDER[0]
+}
+
 // 知识关系类型
 export const RELATION_TYPES = {
   RELATED: { id: 'related', label: 'Related', labelCn: '相关', color: '#6b7280', style: 'dashed' },
@@ -119,18 +125,25 @@ const useCanvasStore = create(
       },
 
       // 一键应用自动布局 — SaveExportToolbar "排序" 按钮调这个
-      // 内部按 layoutDirection 走 dagre (有边) 或分类 (无边)
+      // 横排(LR): 边 sourceHandle='right' / targetHandle='left' (节点上有命名 handle)
+      // 竖排(TB): 清空 sourceHandle/targetHandle, react-flow 用节点 default top/bottom handle
       applyAutoLayout: async () => {
         const { nodes, edges, layoutDirection } = get()
         if (!nodes || nodes.length === 0) {
           return { count: 0, direction: layoutDirection }
         }
-        // 动态 import 避免首屏拖慢 (dagre ~50KB)
         const mod = await import('../utils/autoLayout')
-        const next = mod.smartLayout(nodes, edges, { direction: layoutDirection })
-        // 用 setNodes 触发 yjsSync (push 不触发引用变化)
-        set({ nodes: next })
-        return { count: next.length, direction: layoutDirection }
+        const nextNodes = mod.smartLayout(nodes, edges, { direction: layoutDirection })
+        const isLR = layoutDirection === 'LR'
+        const nextEdges = (edges || []).map((e) => {
+          const { sourceHandle: _sh, targetHandle: _th, ...rest } = e
+          if (isLR) {
+            return { ...rest, sourceHandle: 'right', targetHandle: 'left' }
+          }
+          return rest
+        })
+        set({ nodes: nextNodes, edges: nextEdges })
+        return { count: nextNodes.length, direction: layoutDirection }
       },
 
       // 筛选状态
@@ -761,12 +774,82 @@ const useCanvasStore = create(
         })
       },
 
-      // 本地任务 — 删除
+      // 本地任务 — 删除 (附带删掉它派生的所有 metaStepNode + 连边)
       removeLocalTask: (nodeId, taskId) => {
         set((state) => {
           const node = state.nodes.find((n) => n.id === nodeId)
           if (!node || !Array.isArray(node.data.localTasks)) return
           node.data.localTasks = node.data.localTasks.filter((t) => t.id !== taskId)
+          // 清理元认知步骤节点
+          state.nodes = state.nodes.filter((n) => !(n.type === 'metaStepNode' && n.data?.taskId === taskId))
+          state.edges = state.edges.filter((e) =>
+            !state.nodes.every((n) => n.id !== e.source) &&
+            !state.nodes.every((n) => n.id !== e.target)
+          )
+        })
+      },
+
+      // 元认知步骤节点 — 在源节点下方添加一个 pending 占位 (5 步串成一列)
+      // 入参: { sourceNodeId, taskId, stepId, index, label, icon, en }
+      // 返回新节点 id
+      addMetaStepNode: ({ sourceNodeId, taskId, stepId, index, label, icon, en }) => {
+        const id = `meta-${taskId}-${stepId}`
+        let pos = { x: 100, y: 100 }
+        // 用 get() 而不是 set 内部读, 避免 immer draft 引用混淆
+        const src = get().nodes.find((n) => n.id === sourceNodeId)
+        if (src) {
+          // 5 步阶梯布局: 横向往右每步 +260, 纵向小幅下降 +80, 整体形成
+          // ↘ 流向, 紧凑且能看到所有 5 步在一屏内 (5 * 260 = 1300px 宽, 4 * 80 = 320px 高)
+          pos = {
+            x: (src.position?.x ?? 100) + 320 + index * 260,
+            y: (src.position?.y ?? 100) + index * 80,
+          }
+        }
+        set((state) => {
+          // 防重复 (同 stepId+taskId 已存在则跳过)
+          if (state.nodes.some((n) => n.id === id)) return
+          state.nodes.push({
+            id,
+            type: 'metaStepNode',
+            position: pos,
+            data: {
+              taskId,
+              stepId,
+              index,
+              label,
+              icon,
+              en,
+              status: 'pending',
+              output: null,
+              error: null,
+              startedAt: null,
+              finishedAt: null,
+              durationMs: 0,
+            },
+          })
+          // 连边: 第一步连源节点; 后续连上一步
+          const sourceForEdge = index === 0
+            ? sourceNodeId
+            : `meta-${taskId}-${getStepIdByIndex(index - 1)}`
+          state.edges.push({
+            id: `edge-meta-${taskId}-${index}`,
+            source: sourceForEdge,
+            target: id,
+            type: 'smoothstep',
+            label: index === 0 ? '元认知' : `${index + 1}/5`,
+            data: { relationType: '元认知' },
+            style: { stroke: '#a07cb8', strokeWidth: 1.2, strokeDasharray: '4 4', opacity: 0.7 },
+          })
+        })
+        return id
+      },
+
+      // 元认知步骤节点 — 更新状态 (patch merge 到 data)
+      updateMetaStepNodeStatus: (stepNodeId, patch) => {
+        set((state) => {
+          const node = state.nodes.find((n) => n.id === stepNodeId)
+          if (!node || node.type !== 'metaStepNode') return
+          Object.assign(node.data, patch)
         })
       },
 

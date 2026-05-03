@@ -10,6 +10,7 @@ import { getScenarioPrompt, SCENARIOS } from './scenarios'
 import { synthesize } from './synthesis'
 import useAletheiaStore from '../../stores/useAletheiaStore'
 import useCanvasStore from '../../stores/useCanvasStore'
+import { saveCurrentCanvasAsProject } from '../projectLibraryActions'
 
 const PROPOSER_TYPES = new Set(['conceptNode', 'taskNode', 'ontologyNode'])
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -96,9 +97,14 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
     + getPersonaPrompt(personaId, '请按下文要求对画布提议进行反驳, 严格输出 JSON 数组.')
 
   // 3) 调 LLM (强制真跑, 不再 mock 兜底 — 失败/空就直接报错让用户看到)
+  // cycleId 用于把这一轮全部 LLM 调用归到同一个任务下供 cost 面板分析
+  const cycleId = `aletheia-${Date.now().toString(36)}`
   let challenges = []
   try {
-    const raw = await callLLM({ system: systemPrompt, prompt: userPrompt, temperature: 0.6, jsonMode: true })
+    const raw = await callLLM(
+      { system: systemPrompt, prompt: userPrompt, temperature: 0.6, jsonMode: true },
+      { taskId: cycleId, stage: 'aletheia.challenge' }
+    )
     challenges = parseJsonArray(raw)
   } catch (err) {
     const msg = `LLM 调用失败: ${err.message || err}`
@@ -176,8 +182,10 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
   // 5) 综合
   emit({ stage: 'synthesize', message: '综合反驳与提议, 产出 Action Plan...' })
   const cur = snap()
+  // 把当前 costWeight 注入到 synthesize, 让综合官按用户已反馈的成本偏好排序 actionItems
+  const costWeight = typeof ales.costWeight === 'number' ? ales.costWeight : 0.5
   let r
-  try { r = await synthesize(cur.nodes, cur.edges, weights) }
+  try { r = await synthesize(cur.nodes, cur.edges, weights, { taskId: cycleId, costWeight }) }
   catch (err) { r = { actionPlan: `综合调用异常: ${err.message || err}`, summary: '综合失败', healthScore: 50, ts: Date.now() } }
 
   // 6) 加 SynthesisNode + 把 proposer/challenge 都连过来
@@ -221,5 +229,22 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
     stage: 'done', healthScore: r.healthScore, summary: r.summary,
     message: `本轮完成 · HealthScore=${r.healthScore} · ${r.summary || ''}`.trim(),
   })
+
+  // Aletheia cycle 完成 — 自动保存当前画布到项目库
+  // (失败不抛, 不影响主流程)
+  try {
+    const summarySeed = String(r.summary || '推导').replace(/\s+/g, ' ').trim()
+    const titleSeed = summarySeed.slice(0, 30) || '推导'
+    saveCurrentCanvasAsProject({
+      title: `Aletheia · ${titleSeed}`,
+      summary: summarySeed.slice(0, 200),
+      healthScore: r.healthScore,
+      taskId: cycleId,
+      source: 'aletheia',
+    })
+  } catch (err) {
+    console.warn('[aletheia] 项目库自动保存失败:', err?.message || err)
+  }
+
   return { ok: true, healthScore: r.healthScore, challengeCount: newChallengeIds.length }
 }

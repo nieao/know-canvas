@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import useCanvasStore from '../../stores/useCanvasStore'
 import { routeTask } from '../../services/taskRouter'
-import { runLocalTask } from '../../services/localTaskExecutor'
+import { runMetaCognitiveTask } from '../../services/metaCognitiveExecutor'
 import { logAction } from '../../utils/actionLog'
 
 // 关系类型选项
@@ -468,12 +468,12 @@ const STATUS_META = {
 }
 
 // 共享样式常量（避免重复 inline）
-const S_LABEL = { fontSize: '0.7rem', letterSpacing: '0.25em', color: 'var(--gray-500)', textTransform: 'uppercase', marginBottom: '12px' }
-const S_TEXTAREA = { width: '100%', border: '1px solid #e8e8e8', borderRadius: '4px', padding: '12px', fontSize: '12px', minHeight: '80px', resize: 'vertical', color: 'var(--dark)', fontFamily: 'var(--font-sans, system-ui)', outline: 'none' }
-const S_BTN_PRIMARY = { padding: '6px 16px', fontSize: '12px', border: '1px solid var(--warm)', color: 'var(--warm)', borderRadius: '4px', background: 'transparent', transition: 'all 0.3s' }
-const S_BTN_GHOST = { padding: '6px 16px', fontSize: '12px', border: '1px solid var(--gray-100)', color: 'var(--gray-500)', borderRadius: '4px', background: 'transparent' }
-const S_PRE = { marginTop: '6px', fontSize: '11px', color: 'var(--gray-700)', background: '#fafafa', border: '1px solid var(--gray-100)', padding: '8px', borderRadius: '3px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-sans, system-ui)', maxHeight: '300px', overflowY: 'auto' }
-const S_DOT = { color: '#e8e8e8' }
+const S_LABEL = { fontSize: '0.7rem', letterSpacing: '0.25em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '12px' }
+const S_TEXTAREA = { width: '100%', border: '1px solid var(--border-subtle)', borderRadius: '4px', padding: '12px', fontSize: '12px', minHeight: '80px', resize: 'vertical', color: 'var(--text-secondary)', background: 'var(--surface)', fontFamily: 'var(--font-sans, system-ui)', outline: 'none' }
+const S_BTN_PRIMARY = { padding: '6px 16px', fontSize: '12px', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: '4px', background: 'transparent', transition: 'all 0.3s' }
+const S_BTN_GHOST = { padding: '6px 16px', fontSize: '12px', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', borderRadius: '4px', background: 'transparent' }
+const S_PRE = { marginTop: '6px', fontSize: '11px', color: 'var(--text-secondary)', background: 'var(--surface-soft, var(--accent-bg))', border: '1px solid var(--border-subtle)', padding: '8px', borderRadius: '3px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-sans, system-ui)', maxHeight: '300px', overflowY: 'auto' }
+const S_DOT = { color: 'var(--border-subtle)' }
 
 function LocalTaskSection({ node }) {
   const [prompt, setPrompt] = useState('')
@@ -497,7 +497,9 @@ function LocalTaskSection({ node }) {
     setPrompt('')
 
     if (r.target === 'local') {
-      runLocalTask({
+      // 'local' 在新架构下 = 元认知 skill 5 步工作流, 每一步在画布上长出 metaStepNode,
+      // 当前 running 节点带脉冲 + 流光动画
+      runMetaCognitiveTask({
         nodeId: node.id, taskId, prompt: text,
         onUpdate: (patch) => updateLocalTaskStatus(node.id, taskId, patch),
       })
@@ -536,7 +538,12 @@ function LocalTaskSection({ node }) {
 
   return (
     <div>
-      <div style={S_LABEL}>本地任务</div>
+      <div style={S_LABEL}>元认知任务</div>
+      <div style={{ fontSize: '10px', color: 'var(--gray-500)', marginBottom: '8px', lineHeight: 1.55 }}>
+        🧠 意图 → 🔧 拆解 → ⚡ 执行 → 🔍 反思 → ✨ 综合
+        <br/>
+        <span style={{ color: 'var(--gray-300)' }}>(走 5 步画布节点流, 当前节点有动态效果)</span>
+      </div>
 
       {/* 输入区 */}
       <textarea
@@ -545,7 +552,7 @@ function LocalTaskSection({ node }) {
         placeholder="写下要做什么..."
         style={S_TEXTAREA}
         onFocus={(e) => (e.target.style.borderColor = 'var(--warm)')}
-        onBlur={(e) => (e.target.style.borderColor = '#e8e8e8')}
+        onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle)')}
       />
       {route && (
         <p style={{ fontSize: '11px', marginTop: '8px', color: route.target === 'hermes' ? 'var(--warm)' : '#888' }}>
@@ -591,7 +598,7 @@ function LocalTaskSection({ node }) {
                 <span style={{ color: meta.color, fontSize: '12px', animation: t.status === 'running' ? 'pulse 1.5s ease-in-out infinite' : 'none' }}>{meta.icon}</span>
                 <span>{formatRelativeTime(t.createdAt)}</span>
                 <span style={S_DOT}>·</span>
-                <span style={{ color: t.target === 'hermes' ? 'var(--warm)' : '#888' }}>{t.target === 'hermes' ? 'Hermes' : '本地'}</span>
+                <span style={{ color: t.target === 'hermes' ? 'var(--warm)' : '#888' }}>{t.target === 'hermes' ? 'Hermes' : '元认知'}</span>
                 {dur && (<><span style={S_DOT}>·</span><span>{dur}</span></>)}
                 {t.status === 'failed' && (<><span style={S_DOT}>·</span><span style={{ color: '#d27b7b' }}>失败</span></>)}
                 <button
@@ -607,7 +614,7 @@ function LocalTaskSection({ node }) {
 
               {/* 错误信息 */}
               {t.status === 'failed' && t.error && (
-                <p style={{ marginTop: '4px', fontSize: '11px', color: '#d27b7b', background: '#fff5f5', padding: '6px 8px', borderRadius: '3px' }}>{t.error}</p>
+                <p style={{ marginTop: '4px', fontSize: '11px', color: 'var(--status-failed)', background: 'transparent', border: '1px solid var(--status-failed)', padding: '6px 8px', borderRadius: '3px' }}>{t.error}</p>
               )}
 
               {/* result 折叠/展开 */}

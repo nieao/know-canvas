@@ -372,10 +372,10 @@ test.describe('Know Canvas 全流程自测', () => {
       await page.locator('button:has-text("执行")').first().click({ force: true }).catch(() => {})
       await page.waitForTimeout(500)
 
-      // 在浏览器里轮询 30s 等任务终态（done/failed 都算"local executor 走通"）
+      // 在浏览器里轮询 90s 等任务终态 (元认知 5 步串行 LLM 调用, 通常 40-60s)
       const taskDone = await page.evaluate(async () => {
         const startedAt = Date.now()
-        while (Date.now() - startedAt < 30000) {
+        while (Date.now() - startedAt < 90000) {
           const s = window.__canvasStore?.getState?.()
           const ns = s?.nodes || []
           for (const n of ns) {
@@ -395,7 +395,7 @@ test.describe('Know Canvas 全流程自测', () => {
 
       passed = routeVisible && !!taskDone
       if (!routeVisible) issue = '"路由：本地/Hermes" 提示未出现 — 检查 routeTask + LocalTaskSection 文本渲染'
-      else if (!taskDone) issue = '任务 30s 内未结束（runLocalTask / claude-bridge 18080 未连通 / Hermes 17082 不可达）'
+      else if (!taskDone) issue = '任务 90s 内未结束 (元认知 5 步 LLM 调用 / claude-bridge 18080 未连通 / Hermes 17082 不可达)'
     } catch (err) {
       issue = `异常：${err.message}`
     }

@@ -1,7 +1,17 @@
 @import "tailwindcss";
 
-/* 建筑极简设计系统 — Design Tokens */
+/* 建筑极简设计系统 — Design Tokens
+ *
+ * 三层 token 架构 (设计库通用做法):
+ *   1. Primitive — 原子色 (--black, --gray-100, --warm 等), 跟随主题反色
+ *   2. Semantic  — 语义色 (--surface, --text-primary, --severity-high 等), 给组件用
+ *   3. Component — 组件局部定义, 不在这里
+ *
+ * 加新颜色: 优先扩展 semantic 层, 不要让组件直接引 primitive
+ * 各主题 (blackgold / cyberpunk / macaron) 通过覆盖 primitive 自动重映射 semantic
+ */
 :root {
+  /* === Primitive (原子色) === */
   --black: #1a1a1a;
   --dark: #2d2d2d;
   --gray-900: #3a3a3a;
@@ -13,6 +23,32 @@
   --warm: #c8a882;
   --warm-light: #e8d5c0;
   --warm-bg: #f5f0eb;
+
+  /* === Semantic (组件接口色) ===
+   * 节点和卡片只引这一层, 主题覆盖只动 primitive 即可全局生效 */
+  --surface:           var(--white);    /* 卡片底色 (深色主题自动变深) */
+  --surface-elevated:  #ffffff;          /* 浮起的卡片 (白主题下纯白比 #fafafa 更"浮") */
+  --surface-soft:      var(--warm-bg);   /* running 状态的暖色烘托底 */
+  --text-primary:      var(--black);     /* 主要标题文字 */
+  --text-secondary:    var(--dark);      /* 正文 */
+  --text-muted:        var(--gray-500);  /* 次要信息 (时间/分类标签) */
+  --text-faint:        var(--gray-300);  /* 占位/弱化 */
+  --border-subtle:     var(--gray-100);  /* 浅边框 */
+  --border-strong:     var(--gray-300);
+  --divider:           var(--gray-100);  /* 分割线 */
+  --accent:            var(--warm);      /* 强调色 (= 暖色) */
+  --accent-soft:       var(--warm-light);
+  --accent-bg:         var(--warm-bg);
+
+  /* 严重度色 — 4 套主题各自在覆盖块里调亮以适配深底 */
+  --severity-critical: #9b3a4c;
+  --severity-high:     #b27c8b;
+  --severity-medium:   var(--warm);
+  --severity-low:      var(--gray-500);
+  --status-running:    var(--warm);
+  --status-done:       var(--warm);
+  --status-failed:     #d27b7b;
+  --status-success:    #5a8a5a;
 
   --font-serif: "Noto Serif SC", Georgia, serif;
   --font-sans: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;

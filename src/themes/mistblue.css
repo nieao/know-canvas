@@ -1,0 +1,137 @@
+/* 极简 02 · 雾蓝 (Mist Blue) — 适用于 .theme-mistblue body 子树
+ * 浅雾蓝底 + 钢蓝细线, 跟黑金 02 形成冷暖对照: 黑金=温暖东方, 雾蓝=冷峻克制
+ * 通过覆盖 :root primitive 让 semantic tokens 自动重映射
+ */
+
+.theme-mistblue {
+  /* 主体保留深色文字, 反差弱化 (蓝灰偏移) */
+  --black: #1a2532;        /* 墨蓝主文字 */
+  --dark: #2d3a4a;
+  --gray-900: #3a4858;
+  --gray-700: #56657a;
+  --gray-500: #8090a4;
+  --gray-300: #b0bcc8;
+  --gray-100: #d8e2ec;     /* 边框雾蓝 */
+  --white: #f6f8fa;        /* 背景蓝白 */
+
+  /* 暖色 → 钢蓝 (steel blue) */
+  --warm: #4a6e8a;
+  --warm-light: #7ba0bd;
+  --warm-bg: rgba(74, 110, 138, 0.08);
+
+  /* Semantic 层 — surface elevated 用纯白让卡片更"浮" */
+  --surface: #fdfeff;
+  --surface-elevated: #ffffff;
+  --surface-soft: rgba(74, 110, 138, 0.06);
+  --severity-critical: #6b3a52;
+  --severity-high: #876788;
+  --severity-medium: #4a6e8a;
+  --severity-low: #8090a4;
+
+  background: #f6f8fa;
+  color: #2d3a4a;
+}
+
+/* react-flow 画布背景 — 极淡蓝白 */
+.theme-mistblue .react-flow {
+  background: #f6f8fa;
+}
+.theme-mistblue .react-flow__renderer {
+  background: linear-gradient(180deg, #f6f8fa 0%, #eef2f6 100%);
+}
+.theme-mistblue .react-flow__background .react-flow__background-pattern {
+  color: #d8e2ec;
+}
+
+/* 连线 — 钢蓝 (比黑金的金色更冷峻) */
+.theme-mistblue .react-flow__edge-path {
+  stroke: #4a6e8a !important;
+  stroke-width: 1.2;
+}
+.theme-mistblue .react-flow__edge.selected .react-flow__edge-path,
+.theme-mistblue .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #7ba0bd !important;
+  stroke-width: 1.6;
+}
+.theme-mistblue .react-flow__edge-text {
+  fill: #4a6e8a;
+  font-weight: 500;
+}
+.theme-mistblue .react-flow__edge-textbg {
+  fill: #fdfeff;
+}
+
+/* 锚点 (handle) */
+.theme-mistblue .react-flow__handle {
+  background: #4a6e8a;
+  border: 1.5px solid #fdfeff;
+  width: 9px;
+  height: 9px;
+}
+
+/* 小地图 */
+.theme-mistblue .react-flow__minimap {
+  background: rgba(253, 254, 255, 0.95) !important;
+  border: 1px solid #d8e2ec !important;
+  border-radius: 4px;
+}
+.theme-mistblue .react-flow__minimap-mask {
+  fill: rgba(74, 110, 138, 0.12);
+}
+
+/* 控制按钮 */
+.theme-mistblue .react-flow__controls {
+  border: 1px solid #d8e2ec;
+  border-radius: 4px;
+  background: #fdfeff;
+}
+.theme-mistblue .react-flow__controls button {
+  background: #fdfeff;
+  color: #4a6e8a;
+  border-color: #d8e2ec;
+  fill: #4a6e8a;
+}
+.theme-mistblue .react-flow__controls button:hover {
+  background: rgba(74, 110, 138, 0.06);
+}
+
+/* 节点 — 白底 + 雾蓝细边 */
+.theme-mistblue .react-flow__node {
+  background: #fdfeff !important;
+  border: 1px solid #d8e2ec !important;
+  color: #2d3a4a;
+  box-shadow: 0 2px 8px rgba(74, 110, 138, 0.06);
+}
+.theme-mistblue .react-flow__node.selected,
+.theme-mistblue .react-flow__node:hover {
+  border-color: #4a6e8a !important;
+  box-shadow: 0 4px 16px rgba(74, 110, 138, 0.18);
+}
+
+/* 节点内部文字 */
+.theme-mistblue .react-flow__node h1,
+.theme-mistblue .react-flow__node h2,
+.theme-mistblue .react-flow__node h3,
+.theme-mistblue .react-flow__node h4 {
+  color: #1a2532;
+  font-weight: 500;
+}
+.theme-mistblue .react-flow__node p,
+.theme-mistblue .react-flow__node span {
+  color: #56657a;
+}
+
+/* 滚动条 — 冷雾蓝 */
+.theme-mistblue ::-webkit-scrollbar {
+  width: 5px;
+}
+.theme-mistblue ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.theme-mistblue ::-webkit-scrollbar-thumb {
+  background: #b0bcc8;
+  border-radius: 3px;
+}
+.theme-mistblue ::-webkit-scrollbar-thumb:hover {
+  background: #4a6e8a;
+}

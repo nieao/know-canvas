@@ -36,18 +36,24 @@ export default function PersonaSelector() {
             className={[
               'group relative w-full text-left',
               'px-5 py-4 transition-all duration-300',
-              'bg-white',
-              selected
-                ? 'border-2 border-[#c8a882]'
-                : 'border border-[#e8e8e8] hover:border-[#c8a882]',
             ].join(' ')}
-            style={{ cursor: 'pointer' }}
+            style={{
+              cursor: 'pointer',
+              background: 'var(--surface)',
+              border: selected ? '2px solid var(--accent)' : '1px solid var(--border-subtle)',
+            }}
+            onMouseEnter={(e) => {
+              if (!selected) e.currentTarget.style.borderColor = 'var(--accent)';
+            }}
+            onMouseLeave={(e) => {
+              if (!selected) e.currentTarget.style.borderColor = 'var(--border-subtle)';
+            }}
           >
             {/* 选中态: 顶部暖色细线 */}
             {selected && (
               <span
                 className="absolute left-0 top-0 h-[2px] w-full"
-                style={{ background: '#c8a882' }}
+                style={{ background: 'var(--accent)' }}
               />
             )}
             <div className="flex items-start gap-4">
@@ -56,7 +62,7 @@ export default function PersonaSelector() {
                 className="mt-1 flex h-8 w-8 flex-none items-center justify-center text-lg"
                 style={{
                   fontFamily: 'Noto Serif SC, Georgia, serif',
-                  color: selected ? '#c8a882' : '#888',
+                  color: selected ? 'var(--accent)' : 'var(--text-faint)',
                 }}
               >
                 {p.icon || '·'}
@@ -66,7 +72,7 @@ export default function PersonaSelector() {
                   className="text-base font-medium"
                   style={{
                     fontFamily: 'Noto Serif SC, Georgia, serif',
-                    color: selected ? '#1a1a1a' : '#2d2d2d',
+                    color: selected ? 'var(--text-primary)' : 'var(--text-secondary)',
                     letterSpacing: '0.02em',
                   }}
                 >
@@ -75,7 +81,7 @@ export default function PersonaSelector() {
                 <div
                   className="mt-1 text-xs leading-relaxed"
                   style={{
-                    color: '#888',
+                    color: 'var(--text-faint)',
                     fontFamily: 'Noto Sans SC, system-ui, sans-serif',
                   }}
                 >

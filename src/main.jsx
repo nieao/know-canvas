@@ -5,12 +5,15 @@ import './index.css'
 import './themes/blackgold.css'
 import './themes/cyberpunk.css'
 import './themes/macaron.css'
+import './themes/mistblue.css'
+import './themes/forest.css'
 import { attachConsoleBridge, pushLog } from './utils/logBus'
 
 // 启动时根据 localStorage 应用主题
 // 支持: default(白底) / blackgold(黑金) / cyberpunk(赛博朋克) / macaron(马卡龙Q版)
+//       / mistblue(雾蓝) / forest(森林苔影)
 const savedTheme = typeof window !== 'undefined' ? localStorage.getItem('know_canvas_theme') : null
-const THEME_CLASSES = ['theme-blackgold', 'theme-cyberpunk', 'theme-macaron']
+const THEME_CLASSES = ['theme-blackgold', 'theme-cyberpunk', 'theme-macaron', 'theme-mistblue', 'theme-forest']
 if (savedTheme && THEME_CLASSES.includes(`theme-${savedTheme}`)) {
   document.body.classList.add(`theme-${savedTheme}`)
 }

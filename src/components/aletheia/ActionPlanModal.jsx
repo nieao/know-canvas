@@ -22,7 +22,7 @@ function renderMarkdown(text) {
           margin: '0 0 12px',
           fontSize: '14px',
           lineHeight: 1.75,
-          color: '#3a3a3a',
+          color: 'var(--text-secondary)',
           whiteSpace: 'pre-wrap',
         }}
       >
@@ -42,7 +42,7 @@ function renderMarkdown(text) {
           style={{
             fontFamily: '"Noto Serif SC", Georgia, serif',
             fontSize: '18px',
-            color: '#1a1a1a',
+            color: 'var(--text-primary)',
             margin: '24px 0 10px',
             paddingBottom: '6px',
             borderBottom: '1px solid #e8e8e8',
@@ -61,7 +61,7 @@ function renderMarkdown(text) {
           style={{
             fontFamily: '"Noto Serif SC", Georgia, serif',
             fontSize: '22px',
-            color: '#1a1a1a',
+            color: 'var(--text-primary)',
             margin: '24px 0 12px',
             letterSpacing: '0.02em',
           }}
@@ -166,7 +166,7 @@ export default function ActionPlanModal({ open, onClose }) {
           width: '100%',
           maxWidth: '768px',
           maxHeight: '85vh',
-          background: '#fafafa',
+          background: 'var(--surface)',
           border: '1px solid #e8e8e8',
           borderRadius: '4px',
           boxShadow: '0 24px 60px rgba(0,0,0,0.18)',
@@ -181,7 +181,7 @@ export default function ActionPlanModal({ open, onClose }) {
         }}
       >
         {/* 顶部细线装饰 */}
-        <div style={{ height: '2px', background: '#c8a882' }} />
+        <div style={{ height: '2px', background: 'var(--accent)' }} />
 
         {/* 头部 */}
         <div
@@ -199,7 +199,7 @@ export default function ActionPlanModal({ open, onClose }) {
               style={{
                 fontSize: '10px',
                 letterSpacing: '0.35em',
-                color: '#c8a882',
+                color: 'var(--accent)',
                 marginBottom: '6px',
               }}
             >
@@ -210,7 +210,7 @@ export default function ActionPlanModal({ open, onClose }) {
                 margin: 0,
                 fontFamily: '"Noto Serif SC", Georgia, serif',
                 fontSize: '28px',
-                color: '#1a1a1a',
+                color: 'var(--text-primary)',
                 letterSpacing: '0.04em',
               }}
             >
@@ -221,7 +221,7 @@ export default function ActionPlanModal({ open, onClose }) {
                 style={{
                   marginTop: '10px',
                   fontSize: '13px',
-                  color: '#555',
+                  color: 'var(--text-muted)',
                   lineHeight: 1.6,
                   fontStyle: 'italic',
                 }}
@@ -247,7 +247,7 @@ export default function ActionPlanModal({ open, onClose }) {
                 style={{
                   fontSize: '9px',
                   letterSpacing: '0.3em',
-                  color: '#888',
+                  color: 'var(--text-faint)',
                   marginBottom: '2px',
                 }}
               >
@@ -257,7 +257,7 @@ export default function ActionPlanModal({ open, onClose }) {
                 style={{
                   fontFamily: '"Noto Serif SC", Georgia, serif',
                   fontSize: '28px',
-                  color: '#1a1a1a',
+                  color: 'var(--text-primary)',
                   lineHeight: 1,
                 }}
               >
@@ -281,7 +281,7 @@ export default function ActionPlanModal({ open, onClose }) {
             <div
               style={{
                 fontSize: '13px',
-                color: '#bbb',
+                color: 'var(--text-faint)',
                 textAlign: 'center',
                 padding: '40px 0',
                 fontStyle: 'italic',
@@ -309,9 +309,9 @@ export default function ActionPlanModal({ open, onClose }) {
               padding: '10px 24px',
               fontSize: '11px',
               letterSpacing: '0.25em',
-              color: actionPlan ? '#1a1a1a' : '#bbb',
+              color: actionPlan ? 'var(--text-primary)' : 'var(--text-faint)',
               background: 'transparent',
-              border: `1px solid ${actionPlan ? '#c8a882' : '#e8e8e8'}`,
+              border: `1px solid ${actionPlan ? 'var(--accent)' : 'var(--border-subtle)'}`,
               borderRadius: '2px',
               cursor: actionPlan ? 'pointer' : 'not-allowed',
               transition: 'all 0.3s cubic-bezier(0.22,1,0.36,1)',
@@ -333,8 +333,8 @@ export default function ActionPlanModal({ open, onClose }) {
               padding: '10px 24px',
               fontSize: '11px',
               letterSpacing: '0.25em',
-              color: '#fafafa',
-              background: '#1a1a1a',
+              color: 'var(--surface)',
+              background: 'var(--text-primary)',
               border: '1px solid #1a1a1a',
               borderRadius: '2px',
               cursor: 'pointer',
@@ -342,10 +342,10 @@ export default function ActionPlanModal({ open, onClose }) {
               fontFamily: 'inherit',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#2d2d2d';
+              e.currentTarget.style.background = 'var(--text-secondary)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#1a1a1a';
+              e.currentTarget.style.background = 'var(--text-primary)';
             }}
           >
             关闭

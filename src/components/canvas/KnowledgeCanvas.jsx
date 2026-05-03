@@ -33,6 +33,7 @@ import ResultNode from './ResultNode'
 import OntologyNode from './OntologyNode'
 import ChallengeNode from './ChallengeNode'
 import SynthesisNode from './SynthesisNode'
+import MetaStepNode from './MetaStepNode'
 import SelectionToolbar from './SelectionToolbar'
 import NodePropertyPanel from './NodePropertyPanel'
 import AletheiaLayer from '../aletheia/AletheiaLayer'
@@ -55,6 +56,8 @@ const nodeTypes = {
   ontologyNode: OntologyNode,
   challengeNode: ChallengeNode,
   synthesisNode: SynthesisNode,
+  // 元认知 skill 5 步流的步骤节点 (运行中节点带脉冲 + 流光动画)
+  metaStepNode: MetaStepNode,
 }
 
 // 知识关系类型
@@ -296,6 +299,16 @@ function KnowledgeCanvasInner({
 
   const handleFitView = useCallback(() => {
     reactFlowInstance.fitView({ padding: 0.2, duration: 300 })
+  }, [reactFlowInstance])
+
+  // 元认知 skill 跑完后自动 fitView, 让用户能一眼看到 5 步全貌
+  // 由 services/metaCognitiveExecutor 在 done 时 dispatch 'meta-task:done'
+  useEffect(() => {
+    const onMetaDone = () => {
+      try { reactFlowInstance.fitView({ padding: 0.18, duration: 600 }) } catch {}
+    }
+    window.addEventListener('meta-task:done', onMetaDone)
+    return () => window.removeEventListener('meta-task:done', onMetaDone)
   }, [reactFlowInstance])
 
   const handleResetZoom = useCallback(() => {

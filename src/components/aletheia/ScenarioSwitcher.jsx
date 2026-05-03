@@ -60,7 +60,7 @@ export default function ScenarioSwitcher() {
         alignItems: 'center',
         gap: '10px',
         padding: '14px 24px',
-        background: 'rgba(250, 250, 250, 0.85)',
+        background: 'var(--surface)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         borderBottom: '1px solid #e8e8e8',
@@ -82,8 +82,8 @@ export default function ScenarioSwitcher() {
                 fontFamily: '"Noto Sans SC", system-ui, sans-serif',
                 fontSize: '0.78rem',
                 letterSpacing: '0.2em',
-                background: active ? '#c8a882' : 'transparent',
-                color: active ? '#fafafa' : '#888',
+                background: active ? 'var(--accent)' : 'transparent',
+                color: active ? 'var(--surface)' : 'var(--text-faint)',
                 border: active ? '1px solid #c8a882' : '1px solid #e8e8e8',
                 borderRadius: '2px',
                 cursor: 'pointer',
@@ -91,14 +91,14 @@ export default function ScenarioSwitcher() {
               }}
               onMouseEnter={(e) => {
                 if (!active) {
-                  e.currentTarget.style.borderColor = '#c8a882';
-                  e.currentTarget.style.color = '#c8a882';
+                  e.currentTarget.style.borderColor = 'var(--accent)';
+                  e.currentTarget.style.color = 'var(--accent)';
                 }
               }}
               onMouseLeave={(e) => {
                 if (!active) {
-                  e.currentTarget.style.borderColor = '#e8e8e8';
-                  e.currentTarget.style.color = '#888';
+                  e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                  e.currentTarget.style.color = 'var(--text-faint)';
                 }
               }}
             >
@@ -113,7 +113,7 @@ export default function ScenarioSwitcher() {
         style={{
           fontFamily: '"Noto Sans SC", system-ui, sans-serif',
           fontSize: '0.72rem',
-          color: '#888',
+          color: 'var(--text-faint)',
           letterSpacing: '0.05em',
           textAlign: 'center',
           minHeight: '1em',

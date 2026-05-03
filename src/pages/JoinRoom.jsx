@@ -27,6 +27,9 @@ const genRoomId = () => {
 // 三人协作时点"快速进入主房间"即可，确保都进同一个 room
 const PRIMARY_ROOM = 'demo-final'
 
+// 三人组快捷名字 — 点击即填入用户名
+const PRESET_NAMES = ['lichang', '你想猫', '小叶']
+
 export default function JoinRoom() {
   const [name, setName] = useState(getUsername())
   const [room, setRoom] = useState(getRoomFromUrl())
@@ -133,6 +136,42 @@ export default function JoinRoom() {
               backgroundColor: '#fff',
             }}
           />
+          {/* 三人组快捷选择 */}
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-[10px]" style={{ color: '#bbb', letterSpacing: '0.2em' }}>快捷</span>
+            {PRESET_NAMES.map((preset) => {
+              const active = name.trim() === preset
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setName(preset)}
+                  className="px-3 py-1 text-xs rounded-full transition-all duration-300"
+                  style={{
+                    border: active ? '1px solid #c8a882' : '1px solid #e8e8e8',
+                    color: active ? '#c8a882' : '#888',
+                    background: active ? 'rgba(200,168,130,0.08)' : '#fff',
+                    letterSpacing: '0.05em',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.borderColor = '#c8a882'
+                      e.currentTarget.style.color = '#c8a882'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.borderColor = '#e8e8e8'
+                      e.currentTarget.style.color = '#888'
+                    }
+                  }}
+                >
+                  {preset}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* 房间号 */}

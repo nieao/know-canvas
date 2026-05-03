@@ -9,9 +9,9 @@ function easeOutCubic(t) {
 
 // 根据分数挑选填充色：0-50 灰，50-80 暖色，80-100 深暖
 function pickStrokeColor(score) {
-  if (score < 50) return '#888';
-  if (score < 80) return '#c8a882';
-  return '#b08d5f';
+  if (score < 50) return 'var(--text-faint)';
+  if (score < 80) return 'var(--accent)';
+  return 'var(--accent)';
 }
 
 /**
@@ -94,7 +94,7 @@ export default function HealthScoreRing() {
             cy={cy}
             r={radius}
             fill="none"
-            stroke="#e8e8e8"
+            stroke="var(--border-subtle)"
             strokeWidth={1}
           />
           {/* 前景填充圆环 - 旋转到 12 点方向起始 */}
@@ -132,7 +132,7 @@ export default function HealthScoreRing() {
               fontFamily: '"Noto Serif SC", Georgia, serif',
               fontSize: '64px',
               lineHeight: 1,
-              color: '#1a1a1a',
+              color: 'var(--text-primary)',
               fontWeight: 500,
               letterSpacing: '0.02em',
             }}
@@ -145,7 +145,7 @@ export default function HealthScoreRing() {
               fontFamily: '"Noto Sans SC", system-ui, sans-serif',
               fontSize: '0.68rem',
               letterSpacing: '0.35em',
-              color: '#888',
+              color: 'var(--text-faint)',
               textTransform: 'uppercase',
             }}
           >

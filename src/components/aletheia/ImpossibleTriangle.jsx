@@ -102,15 +102,15 @@ export default function ImpossibleTriangle() {
         width: size,
         height: size + 32,
         padding: '12px',
-        background: 'rgba(250, 250, 250, 0.6)',
+        background: 'var(--surface)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        border: '1px solid #e8e8e8',
+        border: '1px solid var(--border-subtle)',
         borderRadius: '4px',
         transition: 'border-color 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#c8a882')}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#e8e8e8')}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
     >
       <svg
         width={size}
@@ -122,7 +122,7 @@ export default function ImpossibleTriangle() {
         <polygon
           points={polygonPoints}
           fill="none"
-          stroke="#1a1a1a"
+          stroke="var(--text-primary)"
           strokeWidth={1.2}
           style={{
             transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
@@ -136,7 +136,7 @@ export default function ImpossibleTriangle() {
             cx={p.x}
             cy={p.y}
             r={3.5}
-            fill="#c8a882"
+            fill="var(--accent)"
             style={{
               transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
             }}
@@ -150,7 +150,7 @@ export default function ImpossibleTriangle() {
           textAnchor="middle"
           fontFamily='"Noto Serif SC", Georgia, serif'
           fontSize="14"
-          fill="#1a1a1a"
+          fill="var(--text-primary)"
           style={{ transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)' }}
         >
           {labels[0]}
@@ -161,7 +161,7 @@ export default function ImpossibleTriangle() {
           textAnchor="end"
           fontFamily='"Noto Serif SC", Georgia, serif'
           fontSize="14"
-          fill="#1a1a1a"
+          fill="var(--text-primary)"
           style={{ transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)' }}
         >
           {labels[1]}
@@ -172,14 +172,14 @@ export default function ImpossibleTriangle() {
           textAnchor="start"
           fontFamily='"Noto Serif SC", Georgia, serif'
           fontSize="14"
-          fill="#1a1a1a"
+          fill="var(--text-primary)"
           style={{ transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)' }}
         >
           {labels[2]}
         </text>
 
         {/* 中心点 */}
-        <circle cx={cx} cy={cy} r={2} fill="#bbb" />
+        <circle cx={cx} cy={cy} r={2} fill="var(--text-faint)" />
       </svg>
 
       {/* 中心主导标签 - 绝对定位在三角中心 */}
@@ -197,7 +197,7 @@ export default function ImpossibleTriangle() {
           style={{
             fontSize: '0.62rem',
             letterSpacing: '0.35em',
-            color: '#888',
+            color: 'var(--text-faint)',
             marginBottom: '4px',
           }}
         >
@@ -207,7 +207,7 @@ export default function ImpossibleTriangle() {
           style={{
             fontFamily: '"Noto Serif SC", Georgia, serif',
             fontSize: '0.95rem',
-            color: '#c8a882',
+            color: 'var(--accent)',
             letterSpacing: '0.05em',
           }}
         >

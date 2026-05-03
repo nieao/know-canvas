@@ -61,7 +61,7 @@ export default function AdvancedPanel({ open, onClose }) {
         style={{
           width: '420px',
           maxWidth: '100vw',
-          background: '#fafafa',
+          background: 'var(--surface)',
           borderLeft: '1px solid #e8e8e8',
           boxShadow: open ? '-12px 0 40px rgba(26,26,26,0.08)' : 'none',
           transform: open ? 'translateX(0)' : 'translateX(100%)',
@@ -70,7 +70,7 @@ export default function AdvancedPanel({ open, onClose }) {
         }}
       >
         {/* 顶部装饰暖色细线 */}
-        <div className="h-[2px] w-full" style={{ background: '#c8a882' }} />
+        <div className="h-[2px] w-full" style={{ background: 'var(--accent)' }} />
 
         {/* 标题区 */}
         <header
@@ -81,7 +81,7 @@ export default function AdvancedPanel({ open, onClose }) {
             <div
               className="mb-2 text-[11px] uppercase"
               style={{
-                color: '#c8a882',
+                color: 'var(--accent)',
                 letterSpacing: '0.35em',
                 fontFamily: 'Noto Sans SC, system-ui, sans-serif',
               }}
@@ -94,7 +94,7 @@ export default function AdvancedPanel({ open, onClose }) {
                 fontFamily: 'Noto Serif SC, Georgia, serif',
                 fontSize: '28px',
                 lineHeight: 1.2,
-                color: '#1a1a1a',
+                color: 'var(--text-primary)',
                 letterSpacing: '0.02em',
               }}
             >
@@ -109,19 +109,19 @@ export default function AdvancedPanel({ open, onClose }) {
             className="ml-4 flex h-9 w-9 flex-none items-center justify-center transition-all duration-300"
             style={{
               border: '1px solid #e8e8e8',
-              background: '#fafafa',
-              color: '#555',
+              background: 'var(--surface)',
+              color: 'var(--text-muted)',
               cursor: 'pointer',
               fontSize: '18px',
               lineHeight: 1,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#c8a882';
-              e.currentTarget.style.color = '#c8a882';
+              e.currentTarget.style.borderColor = 'var(--accent)';
+              e.currentTarget.style.color = 'var(--accent)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#e8e8e8';
-              e.currentTarget.style.color = '#555';
+              e.currentTarget.style.borderColor = 'var(--border-subtle)';
+              e.currentTarget.style.color = 'var(--text-muted)';
             }}
           >
             ×
@@ -132,14 +132,14 @@ export default function AdvancedPanel({ open, onClose }) {
         <section
           className="px-8 py-5"
           style={{
-            background: '#f5f0eb',
+            background: 'var(--accent-bg)',
             borderBottom: '1px solid #e8e8e8',
           }}
         >
           <div
             className="mb-1 text-[10px] uppercase"
             style={{
-              color: '#c8a882',
+              color: 'var(--accent)',
               letterSpacing: '0.35em',
             }}
           >
@@ -150,13 +150,13 @@ export default function AdvancedPanel({ open, onClose }) {
               style={{
                 fontFamily: 'Noto Serif SC, Georgia, serif',
                 fontSize: '15px',
-                color: '#1a1a1a',
+                color: 'var(--text-primary)',
                 letterSpacing: '0.02em',
               }}
             >
               {scenarioMeta?.label || scenario.toUpperCase()}
             </span>
-            <span className="text-xs" style={{ color: '#888' }}>
+            <span className="text-xs" style={{ color: 'var(--text-faint)' }}>
               {scenarioMeta?.description || ''}
             </span>
           </div>
@@ -181,7 +181,7 @@ export default function AdvancedPanel({ open, onClose }) {
         <div
           className="px-8 py-6 text-[11px]"
           style={{
-            color: '#bbb',
+            color: 'var(--text-faint)',
             letterSpacing: '0.05em',
             borderTop: '1px solid #e8e8e8',
           }}
@@ -206,7 +206,7 @@ function Section({ index, title, last = false, children }) {
         <div
           className="mb-1 text-[10px] uppercase"
           style={{
-            color: '#c8a882',
+            color: 'var(--accent)',
             letterSpacing: '0.35em',
           }}
         >
@@ -217,7 +217,7 @@ function Section({ index, title, last = false, children }) {
           style={{
             fontFamily: 'Noto Serif SC, Georgia, serif',
             fontSize: '18px',
-            color: '#1a1a1a',
+            color: 'var(--text-primary)',
             letterSpacing: '0.02em',
             fontWeight: 500,
           }}

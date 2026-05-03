@@ -254,7 +254,12 @@ function OntologyNodeImpl({ id, data, selected }) {
     if (isChallenging) return
     updateNode(id, { challenging: true })
     challenge(id)
-      .catch((err) => console.error('[OntologyNode] challenge failed:', err))
+      .catch((err) => {
+        // 之前只 console.error 静默吞了错误, 用户看到的就是按钮永远卡在"反驳中"
+        // 现在显式 alert 让失败可见
+        console.error('[OntologyNode] challenge failed:', err)
+        alert(`反驳生成失败:\n${err?.message || err}`)
+      })
       .finally(() => updateNode(id, { challenging: false }))
   }
 
@@ -263,7 +268,10 @@ function OntologyNodeImpl({ id, data, selected }) {
     if (isDecomposing || !title.trim()) return
     setIsDecomposing(true)
     decomposeFurther(id)
-      .catch((err) => console.error('[OntologyNode] decompose failed:', err))
+      .catch((err) => {
+        console.error('[OntologyNode] decompose failed:', err)
+        alert(`节点拆解失败:\n${err?.message || err}`)
+      })
       .finally(() => setIsDecomposing(false))
   }
 

@@ -195,11 +195,23 @@ export async function checkProvider() {
 
 async function callVpsProxy({ system, prompt, model, temperature, jsonMode, proxyUrl }) {
   const url = (proxyUrl || '/canvas/api/llm').replace(/\/$/, '') + '/chat'
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-    body: JSON.stringify({ system, prompt, model, temperature, jsonMode }),
-  })
+  // 60s 超时, 防止后端挂住时前端按钮永远停在 loading 状态
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), 60000)
+  let resp
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ system, prompt, model, temperature, jsonMode }),
+      signal: ctl.signal,
+    })
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('vps-proxy 超时 (60s 无响应), 请检查 LLM 后端')
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')
     throw new Error(`vps-proxy ${resp.status}: ${text.slice(0, 200) || resp.statusText}`)
@@ -215,11 +227,22 @@ async function callVpsProxy({ system, prompt, model, temperature, jsonMode, prox
 
 async function callClaudeCli({ system, prompt, model, bridgeUrl }) {
   const url = (bridgeUrl || 'http://127.0.0.1:18080') + '/chat'
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-    body: JSON.stringify({ system, prompt, model }),
-  })
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(), 120000) // claude CLI 慢一些, 留 120s
+  let resp
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ system, prompt, model }),
+      signal: ctl.signal,
+    })
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('claude-bridge 超时 (120s 无响应), 请检查本地 claude CLI')
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')
     throw new Error(`claude-bridge ${resp.status}: ${text || resp.statusText}`)

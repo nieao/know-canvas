@@ -268,7 +268,7 @@ function QuickAddMenu({ x, y, onSelect, onClose }) {
 
 // 画布内部组件
 function KnowledgeCanvasInner({
-  nodes = [],
+  nodes: rawNodes = [],
   edges = [],
   onNodesChange,
   onEdgesChange,
@@ -281,6 +281,26 @@ function KnowledgeCanvasInner({
   showMiniMap = true,
   children,
 }) {
+  // === 渲染前 sanitize: 检测 parentNode 引用不存在的节点 ===
+  // React Flow 11 在 child.parentNode 找不到时会直接 throw "Parent node X not found"
+  // 整个画布崩 (用户报告 ErrorBoundary, 图 37)。这里清掉 dangling parentNode,
+  // 让孤儿子节点退化成普通根节点继续渲染 — 协作场景下 yjs 同步顺序 / undo 都可能造成短暂不一致。
+  const nodes = useMemo(() => {
+    const idSet = new Set(rawNodes.map((n) => n.id))
+    let dirty = false
+    const cleaned = rawNodes.map((n) => {
+      if (n.parentNode && !idSet.has(n.parentNode)) {
+        dirty = true
+        // eslint-disable-next-line no-unused-vars
+        const { parentNode, extent, ...rest } = n
+        return rest
+      }
+      return n
+    })
+    if (dirty) console.warn('[KnowledgeCanvas] 清理了孤儿 parentNode 引用, count =', cleaned.length)
+    return cleaned
+  }, [rawNodes])
+
   const reactFlowInstance = useReactFlow()
   const reactFlowWrapper = useRef(null)
   const [isPanMode, setIsPanMode] = useState(false)

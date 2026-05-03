@@ -730,6 +730,17 @@ function KnowledgeCanvasInner({
       <ReactFlow
         nodes={nodes}
         edges={processedEdges}
+        onError={(code, msg) => {
+          // React Flow 错误代码:
+          // 002 = "Parent node X not found" — 孤儿场景, sanitize 已经在 useMemo 兜底,
+          //       这里再吃掉错误避免冒泡到 ErrorBoundary 把整画布崩掉
+          if (String(code) === '002') {
+            console.warn('[react-flow#002] 孤儿 parentNode, 已被 fallback root 接管:', msg)
+            return
+          }
+          // 其他错误正常上报
+          console.warn('[react-flow#' + code + ']', msg)
+        }}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}

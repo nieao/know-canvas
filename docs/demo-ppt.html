@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ALETHEIA · 黑客松项目简介</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;600;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06080d;
+  --bg-2:#0a0e18;
+  --panel:#0e1320;
+  --panel-2:#121827;
+  --border:#1a2234;
+  --border-hi:#2a3552;
+  --text:#e8edf6;
+  --text-dim:#8a95ad;
+  --text-mute:#5a6680;
+  --cyan:#00e5ff;
+  --cyan-dim:#0097a7;
+  --magenta:#ff4081;
+  --violet:#b388ff;
+  --amber:#ffb74d;
+  --warm:#c8a882;
+  --lime:#a7f432;
+  --red:#ff5263;
+  --grid:rgba(255,255,255,0.025);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:var(--bg);color:var(--text);
+  font-family:"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  font-weight:300;line-height:1.7;-webkit-font-smoothing:antialiased;
+  height:100%;overflow:hidden;
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:-2;
+  background:
+    radial-gradient(ellipse 60% 40% at 15% 5%, rgba(0,229,255,0.07), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 85%, rgba(255,64,129,0.05), transparent 60%),
+    linear-gradient(180deg,var(--bg) 0%,var(--bg-2) 100%);
+}
+body::after{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:56px 56px;
+  mask-image:radial-gradient(ellipse at center,black 30%,transparent 85%);
+}
+code,.mono{font-family:"JetBrains Mono",monospace}
+
+/* ── Slide framework ─────────────────────────────── */
+.deck{position:fixed;inset:0;overflow:hidden}
+.slides{
+  display:flex;
+  height:100vh;
+  width:100%;
+  transition:transform 0.7s cubic-bezier(0.22,1,0.36,1);
+  will-change:transform;
+}
+.slide{
+  flex:0 0 100vw;
+  height:100vh;
+  padding:60px 80px 80px;
+  position:relative;
+  overflow:auto;
+}
+.slide-inner{max-width:1280px;margin:0 auto;height:100%;display:flex;flex-direction:column;justify-content:center}
+.slide-inner.top{justify-content:flex-start;padding-top:30px}
+
+@media(max-width:880px){
+  .slide{padding:40px 24px 60px}
+}
+
+/* ── Top bar ─────────────────────────────────────── */
+.topbar{
+  position:fixed;top:0;left:0;right:0;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:16px 32px;
+  z-index:50;
+  backdrop-filter:blur(20px);background:rgba(6,8,13,0.55);
+  border-bottom:1px solid var(--border);
+}
+.brand{font-family:"JetBrains Mono",monospace;font-size:0.78rem;letter-spacing:0.3em;color:var(--cyan);text-transform:uppercase}
+.brand::before{content:"◈ ";color:var(--magenta)}
+.page-num{font-family:"JetBrains Mono",monospace;font-size:0.74rem;color:var(--text-dim);letter-spacing:0.2em}
+.page-num .cur{color:var(--cyan)}
+
+/* ── Bottom bar ─────────────────────────────────── */
+.botbar{
+  position:fixed;left:0;right:0;bottom:0;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 32px;
+  z-index:50;
+  border-top:1px solid var(--border);
+  background:rgba(6,8,13,0.5);backdrop-filter:blur(12px);
+  font-family:"JetBrains Mono",monospace;font-size:0.7rem;color:var(--text-mute);
+  letter-spacing:0.18em;
+}
+.botbar .hint{display:flex;gap:18px}
+.botbar .hint kbd{
+  border:1px solid var(--border-hi);padding:2px 7px;border-radius:2px;
+  font-family:"JetBrains Mono",monospace;font-size:0.66rem;color:var(--cyan);
+  background:var(--bg-2);
+}
+.progress{
+  position:fixed;left:0;top:0;height:2px;
+  background:linear-gradient(90deg,var(--cyan),var(--magenta));
+  z-index:60;
+  transition:width 0.6s cubic-bezier(0.22,1,0.36,1);
+}
+
+/* ── Common pieces ──────────────────────────────── */
+.tag{
+  font-family:"JetBrains Mono",monospace;
+  font-size:0.72rem;letter-spacing:0.35em;
+  color:var(--cyan);text-transform:uppercase;
+  margin-bottom:18px;
+}
+.tag::before{content:"// ";opacity:0.5}
+
+h1.cover-title{
+  font-family:"Noto Serif SC",serif;font-weight:900;
+  font-size:clamp(2.4rem,6vw,5.2rem);line-height:1.05;letter-spacing:-0.01em;
+  margin-bottom:24px;
+}
+h1.cover-title .accent{
+  background:linear-gradient(135deg,var(--cyan) 0%,var(--magenta) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+h2.slide-title{
+  font-family:"Noto Serif SC",serif;font-weight:700;
+  font-size:clamp(1.9rem,3.6vw,2.6rem);line-height:1.25;
+  margin-bottom:16px;letter-spacing:-0.005em;
+}
+.subtitle{color:var(--text-dim);font-size:1.02rem;line-height:1.85;max-width:840px;margin-bottom:24px}
+.lead{color:var(--text-dim);font-size:0.96rem;line-height:1.8}
+
+/* Cover stats */
+.cover-stats{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:16px;margin-top:42px;max-width:880px;
+}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:18px 22px;position:relative;overflow:hidden}
+.stat::after{content:"";position:absolute;left:0;bottom:0;height:2px;width:30%;background:var(--cyan);animation:statline 3s ease-in-out infinite alternate}
+.stat:nth-child(2)::after{background:var(--magenta);animation-delay:0.5s}
+.stat:nth-child(3)::after{background:var(--lime);animation-delay:1s}
+.stat:nth-child(4)::after{background:var(--amber);animation-delay:1.5s}
+.stat .l{font-family:"JetBrains Mono",monospace;font-size:0.64rem;letter-spacing:0.2em;color:var(--text-mute);text-transform:uppercase;margin-bottom:6px}
+.stat .v{font-family:"Noto Serif SC",serif;font-size:1.5rem;font-weight:700;color:var(--text)}
+.stat .v .u{font-size:0.74rem;color:var(--cyan);margin-left:4px;font-family:"JetBrains Mono",monospace;font-weight:400}
+@keyframes statline{to{width:100%}}
+
+/* Panel */
+.panel{
+  background:var(--panel);border:1px solid var(--border);border-radius:4px;
+  padding:28px;position:relative;overflow:hidden;
+}
+.panel::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan) 30%,var(--magenta) 70%,transparent);opacity:0.5}
+.panel-caption{font-family:"JetBrains Mono",monospace;font-size:0.66rem;letter-spacing:0.22em;color:var(--text-mute);text-transform:uppercase;margin-bottom:18px}
+.panel-caption::before{content:"▸ ";color:var(--cyan)}
+
+/* Two-col grid */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.grid-2-asym{display:grid;grid-template-columns:1.1fr 1.6fr;gap:24px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:960px){.grid-2,.grid-2-asym,.grid-3{grid-template-columns:1fr}}
+
+/* Bullet list */
+.list{display:flex;flex-direction:column;gap:14px;margin-top:8px}
+.list li{
+  list-style:none;display:flex;gap:14px;align-items:flex-start;
+  font-size:0.94rem;color:var(--text);line-height:1.7;
+}
+.list li::before{
+  content:"";flex-shrink:0;
+  width:7px;height:7px;border-radius:50%;
+  background:var(--cyan);margin-top:9px;box-shadow:0 0 8px rgba(0,229,255,0.4);
+}
+.list li.warm::before{background:var(--warm);box-shadow:0 0 8px rgba(200,168,130,0.4)}
+.list li.magenta::before{background:var(--magenta);box-shadow:0 0 8px rgba(255,64,129,0.4)}
+.list li.lime::before{background:var(--lime);box-shadow:0 0 8px rgba(167,244,50,0.4)}
+.list li b{color:var(--text);font-weight:500}
+.list li code{background:var(--bg-2);padding:1px 6px;border-radius:2px;color:var(--amber);font-size:0.84rem;border:1px solid var(--border)}
+
+/* Quote block (笔记引用) */
+.quote{
+  position:relative;
+  background:var(--panel);
+  border:1px solid var(--border);border-left:2px solid var(--warm);
+  padding:18px 22px 18px 28px;
+  border-radius:2px;
+  font-style:italic;
+  color:var(--text-dim);font-size:0.92rem;line-height:1.85;
+  margin:14px 0;
+}
+.quote::before{
+  content:"“";position:absolute;left:8px;top:0;
+  font-family:"Noto Serif SC",serif;font-size:2.4rem;color:var(--warm);opacity:0.5;line-height:1;
+}
+.quote .src{
+  display:block;margin-top:8px;font-style:normal;
+  font-family:"JetBrains Mono",monospace;font-size:0.68rem;
+  color:var(--text-mute);letter-spacing:0.18em;
+}
+.quote .src::before{content:"— "}
+
+/* Diagram (clickable to fullscreen) */
+.diagram{
+  background:var(--panel-2);border:1px solid var(--border);border-radius:4px;
+  padding:24px;position:relative;cursor:zoom-in;
+  transition:border-color 0.4s;
+}
+.diagram:hover{border-color:var(--cyan)}
+.diagram::after{
+  content:"⤢ 点击放大";
+  position:absolute;top:10px;right:14px;
+  font-family:"JetBrains Mono",monospace;font-size:0.66rem;
+  color:var(--text-mute);letter-spacing:0.15em;
+  opacity:0.7;transition:opacity 0.3s,color 0.3s;
+}
+.diagram:hover::after{opacity:1;color:var(--cyan)}
+.diagram svg{display:block;width:100%;height:auto;max-height:62vh}
+
+/* Modal fullscreen image */
+.modal{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(6,8,13,0.96);backdrop-filter:blur(14px);
+  display:none;align-items:center;justify-content:center;
+  padding:60px;cursor:zoom-out;
+  flex-direction:column;gap:14px;
+}
+.modal.open{display:flex}
+.modal-content{
+  width:100%;max-width:1600px;max-height:84vh;
+  display:flex;align-items:center;justify-content:center;
+}
+.modal-content svg{max-width:100%;max-height:100%;width:auto;height:auto}
+.modal-tip{
+  font-family:"JetBrains Mono",monospace;font-size:0.72rem;
+  color:var(--text-mute);letter-spacing:0.2em;
+}
+.modal-tip kbd{
+  border:1px solid var(--border-hi);padding:2px 7px;border-radius:2px;
+  color:var(--cyan);background:var(--bg-2);
+}
+
+/* Timeline (沟通过程 / bug 修复 等) */
+.timeline{
+  position:relative;padding-left:28px;
+  border-left:1px solid var(--border-hi);
+  display:flex;flex-direction:column;gap:18px;
+}
+.timeline-item{position:relative}
+.timeline-item::before{
+  content:"";position:absolute;left:-32px;top:6px;
+  width:8px;height:8px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 8px rgba(0,229,255,0.6);
+}
+.timeline-item.warm::before{background:var(--warm);box-shadow:0 0 8px rgba(200,168,130,0.5)}
+.timeline-item.lime::before{background:var(--lime);box-shadow:0 0 8px rgba(167,244,50,0.5)}
+.timeline-item.red::before{background:var(--red);box-shadow:0 0 8px rgba(255,82,99,0.5)}
+.timeline-item .ts{
+  font-family:"JetBrains Mono",monospace;font-size:0.7rem;
+  color:var(--cyan);letter-spacing:0.15em;display:block;margin-bottom:4px;
+}
+.timeline-item .label{font-weight:500;color:var(--text);font-size:0.96rem;display:block;margin-bottom:4px}
+.timeline-item .desc{color:var(--text-dim);font-size:0.86rem;line-height:1.7}
+
+/* Buttons explanation cards (拆解/反驳/元认知) */
+.btn-card{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:4px;padding:24px;position:relative;overflow:hidden;
+  display:flex;flex-direction:column;gap:12px;
+  transition:all 0.4s;
+}
+.btn-card:hover{transform:translateY(-3px);border-color:var(--cyan)}
+.btn-card .icon{
+  width:42px;height:42px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.2rem;
+  border:1px solid var(--border-hi);background:var(--bg-2);
+}
+.btn-card.meta .icon{color:var(--cyan);border-color:var(--cyan)}
+.btn-card.decompose .icon{color:var(--warm);border-color:var(--warm)}
+.btn-card.challenge .icon{color:var(--magenta);border-color:var(--magenta)}
+.btn-card h3{font-family:"Noto Serif SC",serif;font-size:1.2rem;font-weight:600}
+.btn-card .stage{
+  font-family:"JetBrains Mono",monospace;font-size:0.72rem;
+  color:var(--text-mute);letter-spacing:0.15em;text-transform:uppercase;
+}
+.btn-card .desc{color:var(--text-dim);font-size:0.88rem;line-height:1.75}
+.btn-card code{background:var(--bg-2);padding:1px 6px;border-radius:2px;color:var(--amber);font-size:0.78rem;border:1px solid var(--border)}
+
+/* Quote with author tag */
+.kicker{
+  font-family:"JetBrains Mono",monospace;font-size:0.66rem;
+  color:var(--magenta);letter-spacing:0.3em;margin-bottom:10px;text-transform:uppercase;
+}
+.kicker::before{content:"▸ "}
+
+/* Animations */
+@keyframes flow{to{stroke-dashoffset:-80}}
+@keyframes pulse{0%,100%{opacity:0.4;r:3}50%{opacity:1;r:5}}
+@keyframes appear{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.edge-anim{stroke-dasharray:6 8;animation:flow 1.8s linear infinite}
+.edge-slow{stroke-dasharray:4 10;animation:flow 3s linear infinite}
+
+/* Hide scrollbar in slides */
+.slide::-webkit-scrollbar{width:6px}
+.slide::-webkit-scrollbar-track{background:transparent}
+.slide::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:3px}
+
+/* Active slide enter animation */
+.slide.active .slide-inner > *{animation:appear 0.7s cubic-bezier(0.22,1,0.36,1) backwards}
+.slide.active .slide-inner > *:nth-child(1){animation-delay:0.1s}
+.slide.active .slide-inner > *:nth-child(2){animation-delay:0.2s}
+.slide.active .slide-inner > *:nth-child(3){animation-delay:0.3s}
+.slide.active .slide-inner > *:nth-child(4){animation-delay:0.4s}
+.slide.active .slide-inner > *:nth-child(5){animation-delay:0.5s}
+
+/* Click navigation hint zones */
+.nav-zone{
+  position:fixed;top:0;height:100vh;width:18%;
+  z-index:40;cursor:pointer;
+  opacity:0;transition:opacity 0.3s;
+}
+.nav-zone.left{left:0;background:linear-gradient(90deg,rgba(0,229,255,0.06),transparent)}
+.nav-zone.right{right:0;background:linear-gradient(270deg,rgba(255,64,129,0.06),transparent)}
+.nav-zone:hover{opacity:1}
+.nav-zone .arrow{
+  position:absolute;top:50%;transform:translateY(-50%);
+  font-family:"JetBrains Mono",monospace;color:var(--cyan);font-size:1.6rem;
+  opacity:0.6;
+}
+.nav-zone.left .arrow{left:18px}
+.nav-zone.right .arrow{right:18px;color:var(--magenta)}
+</style>
+</head>
+<body>
+
+<!-- Top progress bar -->
+<div class="progress" id="progress"></div>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="brand">ALETHEIA · 黑客松项目简介 v0.2</div>
+  <div class="page-num"><span class="cur" id="curPage">01</span> / <span id="totalPage">13</span></div>
+</div>
+
+<!-- Click navigation zones (左 / 右) -->
+<div class="nav-zone left" id="navLeft" title="上一页 ←"><div class="arrow">◀</div></div>
+<div class="nav-zone right" id="navRight" title="下一页 → / Space"><div class="arrow">▶</div></div>
+
+<!-- Slides container -->
+<div class="deck">
+<div class="slides" id="slides">
+
+  <!-- ============== 01 · COVER ============== -->
+  <section class="slide active">
+    <div class="slide-inner">
+      <div class="tag">// 01 / COVER</div>
+      <h1 class="cover-title">ALETHEIA<br><span class="accent">逻辑对抗决策引擎</span></h1>
+      <p class="subtitle" style="font-size:1.18rem;max-width:720px">
+        三人 48 小时黑客松 · 把"长流程 AI 协作"从黑箱变成可视化、可回放、可反驳的画布. 一句话给出目标, 6 阶段元认知在画布上展开 — 上下文 → 拆解 → 角色涌现 → 拓扑 → 执行 → 反思.
+      </p>
+      <div class="cover-stats">
+        <div class="stat"><div class="l">耗时</div><div class="v">48<span class="u">h</span></div></div>
+        <div class="stat"><div class="l">commit</div><div class="v">60+<span class="u">提交</span></div></div>
+        <div class="stat"><div class="l">协作者</div><div class="v">3<span class="u">人</span></div></div>
+        <div class="stat"><div class="l">核心按钮</div><div class="v">3<span class="u">个</span></div></div>
+      </div>
+      <p class="lead" style="margin-top:42px;color:var(--text-mute);font-family:'JetBrains Mono',monospace;font-size:0.74rem;letter-spacing:0.18em">
+        ◈ 你想猫 (李晓明) · 李畅 · 小叶 ─── React 19 · Yjs CRDT · Claude CLI · DeepSeek · Hermes · 2026-05-03
+      </p>
+    </div>
+  </section>
+
+  <!-- ============== 02 · 痛点 ============== -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="tag">// 02 / PAIN POINT</div>
+      <h2 class="slide-title">当 AI 的链条变长, 黑箱就吃掉了你的判断力</h2>
+      <p class="subtitle">
+        我们用 LLM 做长流程协作, 每一步都是"调用 → 输出 → 下一步". 但当链路从 1 步变成 6 步、再变成多 Agent 并行时, 用户失去了对"AI 此刻在做什么 / 为什么这么做 / 哪一步出错了"的直觉.
+      </p>
+
+      <div class="grid-2" style="margin-top:24px;gap:24px">
+        <div class="panel">
+          <div class="panel-caption">现状的三个失能</div>
+          <ul class="list">
+            <li><b>过程不可见</b> · Hermes / agent 流程像黑箱, 中间步骤无可视化, 只看到最终输出.</li>
+            <li><b>结果不可反驳</b> · LLM 倾向于说"看起来对", 缺少对自己结论的压力测试.</li>
+            <li class="magenta"><b>多人不可协作</b> · 单机 SaaS 工具, 不能让团队同时看到、同时改、回放别人的决策路径.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <div class="panel-caption">来自团队 5/2 晚 20:09 录音</div>
+          <div class="quote">
+            解决现有 AI 协作工具 (Hermes 等) 为黑箱的问题, 把长流程任务的拆解 / 分配 / 调度 / 执行全流程可视化展示在画布上, 方便迭代优化.
+            <span class="src">多 Agent 可视化画布系统开发团队讨论 · 2026-05-02 20:09</span>
+          </div>
+          <div class="quote">
+            不同软件之间的沟通真的麻烦, 没有一个统一的标准… 你就跟中国人跟外国人一样, 你必须要找个翻译.
+            <span class="src">AI 项目开发团队线上会议讨论 · 2026-05-02 22:14</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 03 · 思路诞生 ============== -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="tag">// 03 / GENESIS · 思路诞生</div>
+      <h2 class="slide-title">三人组队 48h. 把"反驳能力"和"原认知"装进画布.</h2>
+      <p class="subtitle">
+        5/2 上午 11:20 三人开第一次组队会. 否决了"做 4 个独立 AI 工具"的拼盘思路, 选择把"假设拆解 + 自我反驳"嵌进同一张画布.
+      </p>
+
+      <div class="grid-2-asym" style="margin-top:14px;gap:24px">
+        <div class="panel">
+          <div class="panel-caption">原始 4 个 AI 模块构想</div>
+          <ul class="list">
+            <li><b>假设拆解 agent</b> · 追问基本假设, 输出假设图谱.</li>
+            <li class="warm"><b>问题重构器</b> · 剥离行业固有认知, 从零设计方案.</li>
+            <li class="magenta"><b>自我反驳 agent</b> · 极限挑战者, 找出未检验假设.</li>
+            <li class="lime"><b>隐含假设扫描器</b> · 找出领域内默认为真的习惯性假设.</li>
+          </ul>
+          <div class="quote" style="margin-top:18px">
+            最终确定优先开发"假设拆解器"和"自我反驳"两个模块 — 自我反驳可以避免开发者一厢情愿陷入自嗨, 帮助发现容易忽略的问题.
+            <span class="src">黑客松 AI 项目组队与开发准备讨论 · 2026-05-02 11:20</span>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-caption">收敛后的产品定义</div>
+          <p class="lead" style="margin-bottom:14px">不是 4 个独立工具, 是 <b style="color:var(--cyan)">一张画布 + 三个决策按钮</b>:</p>
+          <ul class="list">
+            <li><b style="color:var(--cyan)">元认知</b> · 输入一句话, 6 阶段在画布上自动展开. 拆解 → 角色涌现 → 执行 → 反思 → 综合.</li>
+            <li class="warm"><b style="color:var(--warm)">拆解</b> · 任意 ENTITY 节点点一下, 把它再拆成更细的本体子节点 (limit 3 层).</li>
+            <li class="magenta"><b style="color:var(--magenta)">反驳</b> · 任意节点点一下, 调 Devil's Advocate 生成挑战卡, 给出严重度评分 + Hermes 二次验证.</li>
+          </ul>
+          <div class="quote" style="margin-top:18px">
+            原认知系统: 执行 → 反思 → 学习 → 进化 的循环逻辑. 一个循环任务只保留 3-5 个智能体, 避免多智能体传递信息出错.
+            <span class="src">黑客松 AI 项目组队与基于 Hermes 的原认知智能体开发讨论 · 2026-05-02 10:32</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 04 · 架构碰撞 ============== -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="tag">// 04 / COLLISION · 架构碰撞</div>
+      <h2 class="slide-title">从"画一张图"碰撞出"做一个中台"</h2>
+      <p class="subtitle">
+        5/2 晚 20:09 第二次会, 4 人对齐技术架构. 决定 ALETHEIA 不只是 UI, 而是<b style="color:var(--cyan)">面向多个 AI 平台的调度中台</b> — 由它判断任务复杂度, 路由到本地 Agent / DeepSeek / Hermes.
+      </p>
+
+      <div class="grid-2" style="margin-top:14px">
+        <div class="panel">
+          <div class="panel-caption">关键决策 #1 · 任务路由策略</div>
+          <ul class="list">
+            <li><b>简单任务</b> → 本地 DeepSeek API · <code>0.001 ¥/次</code>, 成本可控.</li>
+            <li class="warm"><b>复杂多步任务</b> → Hermes 调度 · 利用其 skills 模块和团队 10 年训练数据.</li>
+            <li class="magenta"><b>反驳校验</b> 不挂在每一步, 只在完整方案生成后触发 — 避免 token 浪费.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <div class="panel-caption">关键决策 #2 · 协作底层</div>
+          <ul class="list">
+            <li><b>Yjs CRDT</b> 做实时画布同步. 三人开浏览器即所见即所得, 无中心冲突.</li>
+            <li class="warm"><b>项目库写到 yjs.projects map</b>, 三人共享同一份历史项目, 卡片显示 owner 头像.</li>
+            <li class="lime"><b>飞书机器人</b> 作为对外沟通入口, 后续接画布作总控.</li>
+          </ul>
+          <div class="quote" style="margin-top:14px">
+            画布把每个任务拆分为多个节点, 输入需求后自动拆分节点, 每个节点自动调用对应大模型执行. 由统一决策系统控制整体逻辑.
+            <span class="src">AI 项目开发团队线上会议讨论 · 2026-05-02 22:14</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 05 · 系统架构图 ============== -->
+  <section class="slide">
+    <div class="slide-inner top">
+      <div class="tag">// 05 / ARCHITECTURE · 系统架构</div>
+      <h2 class="slide-title">数据流主线 — 一句话目标 → 多 Agent 涌现 → 决策反思</h2>
+      <p class="lead" style="margin-bottom:14px;color:var(--text-dim)">点击图放大 ⤢ · 棕色 = 用户操作 / 青色 = AI 链路 / 紫色 = 协作同步</p>
+
+      <div class="diagram" data-fig="arch">
+        <svg viewBox="0 0 1200 460" xmlns="http://www.w3.org/2000/svg">
+          <!-- defs -->
+          <defs>
+            <marker id="arr-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#00e5ff"/>
+            </marker>
+            <marker id="arr-warm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#c8a882"/>
+            </marker>
+            <marker id="arr-magenta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#ff4081"/>
+            </marker>
+            <marker id="arr-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#b388ff"/>
+            </marker>
+            <linearGradient id="grad-frame" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#00e5ff" stop-opacity="0"/>
+              <stop offset="50%" stop-color="#00e5ff" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="#ff4081" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+
+          <!-- frame -->
+          <rect x="20" y="20" width="1160" height="420" fill="none" stroke="#1a2234" rx="2"/>
+          <rect x="20" y="20" width="1160" height="2" fill="url(#grad-frame)"/>
+          <text x="40" y="50" font-family="JetBrains Mono" font-size="11" fill="#5a6680" letter-spacing="3">ALETHEIA · DATA SPINE</text>
+
+          <!-- Layer 1: User -->
+          <g>
+            <rect x="60" y="80" width="200" height="64" rx="4" fill="#0e1320" stroke="#c8a882"/>
+            <text x="160" y="106" text-anchor="middle" font-family="Noto Serif SC" font-weight="600" font-size="15" fill="#c8a882">用户输入</text>
+            <text x="160" y="126" text-anchor="middle" font-family="Noto Sans SC" font-size="11" fill="#8a95ad">"在上海开咖啡馆"</text>
+          </g>
+
+          <!-- Layer 2: BottomAIBar (元认知 / Hermes / 极简HTML 切换) -->
+          <g>
+            <rect x="320" y="78" width="220" height="68" rx="4" fill="#0e1320" stroke="#00e5ff"/>
+            <text x="430" y="102" text-anchor="middle" font-family="Noto Serif SC" font-weight="600" font-size="14" fill="#00e5ff">底部 AI 栏 · 路由</text>
+            <text x="430" y="120" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#8a95ad">[元认知] [Hermes] [极简]</text>
+            <text x="430" y="135" text-anchor="middle" font-family="Noto Sans SC" font-size="10" fill="#5a6680">按复杂度自动选</text>
+          </g>
+
+          <!-- arrow user -> bar -->
+          <path d="M 260 112 L 320 112" stroke="#c8a882" stroke-width="1.5" marker-end="url(#arr-warm)" class="edge-anim"/>
+
+          <!-- Layer 3: 三个并行执行路径 -->
+          <!-- 元认知 5 步 -->
+          <g>
+            <rect x="600" y="50" width="540" height="76" rx="4" fill="#0e1320" stroke="#00e5ff"/>
+            <text x="610" y="72" font-family="JetBrains Mono" font-size="9" fill="#00e5ff" letter-spacing="2">META-COGNITIVE · 元认知 5 步状态机</text>
+            <g font-family="Noto Sans SC" font-size="11" fill="#e8edf6" text-anchor="middle">
+              <rect x="612" y="84" width="92" height="28" rx="2" fill="#121827" stroke="#2a3552"/><text x="658" y="102">意图</text>
+              <rect x="712" y="84" width="92" height="28" rx="2" fill="#121827" stroke="#2a3552"/><text x="758" y="102">拆解</text>
+              <rect x="812" y="84" width="92" height="28" rx="2" fill="#121827" stroke="#2a3552"/><text x="858" y="102">执行</text>
+              <rect x="912" y="84" width="92" height="28" rx="2" fill="#121827" stroke="#2a3552"/><text x="958" y="102">反思</text>
+              <rect x="1012" y="84" width="116" height="28" rx="2" fill="#121827" stroke="#2a3552"/><text x="1070" y="102">综合 / Aletheia</text>
+            </g>
+            <!-- chain arrows -->
+            <path d="M 704 98 L 712 98" stroke="#00e5ff" stroke-width="1" marker-end="url(#arr-cyan)"/>
+            <path d="M 804 98 L 812 98" stroke="#00e5ff" stroke-width="1" marker-end="url(#arr-cyan)"/>
+            <path d="M 904 98 L 912 98" stroke="#00e5ff" stroke-width="1" marker-end="url(#arr-cyan)"/>
+            <path d="M 1004 98 L 1012 98" stroke="#00e5ff" stroke-width="1" marker-end="url(#arr-cyan)"/>
+          </g>
+          <path d="M 540 100 L 600 80" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#arr-cyan)" class="edge-anim"/>
+
+          <!-- 拆解 -->
+          <g>
+            <rect x="600" y="146" width="260" height="62" rx="4" fill="#0e1320" stroke="#c8a882"/>
+            <text x="610" y="166" font-family="JetBrains Mono" font-size="9" fill="#c8a882" letter-spacing="2">DECOMPOSE · 拆解</text>
+            <text x="730" y="186" text-anchor="middle" font-family="Noto Sans SC" font-size="11" fill="#e8edf6">ENTITY → 子本体节点</text>
+            <text x="730" y="200" text-anchor="middle" font-family="Noto Sans SC" font-size="10" fill="#8a95ad">深度限制 3 层</text>
+          </g>
+          <path d="M 540 124 L 600 168" stroke="#c8a882" stroke-width="1.5" marker-end="url(#arr-warm)" class="edge-anim"/>
+
+          <!-- 反驳 -->
+          <g>
+            <rect x="880" y="146" width="260" height="62" rx="4" fill="#0e1320" stroke="#ff4081"/>
+            <text x="890" y="166" font-family="JetBrains Mono" font-size="9" fill="#ff4081" letter-spacing="2">CHALLENGE · 反驳</text>
+            <text x="1010" y="186" text-anchor="middle" font-family="Noto Sans SC" font-size="11" fill="#e8edf6">Devil's Advocate · 严重度 + Hermes 验证</text>
+          </g>
+          <path d="M 540 132 L 880 168" stroke="#ff4081" stroke-width="1.5" marker-end="url(#arr-magenta)" class="edge-anim"/>
+
+          <!-- Layer 4: LLM provider -->
+          <g>
+            <rect x="320" y="240" width="220" height="60" rx="4" fill="#121827" stroke="#1a2234"/>
+            <text x="430" y="264" text-anchor="middle" font-family="Noto Serif SC" font-weight="600" font-size="13" fill="#a7f432">aiProvider · LLM 桥</text>
+            <text x="430" y="282" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#8a95ad">claude-cli · vps-proxy · DeepSeek</text>
+          </g>
+          <path d="M 720 130 L 540 240" stroke="#a7f432" stroke-width="1.2" marker-end="url(#arr-cyan)" class="edge-slow" stroke-dasharray="4 8"/>
+          <path d="M 730 208 L 540 254" stroke="#a7f432" stroke-width="1.2" marker-end="url(#arr-cyan)" class="edge-slow" stroke-dasharray="4 8"/>
+          <path d="M 1010 208 L 540 270" stroke="#a7f432" stroke-width="1.2" marker-end="url(#arr-cyan)" class="edge-slow" stroke-dasharray="4 8"/>
+
+          <!-- Layer 5: store / yjs -->
+          <g>
+            <rect x="60" y="240" width="220" height="60" rx="4" fill="#121827" stroke="#b388ff"/>
+            <text x="170" y="264" text-anchor="middle" font-family="Noto Serif SC" font-weight="600" font-size="13" fill="#b388ff">useCanvasStore · Zustand</text>
+            <text x="170" y="282" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#8a95ad">+ Immer · 单源真值</text>
+          </g>
+          <path d="M 540 270 L 280 270" stroke="#b388ff" stroke-width="1.5" marker-end="url(#arr-violet)" class="edge-anim"/>
+
+          <!-- Layer 6: Yjs sync -->
+          <g>
+            <rect x="60" y="340" width="540" height="60" rx="4" fill="#121827" stroke="#b388ff"/>
+            <text x="80" y="362" font-family="JetBrains Mono" font-size="10" fill="#b388ff" letter-spacing="2">YJS CRDT · 房间同步</text>
+            <text x="330" y="384" text-anchor="middle" font-family="Noto Sans SC" font-size="11" fill="#e8edf6">y-websocket :1234 · projects map · awareness · UndoManager</text>
+          </g>
+          <path d="M 170 300 L 170 340" stroke="#b388ff" stroke-width="1.5" marker-end="url(#arr-violet)"/>
+
+          <!-- Layer 7: 三个浏览器 -->
+          <g font-family="Noto Sans SC" font-size="11" text-anchor="middle">
+            <rect x="660" y="340" width="140" height="60" rx="4" fill="#121827" stroke="#c8a882"/>
+            <text x="730" y="362" fill="#c8a882" font-family="JetBrains Mono" font-size="9" letter-spacing="2">USER A</text>
+            <text x="730" y="380" fill="#e8edf6">你想猫 (李晓明)</text>
+            <circle cx="700" cy="380" r="3" fill="#ef4444"/>
+
+            <rect x="820" y="340" width="140" height="60" rx="4" fill="#121827" stroke="#c8a882"/>
+            <text x="890" y="362" fill="#c8a882" font-family="JetBrains Mono" font-size="9" letter-spacing="2">USER B</text>
+            <text x="890" y="380" fill="#e8edf6">李畅 (Hermes)</text>
+            <circle cx="860" cy="380" r="3" fill="#22c55e"/>
+
+            <rect x="980" y="340" width="140" height="60" rx="4" fill="#121827" stroke="#c8a882"/>
+            <text x="1050" y="362" fill="#c8a882" font-family="JetBrains Mono" font-size="9" letter-spacing="2">USER C</text>
+            <text x="1050" y="380" fill="#e8edf6">小叶 (前端)</text>
+            <circle cx="1020" cy="380" r="3" fill="#3b82f6"/>
+          </g>
+          <path d="M 600 370 L 660 370" stroke="#b388ff" stroke-width="1.5" marker-end="url(#arr-violet)" class="edge-slow"/>
+          <path d="M 600 360 L 820 360" stroke="#b388ff" stroke-width="1" marker-end="url(#arr-violet)" class="edge-slow" opacity="0.7"/>
+          <path d="M 600 350 L 980 350" stroke="#b388ff" stroke-width="1" marker-end="url(#arr-violet)" class="edge-slow" opacity="0.5"/>
+
+          <!-- legend -->
+          <g font-family="JetBrains Mono" font-size="9" letter-spacing="2">
+            <rect x="900" y="40" width="10" height="10" fill="#c8a882"/><text x="918" y="49" fill="#8a95ad">USER ACTION</text>
+            <rect x="1010" y="40" width="10" height="10" fill="#00e5ff"/><text x="1028" y="49" fill="#8a95ad">AI CHAIN</text>
+            <rect x="1095" y="40" width="10" height="10" fill="#b388ff"/><text x="1113" y="49" fill="#8a95ad">YJS SYNC</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 06 · 三个按钮 总览 ============== -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="tag">// 06 / BUTTONS · 三大决策按钮</div>
+      <h2 class="slide-title">画布上每个节点都长着三个"思考关节"</h2>
+      <p class="subtitle">
+        ALETHEIA 没有复杂菜单. 一个本体节点上, 用户能做的就三件事 — <b style="color:var(--cyan)">向上元认知 · 向下拆解 · 横向反驳</b>. 每件事都触发一条独立的 AI 链路, 把结果以子节点 / 容器形式连回画布.
+      </p>
+
+      <div class="grid-3" style="margin-top:14px;gap:18px">
+        <div class="btn-card meta">
+          <div class="icon">⚡</div>
+          <div class="stage">META · 元认知</div>
+          <h3>从一句话开出 6 阶段</h3>
+          <p class="desc">输入"在上海开咖啡馆", 自动展开<code>意图 → 拆解 → 角色涌现 → 拓扑 → 执行 → 反思</code>. 每完成一步在项目库自动 commit 一帧, 后续可时间轴回放.</p>
+        </div>
+        <div class="btn-card decompose">
+          <div class="icon">⬇</div>
+          <div class="stage">DECOMPOSE · 拆解</div>
+          <h3>ENTITY 节点的"再追问"</h3>
+          <p class="desc">点 ENTITY 节点上的拆解按钮, 把它再细分为子本体节点. 拆解结果挂入<code>decomposeGroup</code>容器, 与原节点用 dashed 边相连. 限制 3 层防失控.</p>
+        </div>
+        <div class="btn-card challenge">
+          <div class="icon">⚖</div>
+          <div class="stage">CHALLENGE · 反驳</div>
+          <h3>Devil's Advocate 压力测试</h3>
+          <p class="desc">点任意节点的反驳按钮, 自动生成 3-5 张挑战卡 — 每张含<code>角度</code>、<code>论点</code>、<code>严重度评分</code>. 二次验证按钮调 Hermes 给反驳本身打可信度分.</p>
+        </div>
+      </div>
+
+      <div class="quote" style="margin-top:24px">
+        每个节点只需要列出任务清单和关联的 Agent 或技能, 移除单个节点独立的反驳逻辑, 由统一决策系统控制整体逻辑.
+        <span class="src">AI 项目开发团队线上会议讨论 · 2026-05-02 22:14</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 07 · 元认知详解 ============== -->
+  <section class="slide">
+    <div class="slide-inner top">
+      <div class="tag">// 07 / META · 元认知按钮</div>
+      <h2 class="slide-title">⚡ 元认知 — 一句话项目的 5 步状态机</h2>
+      <p class="lead" style="margin-bottom:14px">每完成一步, 自动给项目库追加一帧快照, label 用中文步骤名. 整个状态机也是时间轴回放的"最小连续帧"来源.</p>
+
+      <div class="diagram" data-fig="meta">
+        <svg viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arr-cyan2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#00e5ff"/>
+            </marker>
+          </defs>
+
+          <!-- title bar -->
+          <rect x="20" y="20" width="1160" height="2" fill="url(#grad-frame)"/>
+          <text x="40" y="50" font-family="JetBrains Mono" font-size="11" fill="#5a6680" letter-spacing="3">META-COGNITIVE STATE MACHINE · _commitProjectSnapshot 自动埋点</text>
+
+          <!-- 5 steps -->
+          <g font-family="Noto Sans SC" font-size="13" text-anchor="middle">
+            <!-- 1 -->
+            <rect x="40" y="100" width="200" height="100" rx="6" fill="#0e1320" stroke="#00e5ff" stroke-width="1.5"/>
+            <text x="140" y="125" font-family="JetBrains Mono" font-size="10" fill="#00e5ff" letter-spacing="2">01 INTENT</text>
+            <text x="140" y="150" font-family="Noto Serif SC" font-weight="600" fill="#e8edf6" font-size="16">意图</text>
+            <text x="140" y="175" fill="#8a95ad" font-size="11">理解一句话目标</text>
+            <text x="140" y="190" fill="#5a6680" font-size="10" font-family="JetBrains Mono">commit: 元认知-意图</text>
+
+            <!-- 2 -->
+            <rect x="270" y="100" width="200" height="100" rx="6" fill="#0e1320" stroke="#c8a882" stroke-width="1.5"/>
+            <text x="370" y="125" font-family="JetBrains Mono" font-size="10" fill="#c8a882" letter-spacing="2">02 DECOMPOSE</text>
+            <text x="370" y="150" font-family="Noto Serif SC" font-weight="600" fill="#e8edf6" font-size="16">拆解</text>
+            <text x="370" y="175" fill="#8a95ad" font-size="11">输出 ENTITY 集</text>
+            <text x="370" y="190" fill="#5a6680" font-size="10" font-family="JetBrains Mono">commit: 元认知-拆解</text>
+
+            <!-- 3 -->
+            <rect x="500" y="100" width="200" height="100" rx="6" fill="#0e1320" stroke="#a7f432" stroke-width="1.5"/>
+            <text x="600" y="125" font-family="JetBrains Mono" font-size="10" fill="#a7f432" letter-spacing="2">03 EXECUTE</text>
+            <text x="600" y="150" font-family="Noto Serif SC" font-weight="600" fill="#e8edf6" font-size="16">执行</text>
+            <text x="600" y="175" fill="#8a95ad" font-size="11">角色涌现 + 任务派发</text>
+            <text x="600" y="190" fill="#5a6680" font-size="10" font-family="JetBrains Mono">commit: 元认知-执行</text>
+
+            <!-- 4 -->
+            <rect x="730" y="100" width="200" height="100" rx="6" fill="#0e1320" stroke="#ffb74d" stroke-width="1.5"/>
+            <text x="830" y="125" font-family="JetBrains Mono" font-size="10" fill="#ffb74d" letter-spacing="2">04 REFLECT</text>
+            <text x="830" y="150" font-family="Noto Serif SC" font-weight="600" fill="#e8edf6" font-size="16">反思</text>
+            <text x="830" y="175" fill="#8a95ad" font-size="11">健康度评分 + 矛盾</text>
+            <text x="830" y="190" fill="#5a6680" font-size="10" font-family="JetBrains Mono">commit: 元认知-反思</text>
+
+            <!-- 5 -->
+            <rect x="960" y="100" width="200" height="100" rx="6" fill="#0e1320" stroke="#ff4081" stroke-width="1.5"/>
+            <text x="1060" y="125" font-family="JetBrains Mono" font-size="10" fill="#ff4081" letter-spacing="2">05 SYNTHESIZE</text>
+            <text x="1060" y="150" font-family="Noto Serif SC" font-weight="600" fill="#e8edf6" font-size="16">综合</text>
+            <text x="1060" y="175" fill="#8a95ad" font-size="11">Aletheia 决策引擎</text>
+            <text x="1060" y="190" fill="#5a6680" font-size="10" font-family="JetBrains Mono">commit: Aletheia 综合</text>
+
+            <!-- arrows -->
+            <path d="M 240 150 L 270 150" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#arr-cyan2)"/>
+            <path d="M 470 150 L 500 150" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#arr-cyan2)"/>
+            <path d="M 700 150 L 730 150" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#arr-cyan2)"/>
+            <path d="M 930 150 L 960 150" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#arr-cyan2)"/>
+
+            <!-- bottom: project snapshot bar -->
+            <rect x="40" y="240" width="1120" height="50" rx="4" fill="#121827" stroke="#b388ff"/>
+            <text x="60" y="262" font-family="JetBrains Mono" font-size="10" fill="#b388ff" letter-spacing="2" text-anchor="start">PROJECT.commits[]</text>
+            <g font-family="JetBrains Mono" font-size="10" fill="#8a95ad" text-anchor="start">
+              <text x="60" y="280">[ 创建 → 元认知-意图 → 元认知-拆解 → 元认知-执行 → 元认知-反思 → Aletheia 综合 → 反驳完成 → 再次拆解 ]</text>
+            </g>
+            <text x="1145" y="262" text-anchor="end" font-family="JetBrains Mono" font-size="10" fill="#a7f432" letter-spacing="1">最多 30 帧 · 滚动淘汰</text>
+
+            <!-- arrow down -->
+            <path d="M 600 200 L 600 240" stroke="#b388ff" stroke-width="1.2" marker-end="url(#arr-cyan2)" class="edge-slow" stroke-dasharray="4 8"/>
+          </g>
+
+          <!-- side note -->
+          <text x="600" y="330" text-anchor="middle" font-family="Noto Sans SC" font-size="11" fill="#5a6680">
+            → 时间轴回放数据源. 三人协作时, 每帧带 owner 字段, 可"按用户"筛选回放.
+          </text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 08 · 拆解按钮 ============== -->
+  <section class="slide">
+    <div class="slide-inner top">
+      <div class="tag">// 08 / DECOMPOSE · 拆解按钮</div>
+      <h2 class="slide-title">⬇ 拆解 — 把 ENTITY 节点的"再追问"装进容器</h2>
+      <p class="lead" style="margin-bottom:14px">用户在 ENTITY 节点上点拆解, AI 输出 N 个子本体节点. 每次拆解都生成一个独立 <code style="background:var(--bg-2);padding:1px 6px;color:var(--amber);border-radius:2px;font-family:'JetBrains Mono',monospace;font-size:0.84rem">decomposeGroup</code> 容器, 子节点挂入容器, 用 dashed 边连回原节点.</p>
+
+      <div class="diagram" data-fig="decompose">
+        <svg viewBox="0 0 1200 380" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arr-warm2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#c8a882"/>
+            </marker>
+          </defs>
+
+          <text x="40" y="50" font-family="JetBrains Mono" font-size="11" fill="#5a6680" letter-spacing="3">DECOMPOSE FLOW · MAX_DEPTH 3</text>
+
+          <!-- ENTITY -->
+          <g>
+            <rect x="60" y="120" width="220" height="100" rx="6" fill="#0e1320" stroke="#00e5ff" stroke-width="2"/>
+            <text x="170" y="148" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#00e5ff" letter-spacing="2">ENTITY · L0 主干</text>
+            <text x="170" y="172" text-anchor="middle" font-family="Noto Serif SC" font-weight="600" font-size="14" fill="#e8edf6">合规审批</text>
+            <text x="170" y="195" text-anchor="middle" font-family="Noto Sans SC" font-size="11" fill="#8a95ad">[拆解 ⬇]</text>
+            <circle cx="170" cy="195" r="20" fill="none" stroke="#c8a882" stroke-width="1" stroke-dasharray="3 4">
+              <animate attributeName="r" values="18;22;18" dur="2s" repeatCount="indefinite"/>
+            </circle>
+          </g>
+
+          <!-- 用户点击箭头 -->
+          <text x="320" y="155" font-family="JetBrains Mono" font-size="10" fill="#c8a882" letter-spacing="2">user.click(拆解)</text>
+          <path d="M 280 170 L 380 170" stroke="#c8a882" stroke-width="1.5" marker-end="url(#arr-warm2)" class="edge-anim"/>
+
+          <!-- decomposeGroup container -->
+          <g>
+            <rect x="400" y="60" width="780" height="280" rx="6" fill="rgba(200,168,130,0.04)" stroke="#c8a882" stroke-width="1" stroke-dasharray="6 4"/>
+            <text x="420" y="86" font-family="JetBrains Mono" font-size="10" fill="#c8a882" letter-spacing="2">decomposeGroup · 容器</text>
+            <text x="420" y="102" font-family="JetBrains Mono" font-size="9" fill="#5a6680">id: pgroup-...-decompose-合规审批</text>
+
+            <!-- child 1 -->
+            <rect x="430" y="130" width="220" height="80" rx="4" fill="#0e1320" stroke="#c8a882"/>
+            <text x="540" y="155" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#c8a882" letter-spacing="2">L1 子本体</text>
+            <text x="540" y="178" text-anchor="middle" font-family="Noto Serif SC" font-weight="500" font-size="13" fill="#e8edf6">食品经营许可证</text>
+            <text x="540" y="196" text-anchor="middle" font-family="Noto Sans SC" font-size="10" fill="#8a95ad">depth: 1</text>
+
+            <!-- child 2 -->
+            <rect x="680" y="130" width="220" height="80" rx="4" fill="#0e1320" stroke="#c8a882"/>
+            <text x="790" y="155" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#c8a882" letter-spacing="2">L1 子本体</text>
+            <text x="790" y="178" text-anchor="middle" font-family="Noto Serif SC" font-weight="500" font-size="13" fill="#e8edf6">消防验收</text>
+            <text x="790" y="196" text-anchor="middle" font-family="Noto Sans SC" font-size="10" fill="#8a95ad">depth: 1</text>
+
+            <!-- child 3 -->
+            <rect x="930" y="130" width="220" height="80" rx="4" fill="#0e1320" stroke="#c8a882"/>
+            <text x="1040" y="155" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#c8a882" letter-spacing="2">L1 子本体</text>
+            <text x="1040" y="178" text-anchor="middle" font-family="Noto Serif SC" font-weight="500" font-size="13" fill="#e8edf6">环评 / 排污许可</text>
+            <text x="1040" y="196" text-anchor="middle" font-family="Noto Sans SC" font-size="10" fill="#8a95ad">depth: 1</text>
+
+            <!-- L2 grandchild -->
+            <rect x="430" y="240" width="220" height="80" rx="4" fill="#0e1320" stroke="#c8a882" stroke-opacity="0.6"/>
+            <text x="540" y="265" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#c8a882" letter-spacing="2">L2 再拆解</text>
+            <text x="540" y="288" text-anchor="middle" font-family="Noto Serif SC" font-weight="500" font-size="13" fill="#e8edf6">材料清单</text>
+            <text x="540" y="306" text-anchor="middle" font-family="Noto Sans SC" font-size="10" fill="#8a95ad">depth: 2 · 还能再拆 1 层</text>
+
+            <rect x="680" y="240" width="470" height="80" rx="4" fill="#0e1320" stroke="#5a6680" stroke-opacity="0.4" stroke-dasharray="3 3"/>
+            <text x="915" y="285" text-anchor="middle" font-family="Noto Sans SC" font-size="12" fill="#5a6680">depth ≥ 3 时, 拆解按钮变成 [已到底]</text>
+
+            <!-- internal arrows -->
+            <path d="M 540 210 L 540 240" stroke="#c8a882" stroke-width="1" marker-end="url(#arr-warm2)" stroke-dasharray="3 3"/>
+          </g>
+
+          <!-- entity → group arrow (dashed) -->
+          <path d="M 280 170 C 340 170, 380 170, 430 170" stroke="#c8a882" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 09 · 反驳按钮 ============== -->
+  <section class="slide">
+    <div class="slide-inner top">
+      <div class="tag">// 09 / CHALLENGE · 反驳按钮</div>
+      <h2 class="slide-title">⚖ 反驳 — Devil's Advocate 给你的方案泼三盆冷水</h2>
+      <p class="lead" style="margin-bottom:14px">点任意节点的反驳, 自动生成 3-5 张挑战卡 (角度 · 论点 · 严重度 · 修复 todo). 每张卡都能调 <b style="color:var(--magenta)">Hermes 二次验证</b> 给反驳本身打可信度分, 防止 LLM 编造不切实际的论点.</p>
+
+      <div class="diagram" data-fig="challenge">
+        <svg viewBox="0 0 1200 380" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arr-mag2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,0 L10,5 L0,10 z" fill="#ff4081"/>
+            </marker>
+          </defs>
+          <text x="40" y="50" font-family="JetBrains Mono" font-size="11" fill="#5a6680" letter-spacing="3">CHALLENGE FLOW · DEVIL'S ADVOCATE + HERMES VERIFY</text>
+
+          <!-- source node -->
+          <g>
+            <rect x="60" y="140" width="220" height="100" rx="6" fill="#0e1320" stroke="#00e5ff" stroke-width="2"/>
+            <text x="170" y="170" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#00e5ff" letter-spacing="2">SOURCE NODE</text>
+            <text x="170" y="195" text-anchor="middle" font-family="Noto Serif SC" font-weight="600" font-size="14" fill="#e8edf6">"开 100 平米咖啡馆"</text>
+            <text x="170" y="218" text-anchor="middle" font-family="Noto Sans SC" font-size="11" fill="#8a95ad">[反驳 ⚖]</text>
+          </g>
+
+          <!-- challengeGroup container -->
+          <g>
+            <rect x="380" y="50" width="800" height="300" rx="6" fill="rgba(255,64,129,0.04)" stroke="#ff4081" stroke-width="1" stroke-dasharray="6 4"/>
+            <text x="400" y="76" font-family="JetBrains Mono" font-size="10" fill="#ff4081" letter-spacing="2">challengeGroup · 容器</text>
+
+            <!-- challenge card 1 -->
+            <g>
+              <rect x="410" y="100" width="240" height="110" rx="4" fill="#0e1320" stroke="#ff4081"/>
+              <text x="420" y="120" font-family="JetBrains Mono" font-size="9" fill="#ff4081" letter-spacing="2">CHALLENGE #1</text>
+              <text x="640" y="120" text-anchor="end" font-family="JetBrains Mono" font-size="9" fill="#ffb74d">严重度 85</text>
+              <text x="420" y="140" font-family="Noto Sans SC" font-size="10" fill="#8a95ad">角度:</text><text x="460" y="140" font-family="Noto Sans SC" font-size="10" fill="#e8edf6">市场风险</text>
+              <text x="420" y="160" font-family="Noto Sans SC" font-size="11" fill="#e8edf6">"上海咖啡赛道已饱和, 核心商圈租金占毛利 40%+"</text>
+              <text x="420" y="190" font-family="JetBrains Mono" font-size="9" fill="#5a6680" letter-spacing="1">[下一步 ▸] [⚖ 二次验证]</text>
+            </g>
+
+            <!-- challenge card 2 -->
+            <g>
+              <rect x="680" y="100" width="240" height="110" rx="4" fill="#0e1320" stroke="#ff4081"/>
+              <text x="690" y="120" font-family="JetBrains Mono" font-size="9" fill="#ff4081" letter-spacing="2">CHALLENGE #2</text>
+              <text x="910" y="120" text-anchor="end" font-family="JetBrains Mono" font-size="9" fill="#ffb74d">严重度 72</text>
+              <text x="690" y="140" font-family="Noto Sans SC" font-size="10" fill="#8a95ad">角度:</text><text x="730" y="140" font-family="Noto Sans SC" font-size="10" fill="#e8edf6">合规风险</text>
+              <text x="690" y="160" font-family="Noto Sans SC" font-size="11" fill="#e8edf6">"食品 + 消防 + 环评至少 90 天才能开业"</text>
+              <text x="690" y="190" font-family="JetBrains Mono" font-size="9" fill="#5a6680" letter-spacing="1">[下一步 ▸] [⚖ 二次验证]</text>
+            </g>
+
+            <!-- challenge card 3 -->
+            <g>
+              <rect x="950" y="100" width="220" height="110" rx="4" fill="#0e1320" stroke="#ff4081"/>
+              <text x="960" y="120" font-family="JetBrains Mono" font-size="9" fill="#ff4081" letter-spacing="2">CHALLENGE #3</text>
+              <text x="1160" y="120" text-anchor="end" font-family="JetBrains Mono" font-size="9" fill="#a7f432">严重度 38</text>
+              <text x="960" y="140" font-family="Noto Sans SC" font-size="10" fill="#8a95ad">角度:</text><text x="1000" y="140" font-family="Noto Sans SC" font-size="10" fill="#e8edf6">运营风险</text>
+              <text x="960" y="160" font-family="Noto Sans SC" font-size="11" fill="#e8edf6">"100 平米需 5+ 人员, 人力成本不可忽略"</text>
+              <text x="960" y="190" font-family="JetBrains Mono" font-size="9" fill="#5a6680" letter-spacing="1">[下一步 ▸] [⚖ 二次验证]</text>
+            </g>
+
+            <!-- hermes verify -->
+            <g>
+              <rect x="410" y="240" width="760" height="80" rx="4" fill="#121827" stroke="#a7f432" stroke-dasharray="4 4"/>
+              <text x="424" y="262" font-family="JetBrains Mono" font-size="10" fill="#a7f432" letter-spacing="2">⚖ HERMES VERIFY · 二次审查官</text>
+              <text x="424" y="282" font-family="Noto Sans SC" font-size="11" fill="#e8edf6">输入: 反驳论点 + 原方案 → 输出: { score, verdict, reason }</text>
+              <text x="424" y="302" font-family="Noto Sans SC" font-size="10" fill="#8a95ad">→ 70+ 绿色"成立" / 40-69 暖色"勉强" / &lt;40 红色"不成立" — 防 LLM 脱离实际臆测</text>
+            </g>
+          </g>
+
+          <!-- arrows -->
+          <path d="M 280 200 L 380 200" stroke="#ff4081" stroke-width="1.5" marker-end="url(#arr-mag2)" class="edge-anim"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 10 · 协作 + 时间轴回放 ============== -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="tag">// 10 / COLLAB · 三人共享 + 时间轴回放</div>
+      <h2 class="slide-title">三人画一张图. 后来人能"回放"前人怎么决策的.</h2>
+      <p class="subtitle">
+        Yjs CRDT 让三人浏览器零延迟同步同一张画布. 项目库写到 yjs <code style="background:var(--bg-2);padding:1px 6px;color:var(--amber);border-radius:2px;font-family:'JetBrains Mono',monospace;font-size:0.84rem">projects</code> map, 每个项目自带 commits[] 序列, 最多 30 帧. 任一人在卡片上点 ▶ 回放, 画布外圈出现暖色脉冲边框, 底部 scrubber 拖动看不同帧.
+      </p>
+
+      <div class="grid-2" style="gap:24px;margin-top:14px">
+        <div class="panel">
+          <div class="panel-caption">CRDT 协作能力</div>
+          <ul class="list">
+            <li><b>Yjs UndoManager</b> · 按 origin 区分本地 / 远端 — 每人撤销自己的操作不影响他人.</li>
+            <li class="warm"><b>Awareness 实时光标</b> · 拖节点时其他屏出现暖色脉冲气泡.</li>
+            <li class="lime"><b>Project owner 字段</b> · 卡片显示 owner 圆点 + 用户名, 顶部"按用户筛选"chip.</li>
+            <li class="magenta"><b>离线后回来</b> · CRDT 自动合并, 无中心冲突.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <div class="panel-caption">PlaybackScrubber · 双模式回放</div>
+          <ul class="list">
+            <li><b>按项目</b> · 顺序播 commits[] 全部帧. 看完整决策链路.</li>
+            <li class="magenta"><b>按用户</b> · filter 出某个 owner 的活动帧 — 看"小叶今天在画布上做了什么".</li>
+            <li class="warm"><b>scrubber</b> · range slider 拖到任意帧, 画布即刻切到那一刻状态. 1.5s 一帧自动播放.</li>
+            <li class="lime"><b>视觉锁</b> · 回放时画布外圈暖色脉冲发光 + 顶部"PLAYBACK · 回放模式"标签, 编辑全 noop.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="quote" style="margin-top:18px">
+        领导打开画布即可查看每个节点当日完成情况, 系统自动识别不同工种衔接的冲突, 还能给出进度建议… 不需要频繁开进度会.
+        <span class="src">AI 项目开发团队线上会议讨论 · 2026-05-02 22:14</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 11 · 沟通 + V1 选定 ============== -->
+  <section class="slide">
+    <div class="slide-inner top">
+      <div class="tag">// 11 / COMMS · 沟通过程</div>
+      <h2 class="slide-title">用秒搭打 7 版原型. 用飞书机器人对接 Claude Code.</h2>
+      <p class="lead" style="margin-bottom:18px">5/2 晚 22:14 团队第三次会, 用 V1 (4 种分析类型 + 反驳率 15%) 否决了 V3/V5/V7 的"画布样式但交互不清"版本. 同步对接 Hermes API + DeepSeek 兜底.</p>
+
+      <div class="timeline">
+        <div class="timeline-item warm">
+          <span class="ts">2026-05-02 11:20</span>
+          <span class="label">三人组队会 · 黑客松 AI 项目组队</span>
+          <span class="desc">确定项目方向 (假设拆解 + 自我反驳), 完成 SSH 公钥配置, 项目改成"小组报名". 我让 Claude Code 策划项目整体框架.</span>
+        </div>
+        <div class="timeline-item">
+          <span class="ts">2026-05-02 20:09</span>
+          <span class="label">画布技术架构会 · 多 Agent 可视化画布系统</span>
+          <span class="desc">DeepSeek API 对接成功, 反驳校验只在完整方案后触发不每步做. 共享屏幕展示画布, 确定中台对接 Hermes / 龙虾等 AI 工具.</span>
+        </div>
+        <div class="timeline-item lime">
+          <span class="ts">2026-05-02 22:14</span>
+          <span class="label">原型选定 + Hermes 拉通会 · AI 项目开发团队</span>
+          <span class="desc">飞书多账号串号, 我有 25 个未提交文件先合并. V1 原型选定 (反驳率 15%), V3/V5/V7 弃用. 删除旧远程分支, 启动技术审查 ≥9 分自检.</span>
+        </div>
+        <div class="timeline-item warm">
+          <span class="ts">2026-05-03 18:14</span>
+          <span class="label">线下家庭聚餐 · 项目穿插测试</span>
+          <span class="desc">"开发过程中系统频繁出现渲染出错问题, 我提出按 FN+F12 获取报错信息, 全量拷贝后发送给对应人员排查." 多人协作模块仍存在较多 BUG, 需要更长时间测试修复.</span>
+        </div>
+      </div>
+
+      <div class="quote" style="margin-top:14px">
+        飞书机器人作用: 用于便捷沟通, 可直接给机器人发指令分配任务、修改代码, 当前对接本地 Claude Code, 未来会对接画布系统, 由画布作为总控制中枢调度所有任务.
+        <span class="src">AI 项目开发团队线上会议讨论 · 2026-05-02 22:14</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 12 · 修 bug 实战 ============== -->
+  <section class="slide">
+    <div class="slide-inner top">
+      <div class="tag">// 12 / DEBUG · 修 bug 全流程</div>
+      <h2 class="slide-title">案例: "切主干模式画布崩了" · 三轮修复才彻底</h2>
+      <p class="lead" style="margin-bottom:14px">React Flow 11 在 child layout 时 throw <code style="background:var(--bg-2);padding:1px 6px;color:var(--amber);border-radius:2px;font-family:'JetBrains Mono',monospace;font-size:0.84rem">Parent node X not found</code>, 不走 onError 通道, 直接冒泡到 ErrorBoundary 把整画布崩掉. 反复迭代三轮才解决.</p>
+
+      <div class="timeline">
+        <div class="timeline-item red">
+          <span class="ts">v1 — 清 parentNode</span>
+          <span class="label">把孤儿 child 的 parentNode 字段直接清掉</span>
+          <span class="desc">结果: 子节点变绝对坐标全堆左上角. 用户图 41 反馈"反驳还有排版重新进去后都没有了". <b style="color:var(--red)">弃用</b>.</span>
+        </div>
+        <div class="timeline-item red">
+          <span class="ts">v2 — filter 孤儿</span>
+          <span class="label">直接从 nodes 数组过滤掉孤儿子节点</span>
+          <span class="desc">结果: PDF 等顶层节点偶尔被误判 parent 也消失. 用户图 42 反馈"包括 pdf 不见了". <b style="color:var(--red)">弃用</b>.</span>
+        </div>
+        <div class="timeline-item warm">
+          <span class="ts">v3 — fallback root + onError 002</span>
+          <span class="label">挂个隐形 8000×8000 group 兜住所有孤儿</span>
+          <span class="desc">解决了"孤儿子节点"场景. 但用户切"主干"模式时 — group 自身被 hidden, 子节点没 cascade hide — React Flow 仍 throw, 这次还冒到了 ErrorBoundary. <b style="color:var(--amber)">部分解决</b>.</span>
+        </div>
+        <div class="timeline-item lime">
+          <span class="ts">v4 — cascade hidden + filter (最终)</span>
+          <span class="label">父不可见, 强制子也不可见, 然后整体 filter</span>
+          <span class="desc">cascade 3 pass 兜底 (projectGroup → challengeGroup → leaf). 最终交给 React Flow 的 nodes 数组里所有 parentNode 引用都自洽. <b style="color:var(--lime)">commit 49041d5 上线</b>.</span>
+        </div>
+      </div>
+
+      <div class="quote" style="margin-top:14px">
+        测试在线 demo 时, 误进入本地环境, 进入后无法正常退出, 当前不知道退出方法.
+        <span class="src">青白江开啤酒馆计划与 AI 决策系统测试闲聊记录 · 2026-05-03 18:14</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 13 · 收尾 ============== -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="tag">// 13 / OUTRO · 致谢与现场 demo</div>
+      <h2 class="slide-title cover-title" style="font-size:clamp(2.2rem,5vw,4.4rem)">画布是过程, <span class="accent">不是结果.</span></h2>
+
+      <div class="grid-2" style="margin-top:36px;gap:24px">
+        <div class="panel">
+          <div class="panel-caption">现场 1 分钟 demo · 三段式</div>
+          <ul class="list">
+            <li><b>段 1 (30s)</b> · 三人同时进同一房间, 看暖色脉冲气泡同步.</li>
+            <li class="warm"><b>段 2 (30s)</b> · 打开项目库, 三个 owner 头像 + 用户筛选.</li>
+            <li class="magenta"><b>段 3 (30s)</b> · 找带"N 帧"标签的项目点 ▶ 回放, 看 PLAYBACK 模式 + scrubber.</li>
+          </ul>
+          <p class="lead" style="margin-top:14px;font-size:0.86rem;color:var(--text-mute)">
+            演示前 5 分钟暖场: 跑一次"一句话→元认知 5 步→Aletheia 综合"让项目累到 6+ 帧.
+          </p>
+        </div>
+        <div class="panel">
+          <div class="panel-caption">技术栈 · One Liner</div>
+          <p style="font-family:'JetBrains Mono',monospace;font-size:0.86rem;color:var(--cyan);line-height:1.85;letter-spacing:0.02em">
+            React 19 + Vite 7 · React Flow 11<br>
+            Yjs 13 + WebsocketProvider<br>
+            Zustand 5 + Immer<br>
+            Tailwind CSS 4<br>
+            Claude CLI (subprocess)<br>
+            DeepSeek API · Hermes 中转代理
+          </p>
+          <div class="quote" style="margin-top:14px">
+            可控和好, 他得找到一个平衡点.
+            <span class="src">多 Agent 可视化画布系统开发团队讨论 · 2026-05-02 20:09</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="lead" style="margin-top:36px;color:var(--text-mute);font-family:'JetBrains Mono',monospace;font-size:0.74rem;letter-spacing:0.18em;text-align:center">
+        ◈ 你想猫 (李晓明) · 李畅 · 小叶 ─── ALETHEIA · hackathon-v0.2 · 2026-05-03
+      </p>
+    </div>
+  </section>
+
+</div>
+</div>
+
+<!-- Bottom hint bar -->
+<div class="botbar">
+  <div class="hint">
+    <span><kbd>←</kbd> <kbd>→</kbd> 翻页</span>
+    <span><kbd>Space</kbd> 下一页</span>
+    <span><kbd>F</kbd> 全屏</span>
+    <span><kbd>1-9</kbd> 跳页</span>
+  </div>
+  <div class="hint">
+    <span>点击图 ⤢ 放大</span>
+    <span>点击左/右屏边切页</span>
+  </div>
+</div>
+
+<!-- Modal: fullscreen image preview -->
+<div class="modal" id="modal">
+  <div class="modal-content" id="modalContent"></div>
+  <div class="modal-tip"><kbd>Esc</kbd> 关闭 · <kbd>点击</kbd> 关闭</div>
+</div>
+
+<script>
+(function(){
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  const totalEl = document.getElementById('totalPage');
+  const curEl = document.getElementById('curPage');
+  const progressEl = document.getElementById('progress');
+  const slidesEl = document.getElementById('slides');
+  const modal = document.getElementById('modal');
+  const modalContent = document.getElementById('modalContent');
+
+  totalEl.textContent = String(total).padStart(2, '0');
+  let cur = 0;
+
+  function render(){
+    slidesEl.style.transform = `translateX(-${cur * 100}vw)`;
+    curEl.textContent = String(cur + 1).padStart(2, '0');
+    progressEl.style.width = ((cur + 1) / total * 100) + '%';
+    slides.forEach((s, i) => s.classList.toggle('active', i === cur));
+  }
+
+  function go(delta){
+    if (modal.classList.contains('open')) return;
+    const next = Math.max(0, Math.min(total - 1, cur + delta));
+    if (next === cur) return;
+    cur = next;
+    render();
+  }
+  function jump(idx){
+    if (idx < 0 || idx >= total) return;
+    cur = idx;
+    render();
+  }
+
+  // Keyboard
+  document.addEventListener('keydown', (e) => {
+    if (modal.classList.contains('open')) {
+      if (e.key === 'Escape') closeModal();
+      return;
+    }
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case ' ':
+      case 'PageDown':
+        e.preventDefault(); go(+1); break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
+        e.preventDefault(); go(-1); break;
+      case 'Home': e.preventDefault(); jump(0); break;
+      case 'End':  e.preventDefault(); jump(total - 1); break;
+      case 'f':
+      case 'F':
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+        break;
+      default:
+        if (/^[1-9]$/.test(e.key)) jump(Number(e.key) - 1);
+    }
+  });
+
+  // Click navigation zones
+  document.getElementById('navLeft').addEventListener('click', () => go(-1));
+  document.getElementById('navRight').addEventListener('click', () => go(+1));
+
+  // Click anywhere on slide (excluding diagrams/buttons) — next page
+  // 暂不启用全屏点击翻页 (避免误触图内点击)
+
+  // Click diagram → fullscreen
+  document.querySelectorAll('.diagram').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const svg = el.querySelector('svg');
+      if (!svg) return;
+      modalContent.innerHTML = '';
+      modalContent.appendChild(svg.cloneNode(true));
+      modal.classList.add('open');
+    });
+  });
+
+  function closeModal(){
+    modal.classList.remove('open');
+    modalContent.innerHTML = '';
+  }
+  modal.addEventListener('click', closeModal);
+
+  // Touch swipe support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (modal.classList.contains('open')) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 60) go(dx > 0 ? -1 : +1);
+  });
+
+  // Initial render
+  render();
+})();
+</script>
+
+</body>
+</html>

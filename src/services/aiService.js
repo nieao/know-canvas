@@ -571,6 +571,50 @@ export async function decomposeToOntology(sentence) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 节点级"拆解" — 把单个节点 (entity/constraint/assumption) 进一步拆成 3-5 个子实体
+// 用在 OntologyNode 的"拆解"按钮: 用户觉得某个节点还太抽象, 让 LLM 再下一层
+// ─────────────────────────────────────────────────────────────────────────────
+const FURTHER_DECOMPOSE_SYSTEM_PROMPT = `你是 Aletheia 二级拆解引擎. 给定一个本体节点 (实体/约束/假设), 把它再下一层拆成 3-5 个更具体的子实体.
+
+认知规范:
+- 不要重复原节点的话, 必须更具体一层
+- 子实体之间应当有清晰的功能划分 (不是同义词不同表述)
+- 每个子实体的 description 必须给出"它在原节点里负责什么"
+
+严格输出 JSON 不要 markdown 围栏:
+{
+  "subitems": [
+    { "title": "子实体名 (10 字内)", "description": "30 字内说明它的职责 / 范围" }
+  ]
+}`
+
+/**
+ * 节点级二次拆解: 给一个 OntologyNode → 3-5 个子节点
+ * @param {{title:string, description?:string, variant?:string}} node
+ * @returns {Promise<Array<{title:string, description:string}>>}
+ */
+export async function decomposeNodeFurther(node) {
+  if (!node?.title) return []
+  const variant = node.variant || 'entity'
+  const prompt = `把下列 ${variant === 'constraint' ? '约束' : variant === 'assumption' ? '假设' : '实体'} 进一步拆成 3-5 个更具体的子实体:
+
+标题: ${node.title}
+${node.description ? '描述: ' + node.description : ''}
+
+按 schema 输出 JSON.`
+  const raw = await callLLM({ system: FURTHER_DECOMPOSE_SYSTEM_PROMPT, prompt, jsonMode: true })
+  const parsed = tryParseLLMJson(raw)
+  if (!parsed?.subitems) return []
+  return parsed.subitems
+    .map((s) => ({
+      title: (s.title || s.name || '').trim(),
+      description: (s.description || s.desc || '').trim(),
+    }))
+    .filter((s) => s.title)
+    .slice(0, 6)
+}
+
 /**
  * Aletheia 反驳引擎: 节点 → 多个 Devil's Advocate 反驳论点
  * @param {{title:string, description?:string}} node

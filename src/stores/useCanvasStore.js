@@ -2229,6 +2229,101 @@ const useCanvasStore = create(
         return challenges
       },
 
+      // 节点级二次拆解 — 把现有 OntologyNode 拆成 3-5 个子 entity 节点
+      // 用于 OntologyNode 上的"拆解"按钮: 用户觉得一级拆解还太抽象, 让 LLM 再下一层
+      decomposeOntologyFurther: async (ontoNodeId) => {
+        const { nodes } = get()
+        const src = nodes.find((n) => n.id === ontoNodeId)
+        if (!src || src.type !== 'ontologyNode') {
+          throw new Error(`decomposeOntologyFurther: 找不到 OntologyNode ${ontoNodeId}`)
+        }
+
+        const svc = await import('../services/aiService')
+        const subitems = await svc.decomposeNodeFurther({
+          title: src.data?.title || '',
+          description: src.data?.description || '',
+          variant: src.data?.variant || 'entity',
+        })
+
+        if (!subitems.length) {
+          console.warn('[decomposeOntologyFurther] LLM 没返回子项')
+          return []
+        }
+
+        const ts = Date.now()
+        const rand = () => Math.random().toString(36).slice(2, 8)
+        const COL_W = 240
+        const ROW_H = 150
+        const newNodes = []
+        const newEdges = []
+
+        // 子节点排成一横排, 在父节点下面
+        const startX = src.position.x - ((subitems.length - 1) * COL_W) / 2
+        subitems.forEach((s, i) => {
+          const cid = `onto-${ts}-${rand()}`
+          newNodes.push({
+            id: cid,
+            type: 'ontologyNode',
+            position: { x: startX + i * COL_W, y: src.position.y + ROW_H },
+            data: {
+              variant: 'entity',  // 二次拆出来的统一作为 entity, 用户可手动改
+              title: s.title,
+              description: s.description,
+              parent_node: ontoNodeId,
+              parent_goal: src.data?.parent_goal || src.data?.title,
+              created_at: ts,
+            },
+          })
+          newEdges.push({
+            id: `edge-${ts}-${rand()}`,
+            source: ontoNodeId,
+            target: cid,
+            type: 'smoothstep',
+            data: { relationType: '细化' },
+            style: { stroke: '#c8a882', strokeWidth: 1.5 },
+          })
+        })
+
+        set((state) => {
+          state.nodes.push(...newNodes)
+          state.edges.push(...newEdges)
+        })
+        return subitems
+      },
+
+      // 节点级元认知 — 把节点 title+description 当 prompt, 跑 5 步元认知
+      // (复用 addLocalTask + runMetaCognitiveTask, 节点上长 5 个 metaStepNode)
+      runMetaCognitiveOnNode: async (nodeId) => {
+        const { nodes, addLocalTask, updateLocalTaskStatus } = get()
+        const src = nodes.find((n) => n.id === nodeId)
+        if (!src) throw new Error(`runMetaCognitiveOnNode: 找不到节点 ${nodeId}`)
+        const title = src.data?.title || ''
+        const description = src.data?.description || ''
+        if (!title) throw new Error('节点没有标题, 无法启动元认知')
+
+        const prompt = description ? `${title}\n\n${description}` : title
+        const taskId = addLocalTask(nodeId, {
+          prompt,
+          target: 'local',
+          routerReason: '节点元认知按钮触发',
+        })
+
+        const { runMetaCognitiveTask } = await import('../services/metaCognitiveExecutor')
+        // 不 await — 节点级动作让用户立刻看到"已派"反馈, 5 步进度通过 metaStepNode 实时呈现
+        runMetaCognitiveTask({
+          nodeId,
+          taskId,
+          prompt,
+          onUpdate: (patch) => updateLocalTaskStatus(nodeId, taskId, patch),
+        }).catch((err) => {
+          console.error('[runMetaCognitiveOnNode] failed:', err)
+          updateLocalTaskStatus(nodeId, taskId, {
+            status: 'failed', error: err?.message || String(err), finishedAt: Date.now(),
+          })
+        })
+        return taskId
+      },
+
       // 内部: 给一个 done 任务在右侧建 ResultNode + 自动连线
       _addResultNodeFor: (sourceNodeId, hermesTask, resultText) => {
         set((state) => {

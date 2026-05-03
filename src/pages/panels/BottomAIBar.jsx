@@ -56,7 +56,8 @@ function BottomAIBar({
             `实体 (${struct.entities.length}): ${struct.entities.map((e) => e.title).join('、')}\n` +
             (struct.constraints.length ? `约束 (${struct.constraints.length}): ${struct.constraints.map((c) => c.title).join('、')}\n` : '') +
             (struct.assumptions.length ? `假设 (${struct.assumptions.length}): ${struct.assumptions.map((a) => a.title).join('、')}\n` : '') +
-            `\n→ 在画布上点节点的「派 Hermes →」执行, 或「反驳 ⚔」生成 Devil's Advocate.`
+            `\n→ 接下来在画布的每个节点上点 4 个推进按钮:\n` +
+            `   🔧 拆解 (再下一层) · ⚡ 元认知 (5 步流程) · 🚀 派 Hermes · ⚔ 反驳`
           break
         }
         case 'extract': {

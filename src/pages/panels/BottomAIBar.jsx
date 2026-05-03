@@ -38,7 +38,7 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
   const [mode, setMode] = useState('meta')
   const [submitting, setSubmitting] = useState(false)
   const [lastNodeId, setLastNodeId] = useState(null)
-  const [importedFile, setImportedFile] = useState(null)  // { name, text } — MD/TXT 文件预览
+  const [importedFiles, setImportedFiles] = useState([])  // [{ name, text, fullSize }] — 多文件支持
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
 
@@ -55,43 +55,74 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
   const askAndCreateHtmlNode = useCanvasStore((s) => s.askAndCreateHtmlNode)
   const askAndStartMetaProject = useCanvasStore((s) => s.askAndStartMetaProject)
 
-  // 文件选择 → 解析 → 预览到 input 提示
+  // 文件选择 → 解析 → 预览到 input 提示 (支持多选 + 多次追加)
   const handleFilePick = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      const parsed = await parseFile(file)
-      const text = String(parsed.content || '').trim()
-      if (!text) throw new Error('文件为空或解析失败')
-      // 截断到 8000 字符防止 prompt 过大 (LLM context 限制)
-      const truncated = text.length > 8000 ? text.slice(0, 8000) + '\n\n...(已截断, 原文 ' + text.length + ' 字)' : text
-      setImportedFile({ name: file.name, text: truncated, fullSize: text.length })
-      // 自动填到 input 作为引导
-      setInput(`基于附件《${file.name}》内容做元认知拆解 + 推导`)
-    } catch (err) {
-      alert(`文件解析失败: ${err?.message || err}`)
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = ''
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const failed = []
+    const parsedList = []
+    for (const file of files) {
+      try {
+        const parsed = await parseFile(file)
+        const text = String(parsed.content || '').trim()
+        if (!text) {
+          failed.push(`${file.name}: 文件为空`)
+          continue
+        }
+        // 单文件截断 8000 字 (多文件时还会再做总量裁剪)
+        const truncated = text.length > 8000 ? text.slice(0, 8000) + '\n\n...(已截断, 原文 ' + text.length + ' 字)' : text
+        parsedList.push({ name: file.name, text: truncated, fullSize: text.length })
+      } catch (err) {
+        failed.push(`${file.name}: ${err?.message || err}`)
+      }
     }
+    if (parsedList.length > 0) {
+      // append 到现有列表 (用户可分批选)
+      setImportedFiles((prev) => [...prev, ...parsedList])
+      // 仅在 input 为空时填默认引导
+      setInput((cur) => {
+        if (cur.trim()) return cur
+        const allNames = [...importedFiles, ...parsedList].map((f) => `《${f.name}》`).join('、')
+        return `基于附件 ${allNames} 内容做元认知拆解 + 推导`
+      })
+    }
+    if (failed.length > 0) {
+      alert(`部分文件解析失败:\n${failed.join('\n')}`)
+    }
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const clearImportedFile = () => setImportedFile(null)
+  const clearImportedFile = (idx) => {
+    if (typeof idx === 'number') setImportedFiles((prev) => prev.filter((_, i) => i !== idx))
+    else setImportedFiles([])
+  }
 
   const canSubmit = input.trim().length > 0 && !submitting
 
   const handleSubmit = async () => {
     if (!canSubmit) return
     let text = input.trim()
-    // 如果有附件 MD/TXT, 把内容拼到 prompt 后面给 LLM 当作上下文
-    if (importedFile?.text) {
-      text = `${text}\n\n=== 附件: ${importedFile.name} ===\n${importedFile.text}`
+    // 多附件依次拼到 prompt 后, 总长度上限 24000 字 (LLM 上下文兜底)
+    if (importedFiles.length > 0) {
+      let attachBlock = ''
+      let acc = 0
+      const HARD_CAP = 24000
+      for (const f of importedFiles) {
+        const piece = `\n\n=== 附件: ${f.name} ===\n${f.text}`
+        if (acc + piece.length > HARD_CAP) {
+          attachBlock += `\n\n=== 附件: ${f.name} ===\n[多附件总长超 ${HARD_CAP} 字, 此项已跳过, 原 ${f.fullSize} 字]`
+        } else {
+          attachBlock += piece
+          acc += piece.length
+        }
+      }
+      text = `${text}${attachBlock}`
     }
     setSubmitting(true)
     try {
       let nodeId
       if (mode === 'meta') {
         // 元认知 = 6-stage 多节点 (上下文/拆解/agent涌现/拓扑/执行/决策反思)
-        // 画布上看真实拆分 + agent 涌现, 整个流程在 store 里串行揭示
         nodeId = await askAndStartMetaProject(text)
       } else if (mode === 'oneshot') {
         // 极简 HTML = 一次性单节点 5 维度 HTML
@@ -102,7 +133,7 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
       }
       setLastNodeId(nodeId)
       setInput('')
-      setImportedFile(null)  // 提交后清空附件
+      setImportedFiles([])  // 提交后清空附件
     } catch (err) {
       console.error('[BottomAIBar] submit failed:', err)
       alert(`提交失败: ${err?.message || err}`)
@@ -179,39 +210,55 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
         </div>
       </div>
 
-      {/* === 已选附件预览 === */}
-      {importedFile && (
-        <div
-          className="flex items-center gap-2 mx-3 mb-1 px-3 py-1.5 text-[10px] rounded-md"
-          style={{
-            background: 'var(--warm-bg, #f5f0eb)',
-            border: '1px solid var(--warm-light, #e8d5c0)',
-            color: 'var(--gray-700, #555)',
-          }}
-        >
-          <svg className="w-3 h-3" style={{ color: 'var(--warm, #c8a882)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span style={{ color: 'var(--warm, #c8a882)', fontWeight: 500 }}>{importedFile.name}</span>
-          <span>· {importedFile.text.length} 字{importedFile.fullSize > importedFile.text.length ? ` (原 ${importedFile.fullSize} 字, 已截断)` : ''}</span>
-          <span className="flex-1" />
-          <button
-            type="button"
-            onClick={clearImportedFile}
-            className="px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
-            style={{ color: 'var(--gray-500, #888)' }}
-            title="移除附件"
-          >
-            ✕
-          </button>
+      {/* === 已选附件预览 (多文件) === */}
+      {importedFiles.length > 0 && (
+        <div className="mx-3 mb-1 flex flex-wrap gap-1.5">
+          {importedFiles.map((f, idx) => (
+            <div
+              key={`${f.name}-${idx}`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] rounded-md"
+              style={{
+                background: 'var(--warm-bg, #f5f0eb)',
+                border: '1px solid var(--warm-light, #e8d5c0)',
+                color: 'var(--gray-700, #555)',
+              }}
+            >
+              <svg className="w-3 h-3" style={{ color: 'var(--warm, #c8a882)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span style={{ color: 'var(--warm, #c8a882)', fontWeight: 500, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.name}>{f.name}</span>
+              <span style={{ opacity: 0.7 }}>· {f.text.length}字{f.fullSize > f.text.length ? ' (截)' : ''}</span>
+              <button
+                type="button"
+                onClick={() => clearImportedFile(idx)}
+                className="px-1 rounded hover:bg-red-50 transition-colors"
+                style={{ color: 'var(--gray-500, #888)' }}
+                title="移除此附件"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          {importedFiles.length > 1 && (
+            <button
+              type="button"
+              onClick={() => clearImportedFile()}
+              className="text-[10px] px-2 py-1 rounded transition-colors"
+              style={{ color: 'var(--gray-500, #888)', border: '1px solid var(--gray-100, #e8e8e8)' }}
+              title="全部移除"
+            >
+              清空 {importedFiles.length}
+            </button>
+          )}
         </div>
       )}
 
-      {/* 隐藏的文件 input */}
+      {/* 隐藏的文件 input — multiple 允许选多个 */}
       <input
         ref={fileInputRef}
         type="file"
         accept=".md,.txt,.markdown"
+        multiple
         style={{ display: 'none' }}
         onChange={handleFilePick}
       />
@@ -227,7 +274,7 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
           style={{
             border: '1px solid var(--gray-100, #e8e8e8)',
             background: 'var(--white, #fff)',
-            color: importedFile ? 'var(--warm, #c8a882)' : 'var(--gray-500, #888)',
+            color: importedFiles.length > 0 ? 'var(--warm, #c8a882)' : 'var(--gray-500, #888)',
             cursor: submitting ? 'not-allowed' : 'pointer',
           }}
           title="导入 MD / TXT 文件 → 喂给元认知作上下文"

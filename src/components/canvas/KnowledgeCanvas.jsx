@@ -338,9 +338,30 @@ function KnowledgeCanvasInner({
       return false
     }
 
+    // === 两遍计算 visible 集合 ===
+    // 第一遍: 按 level + shouldShow 决定每个节点是否可见
+    const visibleMap = new Map()
+    for (const n of rawNodes) {
+      visibleMap.set(n.id, shouldShow(n, getLevel(n)))
+    }
+    // 第二遍 (cascade): 父节点不可见时, 子节点也强制不可见.
+    // 防止 React Flow 在 layout 阶段查找 hidden parent 直接 throw "Parent node X not found"
+    // (这种 throw 不走 onError, 直接冒泡到 ErrorBoundary 把整画布崩掉)
+    // 通常深度 ≤ 2 (projectGroup → challengeGroup → child), 跑 3 遍兜底
+    for (let pass = 0; pass < 3; pass++) {
+      let changed = false
+      for (const n of rawNodes) {
+        if (!visibleMap.get(n.id)) continue
+        if (n.parentNode && idSet.has(n.parentNode) && !visibleMap.get(n.parentNode)) {
+          visibleMap.set(n.id, false)
+          changed = true
+        }
+      }
+      if (!changed) break
+    }
+
     const remapped = rawNodes.map((n) => {
-      const level = getLevel(n)
-      const visible = shouldShow(n, level)
+      const visible = visibleMap.get(n.id)
       let next = n
       if (n.parentNode && !idSet.has(n.parentNode)) {
         hasOrphan = true
@@ -373,7 +394,12 @@ function KnowledgeCanvasInner({
       })
       console.warn('[KnowledgeCanvas] 检测到孤儿子节点, 已挂 fallback root')
     }
-    return remapped
+    // 最终交给 React Flow 的数组: 把 hidden 节点直接剔除.
+    // 单靠 hidden=true 字段不够 — React Flow 11 在 child layout 时仍可能 throw
+    // "Parent node X not found" 冒泡到 ErrorBoundary 把整画布崩掉.
+    // cascade 已经把 hidden parent 的所有 child 也标 hidden, 这里 filter
+    // 后剩下的节点之间 parentNode 关系自洽.
+    return remapped.filter((n) => !n.hidden)
   }, [rawNodes, collapseMode, expandedSourceIds, pinnedNodeIds])
 
   const reactFlowInstance = useReactFlow()
@@ -741,9 +767,11 @@ function KnowledgeCanvasInner({
     }
   }, [selectedNodes, selectedCount])
 
-  // 为连线添加关系标签
+  // 为连线添加关系标签 — 同时过滤掉 source/target 节点已被折叠隐藏的边
+  // (否则 React Flow 报 source/target node not found, 但不影响主流程, 仅垃圾日志)
   const processedEdges = useMemo(() => {
-    return edges.map(edge => {
+    const visibleIds = new Set(nodes.map((n) => n.id))
+    return edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target)).map(edge => {
       const relation = RELATION_TYPES[edge.data?.relationType]
       if (relation) {
         return {
@@ -771,7 +799,7 @@ function KnowledgeCanvasInner({
         },
       }
     })
-  }, [edges])
+  }, [edges, nodes])
 
   return (
     <div

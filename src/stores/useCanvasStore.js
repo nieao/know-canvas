@@ -2224,32 +2224,12 @@ const useCanvasStore = create(
       },
 
       // 反驳引擎: 给一个 OntologyNode 生成 N 个 ChallengeNode (Devil's Advocate)
+      // 反驳卡片**统一**堆到源节点所在 projectGroup 右侧的 challengeGroup 容器里
+      // (避免散落在 entity / agent 之间造成视觉重叠 — 用户希望"自动生成就和手动整理后一样")
       dispatchChallenge: async (ontoNodeId) => {
         const { nodes } = get()
         const src = nodes.find((n) => n.id === ontoNodeId)
         if (!src) throw new Error(`dispatchChallenge: 找不到节点 ${ontoNodeId}`)
-
-        // 反驳节点要落到 projectGroup 外 (不污染原项目)
-        // 算源节点的 absolute position (考虑 parentNode 嵌套)
-        const getAbsolutePos = (node) => {
-          if (!node?.parentNode) return node?.position || { x: 0, y: 0 }
-          const parent = nodes.find((n) => n.id === node.parentNode)
-          if (!parent) return node.position
-          return {
-            x: (parent.position?.x || 0) + (node.position?.x || 0),
-            y: (parent.position?.y || 0) + (node.position?.y || 0),
-          }
-        }
-        const srcAbs = getAbsolutePos(src)
-        // 如果源在 projectGroup 内, 反驳节点要跳出 group 右边界 + 50px 缓冲
-        let baseX = srcAbs.x + 320
-        if (src.parentNode) {
-          const group = nodes.find((n) => n.id === src.parentNode)
-          if (group?.style?.width) {
-            const groupRight = (group.position?.x || 0) + Number(group.style.width)
-            baseX = Math.max(baseX, groupRight + 50)
-          }
-        }
 
         const svc = await import('../services/aiService')
         const challenges = await svc.challengeNode({
@@ -2262,20 +2242,76 @@ const useCanvasStore = create(
           return []
         }
 
+        // === 决定 challengeGroup 容器 ===
+        // 优先复用源节点所在 projectGroup 的兄弟反驳通道 (id = `${projectGroupId}-challenges`)
+        // 没有 projectGroup 时, 复用以源节点为单位的浮动通道 (id = `challengeGroup-floating-${ontoNodeId}`)
+        const CHALLENGE_GROUP_W = 380
+        const CHALLENGE_CARD_H = 230  // 单张反驳卡片估算高度 (含 padding)
+        const CHALLENGE_GROUP_PAD = 30 // 容器内上下边距
+
+        let challengeGroupId
+        let challengeGroupPos
+        const projectGroup = src.parentNode ? nodes.find((n) => n.id === src.parentNode && n.type === 'group') : null
+
+        if (projectGroup) {
+          challengeGroupId = `${projectGroup.id}-challenges`
+          // 容器位置: projectGroup 右边界 + 80
+          const groupX = projectGroup.position?.x || 0
+          const groupY = projectGroup.position?.y || 0
+          const groupW = Number(projectGroup.style?.width) || 1600
+          challengeGroupPos = { x: groupX + groupW + 80, y: groupY }
+        } else {
+          challengeGroupId = `challengeGroup-floating-${ontoNodeId}`
+          challengeGroupPos = { x: (src.position?.x || 0) + 360, y: src.position?.y || 0 }
+        }
+
+        const existing = nodes.find((n) => n.id === challengeGroupId)
+        // 已有反驳卡片数 (用于 append 时的 y 偏移)
+        const existingChallenges = nodes.filter((n) => n.parentNode === challengeGroupId && n.type === 'challengeNode')
+        const startIdx = existingChallenges.length
+
         const ts = Date.now()
         const rand = () => Math.random().toString(36).slice(2, 8)
         const newNodes = []
         const newEdges = []
 
-        challenges.forEach((c, i) => {
+        // 没有容器就建一个 (severity 排序后续 append 也按到达顺序排, 简化处理)
+        if (!existing) {
+          newNodes.push({
+            id: challengeGroupId,
+            type: 'group',
+            position: challengeGroupPos,
+            style: {
+              width: CHALLENGE_GROUP_W,
+              height: Math.max(CHALLENGE_GROUP_PAD * 2 + (startIdx + challenges.length) * CHALLENGE_CARD_H, 260),
+              background: 'rgba(178,124,139,0.04)',
+              border: '1px dashed rgba(178,124,139,0.45)',
+              borderRadius: 14,
+            },
+            data: {
+              isChallengeGroup: true,
+              label: '反驳通道',
+              relatedProjectGroupId: projectGroup?.id || null,
+            },
+          })
+        }
+
+        // 反驳按 severity 排 (critical/high 在上)
+        const sevRank = { critical: 0, high: 1, medium: 2, low: 3 }
+        const ordered = [...challenges].sort(
+          (a, b) => (sevRank[a.severity] ?? 9) - (sevRank[b.severity] ?? 9),
+        )
+
+        ordered.forEach((c, i) => {
           const cid = `challenge-${ts}-${rand()}`
+          const slotIdx = startIdx + i
           newNodes.push({
             id: cid,
             type: 'challengeNode',
-            position: {
-              x: baseX,
-              y: srcAbs.y + i * 130 - ((challenges.length - 1) * 130) / 2,
-            },
+            parentNode: challengeGroupId,
+            extent: 'parent',
+            // 容器内坐标: 居中放, 顶部留 PAD, 每张卡 CHALLENGE_CARD_H 高
+            position: { x: 20, y: CHALLENGE_GROUP_PAD + slotIdx * CHALLENGE_CARD_H },
             data: {
               source_node_id: ontoNodeId,
               source_title: src.data?.title || '',
@@ -2289,7 +2325,6 @@ const useCanvasStore = create(
             id: `edge-${ts}-${rand()}`,
             source: ontoNodeId,
             target: cid,
-            // smoothstep = 正交折线, 圆角拐弯
             type: 'smoothstep',
             data: { relationType: '反驳' },
             style: {
@@ -2304,6 +2339,17 @@ const useCanvasStore = create(
         set((state) => {
           state.nodes.push(...newNodes)
           state.edges.push(...newEdges)
+          // 复用旧容器时把高度撑大, 容下新卡片
+          if (existing) {
+            const grp = state.nodes.find((n) => n.id === challengeGroupId)
+            if (grp) {
+              const total = startIdx + challenges.length
+              grp.style = {
+                ...grp.style,
+                height: Math.max(CHALLENGE_GROUP_PAD * 2 + total * CHALLENGE_CARD_H, 260),
+              }
+            }
+          }
         })
 
         return challenges

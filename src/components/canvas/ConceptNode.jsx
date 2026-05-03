@@ -7,6 +7,8 @@
 import { memo, useState, useRef, useEffect } from 'react'
 import { Handle, Position } from 'reactflow'
 import ColorAccentBar from './ColorAccentBar'
+import MetaAnalysisInline from './MetaAnalysisInline'
+import useCanvasStore from '../../stores/useCanvasStore'
 
 // 安全获取字符串内容
 const safeString = (val) => {
@@ -98,6 +100,14 @@ function ConceptNode({ id, data, selected }) {
   const hoverTimeoutRef = useRef(null)
   const collapseTimeoutRef = useRef(null)
 
+  // 元认知按钮状态来自 store data — 跟 yjs 同步
+  const analyzeMeta = useCanvasStore((s) => s.analyzeNodeMetaCognitive)
+  const updateNode = useCanvasStore((s) => s.updateNode)
+  const isAnalyzing = data.metaAnalyzing === true
+  const metaAnalysis = data.metaAnalysis
+  const metaError = data.metaAnalysisError
+  const metaExpanded = data.metaExpanded === true
+
   const sizeStyle = SIZE_SCALES[data.size] || SIZE_SCALES.medium
   const isMarked = data.marked
   const markColor = data.markColor || 'var(--accent)'
@@ -107,6 +117,22 @@ function ConceptNode({ id, data, selected }) {
   // 判断是否有可展开的详细描述
   const hasRichContent = data.description && data.description.length > 60
   const isExpanded = (isHovered || isPinned) && hasRichContent
+
+  // 元认知按钮处理
+  const onAnalyzeMeta = (e) => {
+    e.stopPropagation()
+    if (isAnalyzing || !data.title?.trim()) return
+    if (metaAnalysis) {
+      updateNode(id, { metaExpanded: !metaExpanded })
+      return
+    }
+    analyzeMeta(id).catch((err) => console.error('[ConceptNode] analyze failed:', err))
+  }
+  const onReanalyze = (e) => {
+    e.stopPropagation()
+    if (isAnalyzing) return
+    analyzeMeta(id).catch((err) => console.error('[ConceptNode] reanalyze failed:', err))
+  }
 
   // 清理定时器
   useEffect(() => {
@@ -323,6 +349,54 @@ function ConceptNode({ id, data, selected }) {
               </span>
             ))}
           </div>
+        )}
+
+        {/* 元认知按钮 (一直可见) */}
+        {data.title && (
+          <div className="mt-2">
+            <button
+              onClick={onAnalyzeMeta}
+              disabled={isAnalyzing}
+              className="w-full text-[10px] py-1 px-2 rounded-sm border transition-all"
+              style={{
+                borderColor: metaAnalysis ? 'var(--accent)' : 'var(--accent-soft, var(--accent))',
+                color: 'var(--accent)',
+                background: metaAnalysis ? 'var(--accent-bg, rgba(245,240,235,0.7))' : 'var(--accent-bg, rgba(245,240,235,0.4))',
+                cursor: isAnalyzing ? 'wait' : 'pointer',
+                opacity: isAnalyzing ? 0.6 : 1,
+                fontWeight: metaAnalysis ? 500 : 400,
+              }}
+              title={
+                isAnalyzing ? '正在分析中…' :
+                metaAnalysis ? `点击${metaExpanded ? '收起' : '展开'}元认知分析` :
+                '一次 LLM 调用 → 5 维度分析'
+              }
+            >
+              {isAnalyzing ? '分析中…' : metaAnalysis ? `⚡ 元认知 ${metaExpanded ? '▴' : '▾'}` : '⚡ 元认知分析'}
+            </button>
+          </div>
+        )}
+
+        {/* 元认知错误 */}
+        {metaError && !metaAnalysis && (
+          <div className="text-[10px] mt-2 px-2 py-1 rounded-sm" style={{
+            color: '#7a3a4a',
+            background: 'rgba(245,235,237,0.6)',
+            border: '1px solid #b27c8b',
+          }}>
+            分析失败: {metaError}
+            <button onClick={onReanalyze} className="ml-2 underline" style={{ color: '#7a3a4a' }}>重试</button>
+          </div>
+        )}
+
+        {/* 元认知 inline 折叠区 */}
+        {metaAnalysis && metaExpanded && (
+          <MetaAnalysisInline
+            analysis={metaAnalysis}
+            textColor="var(--text-secondary)"
+            onReanalyze={onReanalyze}
+            isAnalyzing={isAnalyzing}
+          />
         )}
       </div>
 

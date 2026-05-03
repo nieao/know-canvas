@@ -2291,6 +2291,114 @@ const useCanvasStore = create(
         return subitems
       },
 
+      // 圈选组合元认知 — 把多个节点当一个系统看, 生成一个新节点 (variant=group-meta)
+      // 自动连到所有选中节点, 折叠区直接展开 5 维度组合分析
+      analyzeGroupMetaCognitive: async (nodeIds) => {
+        if (!Array.isArray(nodeIds) || nodeIds.length < 2) {
+          throw new Error('analyzeGroupMetaCognitive: 至少需要 2 个节点')
+        }
+        const { nodes } = get()
+        const srcNodes = nodeIds.map((id) => nodes.find((n) => n.id === id)).filter(Boolean)
+        if (srcNodes.length < 2) throw new Error('找不到足够的源节点')
+
+        // 1. 先建占位节点 (analyzing: true), 用户立刻能看到
+        const ts = Date.now()
+        const rand = Math.random().toString(36).slice(2, 8)
+        const groupId = `group-meta-${ts}-${rand}`
+        // 位置: 选中节点的几何中心上方 200px
+        const minX = Math.min(...srcNodes.map((n) => n.position.x))
+        const maxX = Math.max(...srcNodes.map((n) => n.position.x))
+        const minY = Math.min(...srcNodes.map((n) => n.position.y))
+        const cx = (minX + maxX) / 2
+        const cy = minY - 220
+
+        const placeholderNode = {
+          id: groupId,
+          type: 'ontologyNode',
+          position: { x: cx, y: cy },
+          data: {
+            variant: 'goal',  // 视觉用 goal (深底反色) 凸显这是组合分析
+            title: `组合分析 (${srcNodes.length} 节点)`,
+            description: srcNodes.map((n) => n.data?.title || '').filter(Boolean).join(' · '),
+            metaAnalyzing: true,
+            isGroupMeta: true,
+            sourceNodeIds: nodeIds,
+            created_at: ts,
+          },
+        }
+        const newEdges = nodeIds.map((targetId) => ({
+          id: `edge-group-${ts}-${rand}-${targetId.slice(-6)}`,
+          source: groupId,
+          target: targetId,
+          type: 'smoothstep',
+          data: { relationType: '组合分析' },
+          style: { stroke: '#c8a882', strokeWidth: 1.5, strokeDasharray: '6 3' },
+        }))
+        set((state) => {
+          state.nodes.push(placeholderNode)
+          state.edges.push(...newEdges)
+        })
+
+        // 2. 调 LLM 做组合分析
+        try {
+          const svc = await import('../services/aiService')
+          const result = await svc.analyzeGroupMeta(
+            srcNodes.map((n) => ({
+              title: n.data?.title || '',
+              description: n.data?.description || '',
+              variant: n.data?.variant,
+            }))
+          )
+          if (!result) {
+            get().updateNode(groupId, {
+              metaAnalyzing: false,
+              metaAnalysisError: 'LLM 输出无法解析',
+            })
+            return null
+          }
+          get().updateNode(groupId, {
+            metaAnalysis: { ...result, analyzedAt: Date.now() },
+            metaAnalyzing: false,
+            metaAnalysisError: null,
+            metaExpanded: true,
+          })
+          return { groupId, result }
+        } catch (err) {
+          console.error('[analyzeGroupMetaCognitive] failed:', err)
+          get().updateNode(groupId, {
+            metaAnalyzing: false,
+            metaAnalysisError: err?.message || String(err),
+          })
+          throw err
+        }
+      },
+
+      // 批量推进 — 对选中的多个节点并发执行同一类元认知动作
+      // mode: 'analyze' (元认知分析) | 'decompose' (拆解, 仅 OntologyNode) | 'promote' (派 Hermes, 仅 OntologyNode)
+      batchAdvance: async (nodeIds, mode = 'analyze') => {
+        if (!Array.isArray(nodeIds) || nodeIds.length === 0) return { ok: 0, fail: 0 }
+        const { nodes, analyzeNodeMetaCognitive, decomposeOntologyFurther, promoteOntologyToTask } = get()
+        const handler = {
+          analyze: (id) => analyzeNodeMetaCognitive(id),
+          decompose: (id) => decomposeOntologyFurther(id),
+          promote: (id) => promoteOntologyToTask(id),
+        }[mode]
+        if (!handler) throw new Error(`batchAdvance: 未知 mode "${mode}"`)
+
+        // 过滤: decompose / promote 仅对 OntologyNode 生效
+        const eligible = nodeIds.filter((id) => {
+          if (mode === 'analyze') return true
+          const n = nodes.find((x) => x.id === id)
+          return n?.type === 'ontologyNode' && n.data?.variant !== 'goal'
+        })
+
+        // 并发调用 — 每个独立, 失败不阻塞其他
+        const results = await Promise.allSettled(eligible.map((id) => handler(id)))
+        const ok = results.filter((r) => r.status === 'fulfilled').length
+        const fail = results.length - ok
+        return { ok, fail, total: eligible.length, skipped: nodeIds.length - eligible.length }
+      },
+
       // 节点级元认知分析 — 一次 LLM 调用, 5 维度简版结果直接 inline 写到节点 data
       // (不长 metaStepNode, 不开右侧任务面板, 节点自身展开就能看)
       analyzeNodeMetaCognitive: async (nodeId) => {

@@ -332,9 +332,30 @@ export default function KnowledgeGraph() {
     }
 
     const onSelectionAction = (e) => {
-      const { action, relationType, color, name, category, tags } = e.detail
+      const { action, relationType, color, name, category, tags, mode } = e.detail
       const store = useCanvasStore.getState()
       switch (action) {
+        case 'groupAnalyzeMeta': {
+          // 圈选组合元认知 — 生成新组合分析节点并连边
+          const selectedIds = store.nodes.filter((n) => n.selected).map((n) => n.id)
+          if (selectedIds.length < 2) {
+            console.warn('[selection] 组合分析至少需要 2 个节点')
+            return
+          }
+          store.analyzeGroupMetaCognitive(selectedIds).catch((err) => {
+            console.error('[selection] groupAnalyzeMeta failed:', err)
+          })
+          break
+        }
+        case 'batchAdvance': {
+          // 批量推进 — 对每个选中节点跑同一动作
+          const selectedIds = store.nodes.filter((n) => n.selected).map((n) => n.id)
+          if (selectedIds.length === 0) return
+          store.batchAdvance(selectedIds, mode || 'analyze')
+            .then((r) => console.log(`[selection] batchAdvance ${mode}: ${r.ok}/${r.total} 成功 ${r.fail} 失败 ${r.skipped} 跳过`))
+            .catch((err) => console.error('[selection] batchAdvance failed:', err))
+          break
+        }
         case 'linkSelected':
           store.linkSelectedNodes(relationType || 'related')
           break

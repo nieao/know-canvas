@@ -36,6 +36,7 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
   const [showMarkMenu, setShowMarkMenu] = useState(false)
   const [showCategoryMenu, setShowCategoryMenu] = useState(false)
   const [showTagInput, setShowTagInput] = useState(false)
+  const [showAdvanceMenu, setShowAdvanceMenu] = useState(false)
   const [tagInput, setTagInput] = useState('')
 
   if (selectedCount < 2) return null
@@ -84,6 +85,17 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
     setShowMarkMenu(false)
     setShowCategoryMenu(false)
     setShowTagInput(false)
+    setShowAdvanceMenu(false)
+  }
+
+  const handleGroupMeta = () => {
+    closeAllMenus()
+    dispatch('groupAnalyzeMeta', {})
+  }
+
+  const handleBatchAdvance = (mode) => {
+    closeAllMenus()
+    dispatch('batchAdvance', { mode })
   }
 
   // 按钮通用样式
@@ -109,6 +121,74 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
         >
           {selectedCount} 已选
         </div>
+
+        {/* 组合元认知分析 — 把选中节点当一个系统看, 生成新组合分析节点 */}
+        <button
+          onClick={handleGroupMeta}
+          className={btnClass}
+          style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent)', fontWeight: 500 }}
+          title="组合元认知分析: 把选中的节点当成一个系统, LLM 生成 5 维度组合分析新节点"
+        >
+          <span>🧠</span>
+          <span>组合分析</span>
+        </button>
+
+        {/* 批量推进 — 对每个选中节点并发跑同一种推进动作 */}
+        <div className="relative">
+          <button
+            onClick={() => { closeAllMenus(); setShowAdvanceMenu(!showAdvanceMenu) }}
+            className={btnClass}
+            style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent)', fontWeight: 500 }}
+            title="批量推进: 对每个选中节点跑同一动作"
+          >
+            <span>🚀</span>
+            <span>批量推进</span>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showAdvanceMenu && (
+            <div
+              className="absolute top-full left-0 mt-1 rounded-lg shadow-xl py-2 min-w-[180px] z-60"
+              style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border-subtle)' }}
+            >
+              <div className="px-3 py-1 text-xs font-medium" style={{ color: 'var(--text-faint)', letterSpacing: '0.1em' }}>
+                选择批量动作 ({selectedCount} 个节点)
+              </div>
+              <button
+                onClick={() => handleBatchAdvance('analyze')}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                style={{ color: 'var(--accent)' }}
+                title="并发对每个节点单独做元认知分析"
+              >
+                <span>⚡</span>
+                <span>批量元认知</span>
+              </button>
+              <button
+                onClick={() => handleBatchAdvance('decompose')}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                style={{ color: 'var(--accent)' }}
+                title="把每个 OntologyNode 拆成子节点 (跳过普通概念节点)"
+              >
+                <span>🔧</span>
+                <span>批量拆解 (仅本体节点)</span>
+              </button>
+              <button
+                onClick={() => handleBatchAdvance('promote')}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                style={{ color: 'var(--accent)' }}
+                title="把每个 OntologyNode 派给 Hermes (跳过普通概念节点)"
+              >
+                <span>🚀</span>
+                <span>批量派 Hermes (仅本体节点)</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 分隔 */}
+        <div className="w-px h-6 mx-1" style={{ backgroundColor: 'var(--border-subtle)' }} />
 
         {/* 创建分组 */}
         <button
@@ -317,7 +397,7 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
       </div>
 
       {/* 点击遮罩关闭下拉菜单 */}
-      {(showLinkMenu || showMarkMenu || showCategoryMenu || showTagInput) && (
+      {(showLinkMenu || showMarkMenu || showCategoryMenu || showTagInput || showAdvanceMenu) && (
         <div className="fixed inset-0 z-50" onClick={closeAllMenus} />
       )}
     </div>

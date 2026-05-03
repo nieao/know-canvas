@@ -17,6 +17,7 @@
 import { memo, useState } from 'react'
 import { Handle, Position } from 'reactflow'
 import useCanvasStore from '../../stores/useCanvasStore'
+import MetaAnalysisInline from './MetaAnalysisInline'
 
 const VARIANT_META = {
   goal: {
@@ -260,67 +261,14 @@ function OntologyNodeImpl({ id, data, selected }) {
           </div>
         )}
 
-        {/* 元认知分析结果 inline 折叠区 */}
+        {/* 元认知分析结果 inline 折叠区 — 共享组件 */}
         {metaAnalysis && metaExpanded && (
-          <div className="mt-3 pt-2" style={{ borderTop: '1px dashed var(--border-subtle)' }}>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[9px] font-semibold" style={{ color: 'var(--accent)', letterSpacing: '0.2em' }}>
-                META-COGNITIVE
-              </span>
-              <button
-                onClick={onReanalyze}
-                disabled={isAnalyzing}
-                className="text-[9px] underline"
-                style={{ color: 'var(--text-muted)', cursor: isAnalyzing ? 'wait' : 'pointer' }}
-                title="重新分析"
-              >
-                {isAnalyzing ? '...' : '↻ 重跑'}
-              </button>
-            </div>
-
-            {metaAnalysis.core_intent && (
-              <div className="mb-2">
-                <div className="text-[9px] font-medium mb-0.5" style={{ color: 'var(--accent)' }}>核心意图</div>
-                <div className="text-[11px] leading-relaxed" style={{ color: meta.color }}>{metaAnalysis.core_intent}</div>
-              </div>
-            )}
-
-            {metaAnalysis.implicit_goals?.length > 0 && (
-              <div className="mb-2">
-                <div className="text-[9px] font-medium mb-0.5" style={{ color: 'var(--accent)' }}>隐含目标</div>
-                <ul className="text-[10.5px] leading-snug pl-3" style={{ color: meta.color, opacity: 0.85, listStyleType: 'disc' }}>
-                  {metaAnalysis.implicit_goals.map((g, i) => <li key={i}>{g}</li>)}
-                </ul>
-              </div>
-            )}
-
-            {metaAnalysis.key_risks?.length > 0 && (
-              <div className="mb-2">
-                <div className="text-[9px] font-medium mb-0.5" style={{ color: '#7a3a4a' }}>关键风险</div>
-                <ul className="text-[10.5px] leading-snug pl-3" style={{ color: meta.color, opacity: 0.85, listStyleType: 'disc' }}>
-                  {metaAnalysis.key_risks.map((r, i) => <li key={i}>{r}</li>)}
-                </ul>
-              </div>
-            )}
-
-            {metaAnalysis.dependencies?.length > 0 && (
-              <div className="mb-2">
-                <div className="text-[9px] font-medium mb-0.5" style={{ color: 'var(--accent)' }}>前置依赖</div>
-                <ul className="text-[10.5px] leading-snug pl-3" style={{ color: meta.color, opacity: 0.85, listStyleType: 'disc' }}>
-                  {metaAnalysis.dependencies.map((d, i) => <li key={i}>{d}</li>)}
-                </ul>
-              </div>
-            )}
-
-            {metaAnalysis.next_actions?.length > 0 && (
-              <div>
-                <div className="text-[9px] font-medium mb-0.5" style={{ color: 'var(--accent)' }}>下一步行动</div>
-                <ol className="text-[10.5px] leading-snug pl-3" style={{ color: meta.color, listStyleType: 'decimal' }}>
-                  {metaAnalysis.next_actions.map((a, i) => <li key={i}>{a}</li>)}
-                </ol>
-              </div>
-            )}
-          </div>
+          <MetaAnalysisInline
+            analysis={metaAnalysis}
+            textColor={meta.color}
+            onReanalyze={onReanalyze}
+            isAnalyzing={isAnalyzing}
+          />
         )}
       </div>
     </div>

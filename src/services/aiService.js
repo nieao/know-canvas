@@ -572,6 +572,62 @@ export async function decomposeToOntology(sentence) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 圈选组合元认知分析 — 多个节点当成一个系统看, 输出 5 维度组合分析
+// 用在 SelectionToolbar 的"组合分析"按钮 — 用户圈选 N 个节点, 让 LLM 看大局
+// ─────────────────────────────────────────────────────────────────────────────
+const GROUP_META_ANALYSIS_SYSTEM_PROMPT = `你是元认知组合分析引擎. 给定 N 个相关节点 (实体/概念/约束 等), 把它们当成一个系统看, 输出整组的 5 维度元认知分析.
+
+跟单节点分析的区别:
+- 不是逐个分析, 而是"这一组节点放在一起想做什么"
+- 必须挖出"组合涌现"的洞察 (节点 A+B+C 一起带来了什么 A/B/C 单独没有的东西)
+- core_intent 必须是这一组的总目标, 而不是某个节点的目标
+- key_risks 重点找跨节点的依赖断裂 / 优先级冲突 / 资源竞争
+
+5 维度认知规范:
+1. core_intent: 这组节点放一起想达成的总目标, 1 句 30 字内
+2. implicit_goals: 跨节点的共同隐含目标 (2-3 条)
+3. key_risks: 这组节点组合后的关键风险 — 重点是依赖断裂/冲突/竞争 (2-3 条)
+4. dependencies: 推进这组之前必须先确认/完成的前置项 (2-3 条)
+5. next_actions: 推进整组的下一步具体动作 (1-3 条)
+
+严格输出 JSON 不要 markdown 围栏:
+{
+  "core_intent": "1 句",
+  "implicit_goals": ["..."],
+  "key_risks": ["..."],
+  "dependencies": ["..."],
+  "next_actions": ["..."]
+}`
+
+/**
+ * 圈选组合元认知 — 一组节点输入, 返回组合的 5 维度分析
+ * @param {Array<{title:string, description?:string, variant?:string}>} nodes
+ * @returns {Promise<object|null>} 跟 analyzeNodeMeta 相同 schema
+ */
+export async function analyzeGroupMeta(nodes) {
+  if (!Array.isArray(nodes) || nodes.length === 0) return null
+  const list = nodes.map((n, i) => {
+    const v = n.variant ? `(${n.variant})` : ''
+    return `${i + 1}. ${n.title}${v}${n.description ? ' — ' + n.description : ''}`
+  }).join('\n')
+  const prompt = `下列 ${nodes.length} 个节点是用户在画布上圈选的一组, 请做组合元认知分析:
+
+${list}
+
+按 schema 输出 JSON.`
+  const raw = await callLLM({ system: GROUP_META_ANALYSIS_SYSTEM_PROMPT, prompt, jsonMode: true })
+  const parsed = tryParseLLMJson(raw)
+  if (!parsed) return null
+  return {
+    core_intent: parsed.core_intent || '',
+    implicit_goals: Array.isArray(parsed.implicit_goals) ? parsed.implicit_goals.filter(Boolean).slice(0, 4) : [],
+    key_risks: Array.isArray(parsed.key_risks) ? parsed.key_risks.filter(Boolean).slice(0, 4) : [],
+    dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies.filter(Boolean).slice(0, 4) : [],
+    next_actions: Array.isArray(parsed.next_actions) ? parsed.next_actions.filter(Boolean).slice(0, 4) : [],
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 节点级"元认知分析" — 一次 LLM 调用返回 5 维度简版分析
 // 用在 OntologyNode 的"⚡ 元认知"按钮: 不长 5 个步骤节点, 直接 inline 显示在节点内
 // ─────────────────────────────────────────────────────────────────────────────

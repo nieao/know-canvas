@@ -536,6 +536,16 @@ export default function KnowledgeGraph() {
         e.preventDefault()
         setShowRightPanel(prev => !prev)
       }
+      // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — 撤销/重做 (走 Yjs UndoManager, 协作友好)
+      // 输入框内不拦截, 让浏览器原生 undo 处理文本编辑
+      if (!isInput && (e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+        e.preventDefault()
+        import('../collab/yjsClient').then(({ undo }) => undo())
+      }
+      if (!isInput && (e.ctrlKey || e.metaKey) && ((e.key === 'z' || e.key === 'Z') && e.shiftKey || e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault()
+        import('../collab/yjsClient').then(({ redo }) => redo())
+      }
       if (e.key === '?' && !e.ctrlKey && !e.metaKey && !isInput) {
         e.preventDefault()
         setShowShortcuts(prev => !prev)

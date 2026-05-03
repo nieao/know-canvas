@@ -158,3 +158,39 @@ export function onAwarenessChange(handler) {
   aw.on('change', listener)
   return () => aw.off('change', listener)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UndoManager — Ctrl+Z / Ctrl+Y 撤销重做
+// 只跟踪 origin === 'local' 的本地修改 (yjsSync.js 推本地变更时用 ORIGIN_LOCAL)
+// 远端用户的更改不会被本地 undo 误回滚
+// ─────────────────────────────────────────────────────────────────────────────
+let _undoManager = null
+
+export function getUndoManager() {
+  if (_undoManager) return _undoManager
+  const yNodes = getNodesMap()
+  const yEdges = getEdgesMap()
+  _undoManager = new Y.UndoManager([yNodes, yEdges], {
+    trackedOrigins: new Set(['local']),
+    captureTimeout: 500,  // 500ms 内的连续操作 (拖动节点 60fps) 聚合成一个 undo 单位
+  })
+  return _undoManager
+}
+
+export function undo() {
+  const um = getUndoManager()
+  if (um.canUndo()) um.undo()
+}
+
+export function redo() {
+  const um = getUndoManager()
+  if (um.canRedo()) um.redo()
+}
+
+export function canUndo() {
+  return getUndoManager().canUndo()
+}
+
+export function canRedo() {
+  return getUndoManager().canRedo()
+}

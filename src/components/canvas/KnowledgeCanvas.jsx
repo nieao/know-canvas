@@ -20,6 +20,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 
+import useCanvasStore from '../../stores/useCanvasStore'
 import ConceptNode from './ConceptNode'
 import CategoryNode from './CategoryNode'
 import BookmarkNode from './BookmarkNode'
@@ -281,7 +282,12 @@ function KnowledgeCanvasInner({
   showMiniMap = true,
   children,
 }) {
-  // === 渲染前 sanitize: 检测 parentNode 引用不存在的节点 ===
+  // === 折叠分级 (subscribe store, 触发重渲) ===
+  const collapseMode = useCanvasStore((s) => s.collapseMode)
+  const expandedSourceIds = useCanvasStore((s) => s.expandedSourceIds)
+  const pinnedNodeIds = useCanvasStore((s) => s.pinnedNodeIds)
+
+  // === 渲染前 sanitize: 检测 parentNode 引用不存在的节点 + 折叠分级 ===
   // React Flow 11 在 child.parentNode 找不到时直接 throw "Parent node X not found"
   // 整个画布崩 (图 37)。
   //
@@ -292,16 +298,66 @@ function KnowledgeCanvasInner({
   const ORPHAN_FALLBACK_ID = '__orphan-fallback-root__'
   const nodes = useMemo(() => {
     const idSet = new Set(rawNodes.map((n) => n.id))
+    const expandedSet = new Set(expandedSourceIds || [])
+    const pinnedSet = new Set(pinnedNodeIds || [])
     let hasOrphan = false
+
+    // L0/L1/L2 节点级别判定
+    // L0 主干 = goal / 概念 ENTITY (顶层骨架) / synthesis / conclusion / 用户上传文件 / 普通笔记
+    // L1 支撑 = role / agent (对应 ENTITY 内部组件)
+    // L2 衍生 = challengeNode (反驳) / decompose 容器子节点
+    const getLevel = (n) => {
+      if (!n) return 'L0'
+      // 反驳节点
+      if (n.type === 'challengeNode') return 'L2'
+      // role / agent 节点
+      if (n.type === 'agentRoleNode') return 'L1'
+      // ontology role variant
+      if (n.type === 'ontologyNode' && n.data?.variant === 'role') return 'L1'
+      // 容器: challengeGroup / decomposeGroup 自身按 L2, 让 group 也跟着折
+      if (n.type === 'group' && (n.data?.isChallengeGroup || n.data?.isDecomposeGroup)) return 'L2'
+      // 拆解出来的子 ontology 节点 (parent 是 decomposeGroup)
+      if (n.type === 'ontologyNode' && n.parentNode) {
+        const parent = rawNodes.find((p) => p.id === n.parentNode)
+        if (parent?.data?.isDecomposeGroup) return 'L2'
+      }
+      // 其他都按 L0 (GOAL / ENTITY / SYNTHESIS / CONCLUSION / 文件 / 笔记 ...)
+      return 'L0'
+    }
+
+    // 是否显示一个 L1/L2 节点 (在 minimal 模式下)
+    const shouldShow = (n, level) => {
+      if (collapseMode !== 'minimal') return true  // full 模式都显示
+      if (level === 'L0') return true
+      if (pinnedSet.has(n.id)) return true  // pinned 强制显示
+      // 拿"源节点 id" — challenge / agent 等都有 source_node_id 或 parent_node 字段
+      const srcId = n.data?.source_node_id || n.data?.parent_node
+      if (srcId && expandedSet.has(srcId)) return true
+      // 容器节点: 看容器的 sourceNodeId / 是否有任何被展开的关联
+      if (n.type === 'group' && n.data?.sourceNodeId && expandedSet.has(n.data.sourceNodeId)) return true
+      return false
+    }
+
     const remapped = rawNodes.map((n) => {
+      const level = getLevel(n)
+      const visible = shouldShow(n, level)
+      let next = n
       if (n.parentNode && !idSet.has(n.parentNode)) {
         hasOrphan = true
-        return { ...n, parentNode: ORPHAN_FALLBACK_ID, extent: undefined }
+        next = { ...next, parentNode: ORPHAN_FALLBACK_ID, extent: undefined }
       }
-      return n
+      if (!visible) {
+        next = { ...next, hidden: true }
+      } else if (next === n && n.hidden === true) {
+        // 之前隐藏过, 现在该展示 → 显式取消 hidden
+        next = { ...next, hidden: false }
+      } else if (next !== n && n.hidden === true) {
+        next.hidden = false
+      }
+      return next
     })
+
     if (hasOrphan) {
-      // 透明大 group, 不显示边框 / 背景, 不阻挡交互, 让子节点用原相对坐标继续渲染
       remapped.unshift({
         id: ORPHAN_FALLBACK_ID,
         type: 'group',
@@ -315,10 +371,10 @@ function KnowledgeCanvasInner({
         },
         data: { isOrphanFallback: true },
       })
-      console.warn('[KnowledgeCanvas] 检测到孤儿子节点, 已挂 fallback root, 等 yjs sync 后实际 parent 到位会自动接管')
+      console.warn('[KnowledgeCanvas] 检测到孤儿子节点, 已挂 fallback root')
     }
     return remapped
-  }, [rawNodes])
+  }, [rawNodes, collapseMode, expandedSourceIds, pinnedNodeIds])
 
   const reactFlowInstance = useReactFlow()
   const reactFlowWrapper = useRef(null)

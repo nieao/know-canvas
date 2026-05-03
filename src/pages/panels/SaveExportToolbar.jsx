@@ -392,6 +392,9 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
         />
       </div>
 
+      {/* 折叠分级开关 — 仅主干 / 显示全部 */}
+      <CollapseModeSwitch />
+
       {/* 横竖切换分段按钮 (像 iOS Segmented Control) */}
       <div
         className="flex rounded-lg overflow-hidden shadow-sm"
@@ -512,6 +515,67 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
           onClick={() => { setShowSaveMenu(false); setShowExportMenu(false) }}
         />
       )}
+    </div>
+  )
+}
+
+// === 折叠分级开关 — 仅主干 / 显示全部 ===
+// 选中"仅主干"时, ROLE/AGENT/反驳/拆解节点折叠, 只看 GOAL/ENTITY/SYNTHESIS/CONCLUSION 主干。
+// 用户可在 ENTITY 节点 click 单独展开本支, 或 pin 节点强制显示。
+function CollapseModeSwitch() {
+  const collapseMode = useCanvasStore((s) => s.collapseMode || 'full')
+  const setCollapseMode = useCanvasStore((s) => s.setCollapseMode)
+  const collapseAllSources = useCanvasStore((s) => s.collapseAllSources)
+  const expandedCount = useCanvasStore((s) => (s.expandedSourceIds || []).length)
+  const pinnedCount = useCanvasStore((s) => (s.pinnedNodeIds || []).length)
+
+  return (
+    <div
+      className="flex items-center rounded-lg overflow-hidden shadow-sm"
+      style={{ border: '1px solid var(--gray-100)', background: 'var(--white)' }}
+      title="折叠分级 — 仅主干视图减少视觉噪音"
+    >
+      <button
+        onClick={() => setCollapseMode('minimal')}
+        className="px-3 py-2 text-xs font-medium transition-colors duration-200"
+        style={{
+          background: collapseMode === 'minimal' ? 'var(--warm-bg)' : 'transparent',
+          color: collapseMode === 'minimal' ? 'var(--warm)' : 'var(--gray-700)',
+          borderRight: '1px solid var(--gray-100)',
+        }}
+        title="仅显示主干 (GOAL/ENTITY/SYNTHESIS/CONCLUSION), 其他折叠"
+      >
+        <span className="flex items-center gap-1">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M7 12h10M10 18h4" />
+          </svg>
+          主干
+        </span>
+      </button>
+      <button
+        onClick={() => {
+          setCollapseMode('full')
+          collapseAllSources?.()
+        }}
+        className="px-3 py-2 text-xs font-medium transition-colors duration-200"
+        style={{
+          background: collapseMode === 'full' ? 'var(--warm-bg)' : 'transparent',
+          color: collapseMode === 'full' ? 'var(--warm)' : 'var(--gray-700)',
+        }}
+        title="显示全部节点"
+      >
+        <span className="flex items-center gap-1">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4h16v16H4z M4 10h16 M10 4v16" />
+          </svg>
+          全部
+          {collapseMode === 'minimal' && (expandedCount > 0 || pinnedCount > 0) && (
+            <span style={{ fontSize: 9, color: 'var(--accent)', marginLeft: 2 }}>
+              {expandedCount > 0 && `+${expandedCount}支`}{pinnedCount > 0 && ` ${pinnedCount}📌`}
+            </span>
+          )}
+        </span>
+      </button>
     </div>
   )
 }

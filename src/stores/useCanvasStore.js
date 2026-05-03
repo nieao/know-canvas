@@ -192,6 +192,45 @@ const useCanvasStore = create(
       viewportCenter: { x: 400, y: 300 },
       viewportZoom: 1,
 
+      // === 折叠分级视图 (按节点类型分 L0/L1/L2) ===
+      // mode: 'minimal' = 仅主干 (L0 显示, L1/L2 折叠)
+      //       'full'    = 显示全部 (默认 ALETHEIA 老行为, 兼容)
+      // expandedSourceIds = 用户点击 ENTITY/源节点单独展开本支 (Set 持久不持久无所谓, 重启回 minimal 默认)
+      // pinnedNodeIds     = 用户 pin 的节点, 即使 minimal 模式也强制显示 (选项 A)
+      collapseMode:
+        (typeof localStorage !== 'undefined' && localStorage.getItem('know_canvas_collapse_mode')) || 'full',
+      expandedSourceIds: [],
+      pinnedNodeIds: [],
+
+      setCollapseMode: (mode) => {
+        const next = mode === 'minimal' ? 'minimal' : 'full'
+        try { localStorage.setItem('know_canvas_collapse_mode', next) } catch {}
+        set({ collapseMode: next })
+      },
+
+      // 切换某个 ENTITY/源节点的"展开本支"状态
+      toggleExpandSource: (sourceId) => {
+        if (!sourceId) return
+        set((state) => {
+          const arr = Array.isArray(state.expandedSourceIds) ? state.expandedSourceIds : []
+          const idx = arr.indexOf(sourceId)
+          if (idx >= 0) state.expandedSourceIds = arr.filter((id) => id !== sourceId)
+          else state.expandedSourceIds = [...arr, sourceId]
+        })
+      },
+      collapseAllSources: () => set({ expandedSourceIds: [] }),
+
+      // pin / unpin 一个节点 (强制显示, 不受 minimal 折叠规则约束)
+      togglePinNode: (nodeId) => {
+        if (!nodeId) return
+        set((state) => {
+          const arr = Array.isArray(state.pinnedNodeIds) ? state.pinnedNodeIds : []
+          const idx = arr.indexOf(nodeId)
+          if (idx >= 0) state.pinnedNodeIds = arr.filter((id) => id !== nodeId)
+          else state.pinnedNodeIds = [...arr, nodeId]
+        })
+      },
+
       // 更新视口中心（由画布组件在视口变化时调用）
       setViewportCenter: (center, zoom = 1) => {
         set({ viewportCenter: center, viewportZoom: zoom })

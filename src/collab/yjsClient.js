@@ -47,6 +47,11 @@ export function getMetaMap() {
   return getDoc().getMap('meta')
 }
 
+// 共享项目库 — projectId → ProjectEntry (含 owner / snapshot / commits[])
+export function getProjectsMap() {
+  return getDoc().getMap('projects')
+}
+
 export function getProvider() {
   return _provider
 }

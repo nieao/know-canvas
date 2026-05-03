@@ -14,6 +14,7 @@ import { useEffect } from 'react'
 import { startSync, stopSync, setLocalUser } from './yjsClient'
 import { attachYjsSync, detachYjsSync } from './yjsSync'
 import { getUsername, getUserColor, getRoomFromUrl, clearSession } from './session'
+import useProjectLibraryStore from '../stores/useProjectLibraryStore'
 
 export function useCollabSession() {
   const room = getRoomFromUrl()
@@ -25,7 +26,10 @@ export function useCollabSession() {
     startSync(room, { user: { name: username, color: userColor } })
     setLocalUser({ name: username, color: userColor })
     attachYjsSync()
+    // 项目库共享 — 把本地 localStorage 的项目迁到 yjs, 并订阅远端协作者写入
+    useProjectLibraryStore.getState().bindToYjs?.()
     return () => {
+      useProjectLibraryStore.getState().unbindFromYjs?.()
       detachYjsSync()
       stopSync()
     }

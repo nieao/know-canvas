@@ -14,7 +14,7 @@
  *   onLoadProject: (project) => void
  */
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import useProjectLibraryStore from '../../stores/useProjectLibraryStore'
 
 const FONT_SERIF = '"Noto Serif SC", Georgia, serif'
@@ -46,11 +46,31 @@ export default function ProjectLibraryPanel({ open, onClose, onLoadProject }) {
   const projects = useProjectLibraryStore((s) => s.projects)
   const removeProject = useProjectLibraryStore((s) => s.removeProject)
   const renameProject = useProjectLibraryStore((s) => s.renameProject)
+  const yjsBound = useProjectLibraryStore((s) => s.yjsBound)
 
   const [entered, setEntered] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editingValue, setEditingValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  // 按 owner 筛选 — 'all' | <ownerName>
+  const [ownerFilter, setOwnerFilter] = useState('all')
+
+  // 收集所有不同 owner (按出现次数排) — 给筛选 chip 行用
+  const ownerStats = useMemo(() => {
+    const map = new Map()
+    for (const p of projects) {
+      const name = p?.owner?.name || '匿名'
+      const color = p?.owner?.color || '#999'
+      const cur = map.get(name) || { name, color, count: 0 }
+      cur.count++
+      map.set(name, cur)
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count)
+  }, [projects])
+
+  const filteredProjects = ownerFilter === 'all'
+    ? projects
+    : projects.filter((p) => (p?.owner?.name || '匿名') === ownerFilter)
 
   // 入场动画
   useEffect(() => {
@@ -188,7 +208,9 @@ export default function ProjectLibraryPanel({ open, onClose, onLoadProject }) {
                 lineHeight: 1.6,
               }}
             >
-              已保存 {projects.length} 个项目 · 双击卡片标题重命名 · 点击载入即可复现画布
+              已保存 {projects.length} 个项目 · {yjsBound ? (
+                <span style={{ color: 'var(--accent)' }}>已共享到房间</span>
+              ) : '本地'} · 双击卡片标题重命名
             </div>
           </div>
 
@@ -220,6 +242,41 @@ export default function ProjectLibraryPanel({ open, onClose, onLoadProject }) {
           </button>
         </div>
 
+        {/* 用户筛选 chip 行 — 仅当 owner 不止 1 个时显示 */}
+        {ownerStats.length > 1 && (
+          <div
+            style={{
+              padding: '12px 32px',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              flexWrap: 'wrap',
+              fontSize: '11px',
+            }}
+          >
+            <span style={{ color: 'var(--text-muted)', letterSpacing: '0.15em', marginRight: 4 }}>
+              按用户筛选 :
+            </span>
+            <OwnerChip
+              label="全部"
+              count={projects.length}
+              active={ownerFilter === 'all'}
+              onClick={() => setOwnerFilter('all')}
+            />
+            {ownerStats.map((o) => (
+              <OwnerChip
+                key={o.name}
+                label={o.name}
+                color={o.color}
+                count={o.count}
+                active={ownerFilter === o.name}
+                onClick={() => setOwnerFilter(o.name)}
+              />
+            ))}
+          </div>
+        )}
+
         {/* 主体 - 滚动 */}
         <div
           style={{
@@ -228,8 +285,14 @@ export default function ProjectLibraryPanel({ open, onClose, onLoadProject }) {
             padding: '24px 32px 32px',
           }}
         >
-          {projects.length === 0 ? (
-            <EmptyState />
+          {filteredProjects.length === 0 ? (
+            projects.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: 12 }}>
+                此用户暂无项目
+              </div>
+            )
           ) : (
             <div
               style={{
@@ -238,7 +301,7 @@ export default function ProjectLibraryPanel({ open, onClose, onLoadProject }) {
                 gap: '16px',
               }}
             >
-              {projects.map((project) => (
+              {filteredProjects.map((project) => (
                 <ProjectCard
                   key={project.id}
                   project={project}
@@ -264,6 +327,42 @@ export default function ProjectLibraryPanel({ open, onClose, onLoadProject }) {
 }
 
 // ============================ 子组件 ============================
+
+function OwnerChip({ label, color, count, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 10px',
+        borderRadius: 12,
+        border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
+        background: active ? 'var(--warm-bg)' : 'transparent',
+        color: active ? 'var(--accent)' : 'var(--text-secondary)',
+        fontSize: 11,
+        cursor: 'pointer',
+        transition: 'all 0.3s',
+        fontFamily: 'inherit',
+      }}
+    >
+      {color && (
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: color,
+            boxShadow: '0 0 0 1px rgba(0,0,0,0.1)',
+          }}
+        />
+      )}
+      <span>{label}</span>
+      <span style={{ color: 'var(--text-faint)', fontSize: 10 }}>{count}</span>
+    </button>
+  )
+}
 
 function EmptyState() {
   return (
@@ -383,6 +482,35 @@ function ProjectCard({
           {formatRelativeTime(project.createdAt)}
         </span>
       </div>
+
+      {/* owner 标识 — 协作场景下区分项目创建者 */}
+      {project.owner?.name && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            letterSpacing: '0.05em',
+          }}
+          title={`创建者: ${project.owner.name}`}
+        >
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: project.owner.color || '#999',
+              boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
+              flexShrink: 0,
+            }}
+          />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
+            {project.owner.name}
+          </span>
+        </div>
+      )}
 
       {/* 标题（双击编辑） */}
       {isEditing ? (

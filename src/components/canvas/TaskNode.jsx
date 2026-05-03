@@ -12,6 +12,7 @@ import ColorAccentBar from './ColorAccentBar'
 import useCanvasStore from '../../stores/useCanvasStore'
 import { TASK_NODE_STATUS } from '../../services/hermesService'
 
+// 状态色 (语义色: 草稿/运行/完成/失败 状态色板, 跨主题保持语义)
 const STATUS_META = {
   [TASK_NODE_STATUS.DRAFT]:   { label: '草稿', color: '#bbbbbb', dot: '○' },
   [TASK_NODE_STATUS.RUNNING]: { label: 'AI 执行中…', color: '#7c9eb2', dot: '◕' },
@@ -72,8 +73,8 @@ function TaskNodeImpl({ id, data, selected }) {
       <div className="flex items-start gap-1.5 flex-wrap text-[10px]">
         <span className="text-gray-400 tracking-[0.15em] uppercase pt-0.5">{kind} ·</span>
         {list.map((t) => (
-          <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm border bg-white"
-            style={{ borderColor: color, color }}>
+          <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm border"
+            style={{ borderColor: color, color, background: 'var(--surface)' }}>
             {t}
             {isDraft && (
               <button onClick={(e) => { e.stopPropagation(); removeFn(t) }}
@@ -101,12 +102,14 @@ function TaskNodeImpl({ id, data, selected }) {
   }
 
   return (
-    <div className={`relative bg-white border rounded-md shadow-sm transition-all duration-300 ${
-      selected ? 'border-amber-500' : 'border-gray-200'
-    }`} style={{ width: 280, minHeight: 140 }}>
+    <div className="relative border rounded-md shadow-sm transition-all duration-300" style={{
+      width: 280, minHeight: 140,
+      background: 'var(--surface)',
+      borderColor: selected ? 'var(--accent)' : 'var(--border-subtle)',
+    }}>
       <ColorAccentBar color={meta.color} />
-      <Handle type="target" position={Position.Top} style={{ background: '#c8a882' }} />
-      <Handle type="source" position={Position.Bottom} style={{ background: '#c8a882' }} />
+      <Handle type="target" position={Position.Top} style={{ background: 'var(--accent)' }} />
+      <Handle type="source" position={Position.Bottom} style={{ background: 'var(--accent)' }} />
 
       <div className="px-4 py-3">
         {/* 顶部状态行 */}
@@ -119,7 +122,8 @@ function TaskNodeImpl({ id, data, selected }) {
 
         {/* 标题 */}
         <input type="text"
-          className="w-full text-sm font-medium text-gray-900 border-none outline-none bg-transparent mb-1"
+          className="w-full text-sm font-medium border-none outline-none bg-transparent mb-1"
+          style={{ color: 'var(--text-primary)' }}
           placeholder="任务标题…" value={title}
           onChange={(e) => handleUpdate({ title: e.target.value })}
           disabled={!isDraft} />
@@ -127,16 +131,17 @@ function TaskNodeImpl({ id, data, selected }) {
         {/* 描述 */}
         {isDraft ? (
           <textarea
-            className="w-full text-xs text-gray-600 border-none outline-none bg-transparent resize-none mt-1"
+            className="w-full text-xs border-none outline-none bg-transparent resize-none mt-1"
+            style={{ color: 'var(--text-secondary)' }}
             placeholder="任务描述 (markdown)…" rows={2} value={body}
             onChange={(e) => handleUpdate({ body: e.target.value })} />
         ) : body && (
-          <div className="text-xs text-gray-500 mt-1 line-clamp-2 whitespace-pre-wrap">{body}</div>
+          <div className="text-xs mt-1 line-clamp-2 whitespace-pre-wrap" style={{ color: 'var(--text-muted)' }}>{body}</div>
         )}
 
         {/* 任务清单 */}
-        <div className="mt-3 pt-2 border-t" style={{ borderColor: '#f0f0f0' }}>
-          <div className="text-[10px] tracking-[0.2em] uppercase text-gray-400 mb-1.5">任务清单</div>
+        <div className="mt-3 pt-2 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div className="text-[10px] tracking-[0.2em] uppercase mb-1.5" style={{ color: 'var(--text-faint)' }}>任务清单</div>
           <ul className="space-y-1">
             {visible.map((item) => (
               <li key={item.id} className="group flex items-center gap-1.5 text-[11px]">
@@ -145,14 +150,14 @@ function TaskNodeImpl({ id, data, selected }) {
                   disabled={!isDraft}
                   className="flex-shrink-0 w-3.5 h-3.5 border rounded-sm flex items-center justify-center"
                   style={{
-                    borderColor: item.done ? '#c8a882' : '#d0d0d0',
-                    background: item.done ? '#c8a882' : 'transparent',
+                    borderColor: item.done ? 'var(--accent)' : 'var(--border-strong)',
+                    background: item.done ? 'var(--accent)' : 'transparent',
                     color: 'white', fontSize: '9px',
                     cursor: isDraft ? 'pointer' : 'default',
                   }}>{item.done ? '✓' : ''}</button>
                 <span className="flex-1 break-words" style={{
                   textDecoration: item.done ? 'line-through' : 'none',
-                  opacity: item.done ? 0.5 : 1, color: '#3a3a3a',
+                  opacity: item.done ? 0.5 : 1, color: 'var(--text-secondary)',
                 }}>{item.text}</span>
                 {isDraft && (
                   <button onClick={(e) => { e.stopPropagation(); removeChecklistItem?.(id, item.id) }}
@@ -171,7 +176,7 @@ function TaskNodeImpl({ id, data, selected }) {
           {isDraft && (
             <input type="text"
               className="w-full text-[11px] mt-1.5 border-b outline-none bg-transparent pb-0.5"
-              style={{ borderColor: '#f0f0f0', color: '#3a3a3a' }}
+              style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}
               placeholder="+ 添加项…" value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
               onKeyDown={(e) => {
@@ -182,10 +187,10 @@ function TaskNodeImpl({ id, data, selected }) {
           )}
         </div>
 
-        {/* 关联标签 */}
+        {/* 关联标签 (语义色: agents=accent / skills=蓝灰类型色) */}
         {(isDraft || agents.length > 0 || skills.length > 0) && (
-          <div className="mt-3 pt-2 border-t space-y-1.5" style={{ borderColor: '#f0f0f0' }}>
-            {renderTagRow('agents', agents, '#c8a882',
+          <div className="mt-3 pt-2 border-t space-y-1.5" style={{ borderColor: 'var(--border-subtle)' }}>
+            {renderTagRow('agents', agents, 'var(--accent)',
               (t) => setRelatedAgents?.(id, agents.filter((a) => a !== t)))}
             {renderTagRow('skills', skills, '#7c9eb2',
               (t) => setRelatedSkills?.(id, skills.filter((s) => s !== t)))}

@@ -19,12 +19,12 @@ export default function WelcomeOverlay({ onShowShortcuts }) {
       <div className="text-center max-w-md mx-auto px-8 pointer-events-none">
         {/* 建筑网格装饰 */}
         <div className="fixed inset-0 pointer-events-none z-0" style={{ opacity: 0.03 }}>
-          <div className="absolute top-1/2 left-0 right-0 h-px" style={{ background: 'var(--black)' }} />
-          <div className="absolute top-0 bottom-0 left-1/2 w-px" style={{ background: 'var(--black)' }} />
+          <div className="absolute top-1/2 left-0 right-0 h-px" style={{ background: 'var(--text-primary)' }} />
+          <div className="absolute top-0 bottom-0 left-1/2 w-px" style={{ background: 'var(--text-primary)' }} />
         </div>
 
         <div className="section-label mb-6">KNOW / CANVAS</div>
-        <h1 className="heading-serif text-2xl font-light mb-4" style={{ color: 'var(--black)' }}>
+        <h1 className="heading-serif text-2xl font-light mb-4" style={{ color: 'var(--text-primary)' }}>
           知识图谱
         </h1>
         <p className="text-sm leading-relaxed mb-8" style={{ color: 'var(--gray-700)' }}>
@@ -39,7 +39,7 @@ export default function WelcomeOverlay({ onShowShortcuts }) {
             <div
               key={item.step}
               className="flex items-start gap-3 p-3 rounded-md transition-all duration-300"
-              style={{ border: '1px solid var(--gray-100)', background: 'rgba(250,250,250,0.9)' }}
+              style={{ border: '1px solid var(--border-subtle)', background: 'var(--surface)' }}
             >
               <span className="text-xs font-light mt-0.5" style={{ color: 'var(--warm)', fontFamily: 'var(--font-serif)' }}>
                 {item.step}
@@ -53,7 +53,7 @@ export default function WelcomeOverlay({ onShowShortcuts }) {
         </div>
 
         {/* 拖拽提示 */}
-        <div className="mt-8 py-6 px-8 rounded-lg border-dashed" style={{ border: '2px dashed var(--gray-100)', background: 'rgba(250,250,250,0.8)' }}>
+        <div className="mt-8 py-6 px-8 rounded-lg border-dashed" style={{ border: '2px dashed var(--border-subtle)', background: 'rgba(250,250,250,0.8)' }}>
           <svg className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--gray-300)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
           </svg>

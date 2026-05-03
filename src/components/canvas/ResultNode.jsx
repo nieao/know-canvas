@@ -29,11 +29,15 @@ function ResultNodeImpl({ data, selected }) {
 
   return (
     <div
-      className={`relative bg-white border rounded-md shadow-sm transition-all duration-300 ${
-        selected ? 'border-emerald-500' : 'border-gray-200'
-      }`}
-      style={{ width: 320, minHeight: 160 }}
+      className="relative border rounded-md shadow-sm transition-all duration-300"
+      style={{
+        width: 320, minHeight: 160,
+        background: 'var(--surface)',
+        // 选中边: emerald 完成色 — 用 status-success 语义色, 跨主题保持完成绿
+        borderColor: selected ? '#5a8a5a' : 'var(--border-subtle)',
+      }}
     >
+      {/* 顶部色条: 完成色 (语义色: 完成绿, 不随主题切换) */}
       <ColorAccentBar color="#8b9e7c" />
 
       <Handle type="target" position={Position.Top} style={{ background: '#8b9e7c' }} />
@@ -42,33 +46,34 @@ function ResultNodeImpl({ data, selected }) {
       <div className="px-4 py-3">
         {/* 标签 */}
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] tracking-[0.25em] uppercase font-semibold text-emerald-700">
+          <span className="text-[10px] tracking-[0.25em] uppercase font-semibold" style={{ color: '#5a8a5a' }}>
             <span className="mr-1">●</span>HERMES RESULT
           </span>
-          <span className="text-[10px] text-gray-400">已完成</span>
+          <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>已完成</span>
         </div>
 
         {/* 源任务标题 */}
-        <div className="text-[11px] text-gray-500 mb-1 truncate">
+        <div className="text-[11px] mb-1 truncate" style={{ color: 'var(--text-muted)' }}>
           ↩ {sourceTitle}
         </div>
 
         {/* 结果内容 */}
-        <div className="text-xs text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
+        <div className="text-xs whitespace-pre-wrap break-words leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
           {preview}
         </div>
 
         {isLong && (
           <button
             onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
-            className="text-[10px] text-amber-700 mt-1 hover:underline"
+            className="text-[10px] mt-1 hover:underline"
+            style={{ color: 'var(--accent)' }}
           >
             {expanded ? '收起' : '展开全文'}
           </button>
         )}
 
         {/* 元信息 */}
-        <div className="text-[10px] text-gray-400 mt-2 font-mono space-y-0.5">
+        <div className="text-[10px] mt-2 font-mono space-y-0.5" style={{ color: 'var(--text-faint)' }}>
           {taskId && <div>{taskId}</div>}
           {assignee && <div>by {assignee}</div>}
           {finishedAt && <div>{finishedAt}</div>}

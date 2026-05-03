@@ -13,10 +13,11 @@
 import { memo } from 'react'
 import { Handle, Position } from 'reactflow'
 
+// severity 色 (语义色: 严重度色板, 跨主题保持语义)
 const SEVERITY_META = {
-  high:   { label: '严重', color: '#b27c8b', bg: '#fbf1f3' },
-  medium: { label: '中等', color: '#c8a882', bg: '#f5f0eb' },
-  low:    { label: '轻微', color: '#888',    bg: '#f5f5f5' },
+  high:   { label: '严重', color: '#b27c8b', bg: '#fbf1f3' },        // severity-high 粉灰
+  medium: { label: '中等', color: 'var(--accent)', bg: 'var(--accent-bg)' },  // severity-medium = accent
+  low:    { label: '轻微', color: 'var(--text-muted)', bg: 'var(--border-subtle)' },
 }
 
 function ChallengeNodeImpl({ data, selected }) {
@@ -33,7 +34,7 @@ function ChallengeNodeImpl({ data, selected }) {
       className="relative shadow-sm transition-all duration-300"
       style={{
         width: 280,
-        background: '#fafafa',
+        background: 'var(--surface)',
         border: `${selected ? '2px' : '1px'} solid ${meta.color}`,
         borderRadius: 4,
       }}
@@ -64,14 +65,14 @@ function ChallengeNodeImpl({ data, selected }) {
         </div>
 
         {/* 攻击角度 */}
-        <div className="text-[11px] font-medium mb-1.5" style={{ color: '#1a1a1a' }}>
+        <div className="text-[11px] font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>
           {angle}
         </div>
 
         {/* 反驳论点 */}
         <div
           className="text-[11px] leading-relaxed italic mb-2"
-          style={{ color: '#3a3a3a', borderLeft: `2px solid ${meta.color}`, paddingLeft: 8 }}
+          style={{ color: 'var(--text-secondary)', borderLeft: `2px solid ${meta.color}`, paddingLeft: 8 }}
         >
           “{claim}”
         </div>
@@ -90,7 +91,7 @@ function ChallengeNodeImpl({ data, selected }) {
                 <li
                   key={i}
                   className="text-[10px] leading-snug pl-2"
-                  style={{ color: '#3a3a3a', borderLeft: '2px solid #e8e8e8' }}
+                  style={{ color: 'var(--text-secondary)', borderLeft: '2px solid var(--border-subtle)' }}
                 >
                   {e}
                 </li>
@@ -113,7 +114,7 @@ function ChallengeNodeImpl({ data, selected }) {
                 <li
                   key={i}
                   className="text-[10px] leading-snug flex items-start gap-1.5"
-                  style={{ color: '#1a1a1a' }}
+                  style={{ color: 'var(--text-primary)' }}
                 >
                   <span style={{ color: meta.color, fontWeight: 700, flexShrink: 0 }}>›</span>
                   <span>{t}</span>
@@ -125,8 +126,8 @@ function ChallengeNodeImpl({ data, selected }) {
 
         {/* 攻击对象 (源节点) */}
         {sourceTitle && (
-          <div className="text-[9px] mt-2.5 pt-1.5" style={{ color: '#888', borderTop: '1px dashed #e8e8e8' }}>
-            针对: <span className="font-medium" style={{ color: '#555' }}>{sourceTitle}</span>
+          <div className="text-[9px] mt-2.5 pt-1.5" style={{ color: 'var(--text-muted)', borderTop: '1px dashed var(--border-subtle)' }}>
+            针对: <span className="font-medium" style={{ color: 'var(--text-muted)' }}>{sourceTitle}</span>
           </div>
         )}
       </div>

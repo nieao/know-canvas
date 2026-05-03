@@ -20,7 +20,7 @@ const HANDLE_STYLE = {
   width: 10, height: 10,
   border: '2px solid white',
   borderRadius: '50%',
-  backgroundColor: '#c8a882',
+  backgroundColor: 'var(--accent)',
   opacity: 1,
   cursor: 'crosshair',
 }
@@ -38,9 +38,9 @@ function ImageNode({ id, data, selected }) {
       `}
       style={{
         overflow: 'visible',
-        backgroundColor: '#fafafa',
-        borderColor: selected ? '#c8a882' : '#e8e8e8',
-        ringColor: selected ? '#c8a882' : undefined,
+        backgroundColor: 'var(--surface)',
+        borderColor: selected ? 'var(--accent)' : 'var(--border-subtle)',
+        ringColor: selected ? 'var(--accent)' : undefined,
         boxShadow: selected ? '0 4px 20px rgba(200, 168, 130, 0.15)' : '0 1px 3px rgba(0,0,0,0.06)',
       }}
     >
@@ -67,17 +67,17 @@ function ImageNode({ id, data, selected }) {
       {/* 图片容器 */}
       <div className="relative overflow-hidden rounded-t-lg">
         {!loaded && !error && (
-          <div className="w-full h-32 flex items-center justify-center" style={{ backgroundColor: '#f5f0eb' }}>
-            <div className="animate-pulse" style={{ color: '#bbb' }}>加载中...</div>
+          <div className="w-full h-32 flex items-center justify-center" style={{ backgroundColor: 'var(--accent-bg)' }}>
+            <div className="animate-pulse" style={{ color: 'var(--text-faint)' }}>加载中...</div>
           </div>
         )}
 
         {error ? (
-          <div className="w-full h-32 flex flex-col items-center justify-center" style={{ backgroundColor: '#f5f0eb' }}>
-            <svg className="w-10 h-10 mb-1" style={{ color: '#bbb' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-full h-32 flex flex-col items-center justify-center" style={{ backgroundColor: 'var(--accent-bg)' }}>
+            <svg className="w-10 h-10 mb-1" style={{ color: 'var(--text-faint)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            <span className="text-xs" style={{ color: '#bbb' }}>图片加载失败</span>
+            <span className="text-xs" style={{ color: 'var(--text-faint)' }}>图片加载失败</span>
           </div>
         ) : (
           <img
@@ -94,8 +94,8 @@ function ImageNode({ id, data, selected }) {
         <div
           className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-medium rounded"
           style={{
-            backgroundColor: '#c8a882',
-            color: '#fafafa',
+            backgroundColor: 'var(--accent)',
+            color: 'var(--surface)',
             letterSpacing: '0.1em',
           }}
         >
@@ -105,8 +105,8 @@ function ImageNode({ id, data, selected }) {
 
       {/* 说明文字 */}
       {data.alt && (
-        <div className="px-2 py-1.5" style={{ borderTop: '1px solid #e8e8e8' }}>
-          <p className="text-xs truncate" style={{ color: '#555', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}>
+        <div className="px-2 py-1.5" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+          <p className="text-xs truncate" style={{ color: 'var(--text-muted)', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}>
             {safeString(data.alt)}
           </p>
         </div>

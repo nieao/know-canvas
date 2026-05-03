@@ -15,7 +15,7 @@ const safeString = (val) => {
   return String(val)
 }
 
-// 平台配置
+// 平台配置 (语义色: brand 色板, 不随主题切换)
 const PLATFORMS = {
   youtube: {
     color: '#DC2626',
@@ -36,7 +36,7 @@ const PLATFORMS = {
     label: 'Bilibili',
   },
   local: {
-    color: '#555',
+    color: 'var(--text-muted)',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
@@ -45,7 +45,7 @@ const PLATFORMS = {
     label: '本地',
   },
   other: {
-    color: '#888',
+    color: 'var(--text-muted)',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -61,7 +61,7 @@ const HANDLE_STYLE = {
   width: 10, height: 10,
   border: '2px solid white',
   borderRadius: '50%',
-  backgroundColor: '#c8a882',
+  backgroundColor: 'var(--accent)',
   opacity: 1,
   cursor: 'crosshair',
 }
@@ -99,9 +99,9 @@ function VideoNode({ id, data, selected }) {
       `}
       style={{
         overflow: 'visible',
-        backgroundColor: '#fafafa',
-        borderColor: selected ? '#c8a882' : '#e8e8e8',
-        ringColor: selected ? '#c8a882' : undefined,
+        backgroundColor: 'var(--surface)',
+        borderColor: selected ? 'var(--accent)' : 'var(--border-subtle)',
+        ringColor: selected ? 'var(--accent)' : undefined,
         boxShadow: selected ? '0 4px 20px rgba(200, 168, 130, 0.15)' : '0 1px 3px rgba(0,0,0,0.06)',
       }}
       onClick={handleClick}
@@ -126,10 +126,10 @@ function VideoNode({ id, data, selected }) {
       <Handle type="source" position={Position.Right} id="right-source"
         style={{ ...HANDLE_STYLE, right: -5 }} />
 
-      {/* 缩略图 / 预览 */}
+      {/* 缩略图 / 预览 — 视频播放器底色固定深色 (语义: 视频画面最佳呈现) */}
       <div className="relative h-36 flex items-center justify-center overflow-hidden rounded-t-lg" style={{ backgroundColor: '#1a1a1a' }}>
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center" style={{ color: '#888' }}>
+          <div className="flex flex-col items-center justify-center" style={{ color: 'var(--text-faint)' }}>
             <svg className="w-8 h-8 animate-spin mb-2" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -143,7 +143,7 @@ function VideoNode({ id, data, selected }) {
             className="w-full h-full object-cover"
           />
         ) : (
-          <div style={{ color: '#555' }}>
+          <div style={{ color: 'var(--text-muted)' }}>
             <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
@@ -182,12 +182,12 @@ function VideoNode({ id, data, selected }) {
       <div className="p-2.5">
         <h4
           className="font-medium text-sm line-clamp-2 mb-1"
-          style={{ color: '#1a1a1a', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}
+          style={{ color: 'var(--text-primary)', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}
         >
           {safeString(data.title) || '未命名视频'}
         </h4>
         {data.url && (
-          <p className="text-[10px] truncate" style={{ color: '#c8a882' }} title={data.url}>
+          <p className="text-[10px] truncate" style={{ color: 'var(--accent)' }} title={data.url}>
             {safeString(data.url)}
           </p>
         )}

@@ -32,7 +32,7 @@ const renderWithLinks = (text) => {
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
           className="hover:underline break-all"
-          style={{ color: '#c8a882' }}
+          style={{ color: 'var(--accent)' }}
         >
           {part.length > 50 ? part.substring(0, 50) + '...' : part}
         </a>
@@ -47,7 +47,7 @@ const HANDLE_STYLE = {
   width: 10, height: 10,
   border: '2px solid white',
   borderRadius: '50%',
-  backgroundColor: '#c8a882',
+  backgroundColor: 'var(--accent)',
   opacity: 1,
   cursor: 'crosshair',
 }
@@ -82,9 +82,9 @@ function NoteNode({ id, data, selected }) {
       `}
       style={{
         overflow: 'visible',
-        backgroundColor: '#fafafa',
-        borderColor: selected ? '#c8a882' : '#e8e8e8',
-        ringColor: selected ? '#c8a882' : undefined,
+        backgroundColor: 'var(--surface)',
+        borderColor: selected ? 'var(--accent)' : 'var(--border-subtle)',
+        ringColor: selected ? 'var(--accent)' : undefined,
       }}
       onDoubleClick={handleDoubleClick}
     >
@@ -112,18 +112,18 @@ function NoteNode({ id, data, selected }) {
       <div
         className="px-3 py-1.5 flex items-center gap-2"
         style={{
-          backgroundColor: '#f5f0eb',
-          borderBottom: '1px solid #e8d5c0',
+          backgroundColor: 'var(--accent-bg)',
+          borderBottom: '1px solid var(--accent-soft)',
           borderRadius: '0.5rem 0.5rem 0 0',
         }}
       >
-        <svg className="w-4 h-4" style={{ color: '#c8a882' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4" style={{ color: 'var(--accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
         </svg>
         <span
           className="text-xs font-medium"
           style={{
-            color: '#c8a882',
+            color: 'var(--accent)',
             fontFamily: '"Noto Sans SC", system-ui, sans-serif',
             letterSpacing: '0.1em',
           }}
@@ -136,16 +136,16 @@ function NoteNode({ id, data, selected }) {
       {hasImage && (
         <div className="relative overflow-hidden">
           {!imageLoaded && !imageError && (
-            <div className="w-full h-32 flex items-center justify-center" style={{ backgroundColor: '#f5f0eb' }}>
-              <div className="animate-pulse text-sm" style={{ color: '#bbb' }}>加载中...</div>
+            <div className="w-full h-32 flex items-center justify-center" style={{ backgroundColor: 'var(--accent-bg)' }}>
+              <div className="animate-pulse text-sm" style={{ color: 'var(--text-faint)' }}>加载中...</div>
             </div>
           )}
           {imageError ? (
-            <div className="w-full h-24 flex flex-col items-center justify-center" style={{ backgroundColor: '#f5f0eb' }}>
-              <svg className="w-8 h-8 mb-1" style={{ color: '#bbb' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-full h-24 flex flex-col items-center justify-center" style={{ backgroundColor: 'var(--accent-bg)' }}>
+              <svg className="w-8 h-8 mb-1" style={{ color: 'var(--text-faint)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <span className="text-xs" style={{ color: '#bbb' }}>图片加载失败</span>
+              <span className="text-xs" style={{ color: 'var(--text-faint)' }}>图片加载失败</span>
             </div>
           ) : (
             <img
@@ -171,9 +171,9 @@ function NoteNode({ id, data, selected }) {
             autoFocus
             className="w-full min-h-[60px] p-2 text-sm border rounded resize-none focus:outline-none focus:ring-1"
             style={{
-              color: '#2d2d2d',
-              borderColor: '#e8d5c0',
-              ringColor: '#c8a882',
+              color: 'var(--text-secondary)',
+              borderColor: 'var(--accent-soft)',
+              ringColor: 'var(--accent)',
               fontFamily: '"Noto Sans SC", system-ui, sans-serif',
             }}
             placeholder="输入笔记内容..."
@@ -182,7 +182,7 @@ function NoteNode({ id, data, selected }) {
           <div
             className="text-sm whitespace-pre-wrap leading-relaxed"
             style={{
-              color: '#2d2d2d',
+              color: 'var(--text-secondary)',
               fontFamily: '"Noto Sans SC", system-ui, sans-serif',
             }}
           >
@@ -194,7 +194,7 @@ function NoteNode({ id, data, selected }) {
       {/* 底部提示 */}
       {!isEditing && (
         <div className="px-3 pb-2">
-          <span className="text-[10px]" style={{ color: '#bbb' }}>双击编辑</span>
+          <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>双击编辑</span>
         </div>
       )}
     </div>

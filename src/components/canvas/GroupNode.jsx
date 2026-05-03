@@ -11,7 +11,7 @@ import { Handle, Position, NodeResizer } from 'reactflow'
 // 收起状态固定尺寸
 const COLLAPSED_WIDTH = 220
 
-// 预设分组颜色
+// 预设分组颜色 (语义色: 用户自选分组色板, 不随主题切换)
 const GROUP_COLORS = [
   '#c8a882', // 暖色（默认）
   '#7c9eb2', // 蓝灰
@@ -23,7 +23,7 @@ const GROUP_COLORS = [
   '#a8a87c', // 橄榄
 ]
 
-// 节点类型图标和标签
+// 节点类型图标和标签 (语义色: 节点身份色板, 不随主题切换)
 const NODE_TYPE_CONFIG = {
   conceptNode: { icon: 'C', label: '概念', color: '#c8a882' },
   categoryNode: { icon: 'K', label: '分类', color: '#7c9eb2' },
@@ -44,7 +44,7 @@ function GroupNode({ id, data, selected, style }) {
   const isExpanded = data.expanded !== false
   const memberCount = data.memberNodeIds?.length || 0
   const groupName = data.name || `分组 (${memberCount})`
-  const groupColor = data.color || '#c8a882'
+  const groupColor = data.color || 'var(--accent)'
 
   // 计算成员类型统计
   const memberStats = useMemo(() => {
@@ -132,8 +132,8 @@ function GroupNode({ id, data, selected, style }) {
   const ColorPicker = () => (
     showColorPicker && (
       <div
-        className="absolute top-full left-0 mt-1 p-2 bg-white rounded-lg shadow-xl border z-50 grid grid-cols-4 gap-1"
-        style={{ borderColor: '#e8e8e8' }}
+        className="absolute top-full left-0 mt-1 p-2 rounded-lg shadow-xl border z-50 grid grid-cols-4 gap-1"
+        style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--surface)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {GROUP_COLORS.map((color) => (
@@ -144,7 +144,7 @@ function GroupNode({ id, data, selected, style }) {
             }`}
             style={{
               backgroundColor: color,
-              ringColor: color === groupColor ? '#888' : undefined,
+              ringColor: color === groupColor ? 'var(--text-muted)' : undefined,
             }}
             onClick={() => handleColorChange(color)}
           />
@@ -158,7 +158,7 @@ function GroupNode({ id, data, selected, style }) {
     return (
       <div
         className={`
-          relative bg-white rounded-lg border-2 overflow-hidden shadow-md
+          relative rounded-lg border-2 overflow-hidden shadow-md
           transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
           ${selected ? 'ring-2 ring-offset-2 scale-[1.02]' : 'hover:shadow-lg'}
         `}
@@ -220,7 +220,7 @@ function GroupNode({ id, data, selected, style }) {
                 <p className="text-sm font-semibold truncate" style={{ color: groupColor, fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}>
                   {groupName}
                 </p>
-                <p className="text-xs" style={{ color: '#bbb' }}>{memberCount} 节点</p>
+                <p className="text-xs" style={{ color: 'var(--text-faint)' }}>{memberCount} 节点</p>
               </>
             )}
           </div>
@@ -230,7 +230,7 @@ function GroupNode({ id, data, selected, style }) {
             onClick={handleToggleExpand}
             title="展开分组"
           >
-            <svg className="w-4 h-4" style={{ color: '#888' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
             </svg>
           </button>
@@ -240,7 +240,7 @@ function GroupNode({ id, data, selected, style }) {
         {memberStats && Object.keys(memberStats).length > 0 && (
           <div className="px-3 py-2 flex flex-wrap gap-1.5" style={{ borderTop: `1px solid ${groupColor}20` }}>
             {Object.entries(memberStats).map(([type, count]) => {
-              const config = NODE_TYPE_CONFIG[type] || { icon: '?', label: type, color: '#888' }
+              const config = NODE_TYPE_CONFIG[type] || { icon: '?', label: type, color: 'var(--text-muted)' }
               return (
                 <div
                   key={type}
@@ -263,9 +263,10 @@ function GroupNode({ id, data, selected, style }) {
 
         {/* 操作栏 */}
         <div className="px-3 py-1.5 flex items-center justify-between text-xs" style={{ borderTop: `1px solid ${groupColor}15` }}>
-          <span className="cursor-pointer hover:opacity-80" style={{ color: '#bbb' }} onClick={handleToggleExpand}>
+          <span className="cursor-pointer hover:opacity-80" style={{ color: 'var(--text-faint)' }} onClick={handleToggleExpand}>
             点击展开
           </span>
+          {/* 解散按钮颜色: severity-high 粉灰, 跨主题保持警示语义 */}
           <button
             className="transition-colors"
             style={{ color: '#b27c8b' }}
@@ -295,6 +296,7 @@ function GroupNode({ id, data, selected, style }) {
         ringColor: selected ? `${groupColor}80` : undefined,
       }}
     >
+      {/* NodeResizer 选中调整框: 暖色, 用 Tailwind 任意值（无法用 var()）— 仅 selected 时可见 */}
       <NodeResizer
         minWidth={200}
         minHeight={150}
@@ -368,6 +370,7 @@ function GroupNode({ id, data, selected, style }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4m0 0l6-6m-6 6l6 6" />
             </svg>
           </button>
+          {/* 解散按钮颜色: severity-high 粉灰, 跨主题保持警示语义 */}
           <button onClick={handleUngroup} className="p-1.5 hover:bg-red-100 rounded transition-colors" title="解散分组">
             <svg className="w-4 h-4" style={{ color: '#b27c8b' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />

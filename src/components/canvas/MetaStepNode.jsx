@@ -14,11 +14,12 @@
 import { memo } from 'react'
 import { Handle, Position } from 'reactflow'
 
+// MetaStep 状态色 (语义色: pending/running/done/failed 状态板, 跨主题保持语义)
 const STATUS_META = {
-  pending: { color: '#bbb', bg: '#fafafa', label: '待执行' },
-  running: { color: '#c8a882', bg: '#fffbf5', label: '执行中' },
-  done:    { color: '#c8a882', bg: '#fdfaf5', label: '已完成' },
-  failed:  { color: '#d27b7b', bg: '#fdf3f3', label: '失败' },
+  pending: { color: 'var(--text-faint)', bg: 'var(--surface)', label: '待执行' },
+  running: { color: 'var(--accent)', bg: '#fffbf5', label: '执行中' },
+  done:    { color: 'var(--accent)', bg: '#fdfaf5', label: '已完成' },
+  failed:  { color: '#d27b7b', bg: '#fdf3f3', label: '失败' },  // status-failed 红
 }
 
 // 把秒数格式化成 "1.2s" / "12s" / "1m 30s"
@@ -32,15 +33,15 @@ function fmtDuration(ms) {
 // 渲染每步的 output (按 stepId 分类, output 形态来自 metaCognitiveExecutor 的 STEP_PROMPTS)
 function StepOutput({ stepId, output }) {
   if (!output) return null
-  const labelStyle = { fontSize: '9px', color: '#c8a882', letterSpacing: '0.18em', fontWeight: 600, marginBottom: 3 }
-  const textStyle = { fontSize: '10px', lineHeight: 1.55, color: '#3a3a3a' }
+  const labelStyle = { fontSize: '9px', color: 'var(--accent)', letterSpacing: '0.18em', fontWeight: 600, marginBottom: 3 }
+  const textStyle = { fontSize: '10px', lineHeight: 1.55, color: 'var(--text-secondary)' }
 
   if (stepId === 'intent') {
     return (
       <div className="space-y-1.5">
         <div>
           <div style={labelStyle}>核心问题</div>
-          <div style={{ ...textStyle, fontStyle: 'italic', borderLeft: '2px solid #c8a882', paddingLeft: 6 }}>
+          <div style={{ ...textStyle, fontStyle: 'italic', borderLeft: '2px solid var(--accent)', paddingLeft: 6 }}>
             {output.core_question}
           </div>
         </div>
@@ -78,8 +79,8 @@ function StepOutput({ stepId, output }) {
             <div style={labelStyle}>子任务 · {output.subtasks.length}</div>
             <ul style={{ paddingLeft: 0, listStyle: 'none' }}>
               {output.subtasks.slice(0, 5).map((s, i) => (
-                <li key={i} style={{ ...textStyle, padding: '3px 0', borderBottom: '1px dashed #f0e8d8' }}>
-                  <span style={{ color: '#c8a882', fontWeight: 600, marginRight: 6 }}>{s.id || `s${i + 1}`}</span>
+                <li key={i} style={{ ...textStyle, padding: '3px 0', borderBottom: '1px dashed var(--accent-soft)' }}>
+                  <span style={{ color: 'var(--accent)', fontWeight: 600, marginRight: 6 }}>{s.id || `s${i + 1}`}</span>
                   {s.name}
                 </li>
               ))}
@@ -95,10 +96,10 @@ function StepOutput({ stepId, output }) {
       <div>
         <div style={labelStyle}>执行结果 · {Array.isArray(output.results) ? output.results.length : 0} 项</div>
         {Array.isArray(output.results) && output.results.slice(0, 3).map((r, i) => (
-          <div key={i} style={{ ...textStyle, marginBottom: 6, paddingBottom: 6, borderBottom: '1px dashed #f0e8d8' }}>
-            <div style={{ fontWeight: 600, color: '#1a1a1a' }}>
-              <span style={{ color: '#c8a882', marginRight: 6 }}>{r.subtask_id || `s${i + 1}`}</span>
-              <span style={{ fontSize: 9, color: '#888' }}>conf {(r.confidence ?? 0).toFixed(2)}</span>
+          <div key={i} style={{ ...textStyle, marginBottom: 6, paddingBottom: 6, borderBottom: '1px dashed var(--accent-soft)' }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+              <span style={{ color: 'var(--accent)', marginRight: 6 }}>{r.subtask_id || `s${i + 1}`}</span>
+              <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>conf {(r.confidence ?? 0).toFixed(2)}</span>
             </div>
             <div style={{ marginTop: 3 }}>{(r.output || '').slice(0, 140)}{(r.output || '').length > 140 ? '...' : ''}</div>
           </div>
@@ -108,7 +109,8 @@ function StepOutput({ stepId, output }) {
   }
 
   if (stepId === 'reflect') {
-    const verdictColor = output.verdict === 'passed' ? '#5a8a5a' : output.verdict === 'partial' ? '#c8a882' : '#d27b7b'
+    // verdict 色 (语义色: passed/partial/failed 状态板, 跨主题不变)
+    const verdictColor = output.verdict === 'passed' ? '#5a8a5a' : output.verdict === 'partial' ? 'var(--accent)' : '#d27b7b'
     return (
       <div className="space-y-1.5">
         <div>
@@ -141,7 +143,7 @@ function StepOutput({ stepId, output }) {
         {output.final_answer && (
           <div>
             <div style={labelStyle}>最终答复</div>
-            <div style={{ ...textStyle, lineHeight: 1.6, padding: 6, background: '#fdfaf5', border: '1px solid #f0e8d8', borderRadius: 3 }}>
+            <div style={{ ...textStyle, lineHeight: 1.6, padding: 6, background: 'var(--accent-bg)', border: '1px solid var(--accent-soft)', borderRadius: 3 }}>
               {output.final_answer.slice(0, 320)}{output.final_answer.length > 320 ? '...' : ''}
             </div>
           </div>
@@ -157,7 +159,7 @@ function StepOutput({ stepId, output }) {
         {Array.isArray(output.lessons_learned) && output.lessons_learned.length > 0 && (
           <div>
             <div style={labelStyle}>元认知教训</div>
-            <ul style={{ ...textStyle, paddingLeft: 14, fontStyle: 'italic', color: '#7a7a7a' }}>
+            <ul style={{ ...textStyle, paddingLeft: 14, fontStyle: 'italic', color: 'var(--text-muted)' }}>
               {output.lessons_learned.slice(0, 2).map((l, i) => <li key={i} style={{ listStyle: 'disc' }}>{l}</li>)}
             </ul>
           </div>
@@ -244,7 +246,7 @@ function MetaStepNodeImpl({ data, selected }) {
             >
               {data.icon || '·'}
             </span>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#1a1a1a' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
               {(data.index ?? 0) + 1}. {data.label || '步骤'}
             </span>
           </div>
@@ -255,7 +257,7 @@ function MetaStepNodeImpl({ data, selected }) {
                   display: 'inline-block',
                   width: 10, height: 10,
                   borderRadius: '50%',
-                  border: '2px solid #f0e8d8',
+                  border: '2px solid var(--accent-soft)',
                   borderTopColor: meta.color,
                   animation: 'metaStepSpin 0.9s linear infinite',
                 }}
@@ -278,7 +280,7 @@ function MetaStepNodeImpl({ data, selected }) {
         </div>
 
         {/* EN 副标 */}
-        <div style={{ fontSize: 9, color: '#888', letterSpacing: '0.3em', marginBottom: 8 }}>
+        <div style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.3em', marginBottom: 8 }}>
           {data.en || ''}
         </div>
 
@@ -287,14 +289,14 @@ function MetaStepNodeImpl({ data, selected }) {
 
         {/* Pending — 提示 */}
         {status === 'pending' && (
-          <div style={{ fontSize: 10, color: '#bbb', fontStyle: 'italic', textAlign: 'center', padding: '6px 0' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-faint)', fontStyle: 'italic', textAlign: 'center', padding: '6px 0' }}>
             等待上一步完成
           </div>
         )}
 
         {/* Running — 提示 */}
         {isRunning && (
-          <div style={{ fontSize: 10, color: '#c8a882', textAlign: 'center', padding: '4px 0' }}>
+          <div style={{ fontSize: 10, color: 'var(--accent)', textAlign: 'center', padding: '4px 0' }}>
             LLM 正在生成...
           </div>
         )}
@@ -308,7 +310,7 @@ function MetaStepNodeImpl({ data, selected }) {
 
         {/* 底部时间 */}
         {(isDone || isFailed) && data.durationMs ? (
-          <div style={{ fontSize: 9, color: '#888', marginTop: 6, paddingTop: 4, borderTop: '1px dashed #e8e8e8', textAlign: 'right' }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 6, paddingTop: 4, borderTop: '1px dashed var(--border-subtle)', textAlign: 'right' }}>
             耗时 {fmtDuration(data.durationMs)}
           </div>
         ) : null}

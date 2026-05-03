@@ -15,7 +15,7 @@ const safeString = (val) => {
   return String(val)
 }
 
-// 文件类型配置
+// 文件类型配置 (语义色: 文件格式 brand 色板, 不随主题切换)
 const FILE_TYPES = {
   pdf: { color: '#DC2626', bgColor: '#fef2f2', label: 'PDF' },
   doc: { color: '#2563EB', bgColor: '#eff6ff', label: 'Word' },
@@ -50,7 +50,7 @@ const HANDLE_STYLE = {
   width: 10, height: 10,
   border: '2px solid white',
   borderRadius: '50%',
-  backgroundColor: '#888',
+  backgroundColor: 'var(--text-muted)',
   opacity: 1,
   cursor: 'crosshair',
 }
@@ -72,9 +72,9 @@ function FileNode({ id, data, selected }) {
       `}
       style={{
         overflow: 'visible',
-        backgroundColor: '#fafafa',
-        borderColor: selected ? '#c8a882' : '#e8e8e8',
-        ringColor: selected ? '#c8a882' : undefined,
+        backgroundColor: 'var(--surface)',
+        borderColor: selected ? 'var(--accent)' : 'var(--border-subtle)',
+        ringColor: selected ? 'var(--accent)' : undefined,
         boxShadow: selected ? '0 4px 20px rgba(200, 168, 130, 0.15)' : '0 1px 3px rgba(0,0,0,0.06)',
       }}
       onClick={handleClick}
@@ -122,7 +122,7 @@ function FileNode({ id, data, selected }) {
         {/* 悬停时下载图标 */}
         {isHovered && data.url && (
           <div className="absolute top-2 right-2 w-6 h-6 bg-white/90 rounded-full flex items-center justify-center shadow">
-            <svg className="w-3.5 h-3.5" style={{ color: '#555' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
           </div>
@@ -133,12 +133,12 @@ function FileNode({ id, data, selected }) {
       <div className="p-2.5">
         <h4
           className="font-medium text-sm line-clamp-2 leading-tight"
-          style={{ color: '#1a1a1a', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}
+          style={{ color: 'var(--text-primary)', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}
         >
           {safeString(data.name) || '未命名文件'}
         </h4>
         {data.size && (
-          <p className="text-xs mt-1" style={{ color: '#bbb' }}>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-faint)' }}>
             {formatFileSize(data.size)}
           </p>
         )}

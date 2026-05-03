@@ -15,7 +15,7 @@ const safeString = (val) => {
   return String(val)
 }
 
-// 默认分类配置：图标 + 颜色
+// 默认分类配置：图标 + 颜色 (语义色: 节点身份色板, 不随主题切换)
 const CATEGORY_CONFIG = {
   '概念': { icon: '💡', color: '#c8a882' },
   '技术': { icon: '⚙', color: '#7c9eb2' },
@@ -32,13 +32,13 @@ const HANDLE_STYLE = {
   width: 10, height: 10,
   border: '2px solid white',
   borderRadius: '50%',
-  backgroundColor: '#fafafa',
+  backgroundColor: 'var(--surface)',
   opacity: 1,
   cursor: 'crosshair',
 }
 
 function CategoryNode({ data, selected }) {
-  const config = CATEGORY_CONFIG[data.name] || { icon: '📁', color: data.color || '#c8a882' }
+  const config = CATEGORY_CONFIG[data.name] || { icon: '📁', color: data.color || 'var(--accent)' }
   const categoryColor = data.color || config.color
   const childCount = data.childCount || 0
 
@@ -52,7 +52,7 @@ function CategoryNode({ data, selected }) {
       style={{
         backgroundColor: categoryColor,
         boxShadow: selected
-          ? `0 0 0 4px #fafafa, 0 0 0 6px ${categoryColor}, 0 8px 24px ${categoryColor}40`
+          ? `0 0 0 4px var(--surface), 0 0 0 6px ${categoryColor}, 0 8px 24px ${categoryColor}40`
           : `0 4px 12px ${categoryColor}30`,
       }}
     >
@@ -87,7 +87,7 @@ function CategoryNode({ data, selected }) {
       <span
         className="text-xs font-bold text-center px-2 truncate max-w-full"
         style={{
-          color: '#fafafa',
+          color: 'var(--surface)',
           fontFamily: '"Noto Sans SC", system-ui, sans-serif',
           letterSpacing: '0.05em',
         }}

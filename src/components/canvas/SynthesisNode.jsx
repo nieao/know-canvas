@@ -1,10 +1,14 @@
 // SynthesisNode - 紫色融合节点 (React Flow node), 展示对抗收敛后的 Action Plan + Health Score
+// 注: 紫色融合 + 暖色字 + 半透明白色块 是封闭的语义视觉系统 (蓝+红=紫)
+//     跨 6 主题保持视觉一致性, hex 颜色不需要替换为 var() token
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
-// 紫色主色调 (融合 PROPOSER 蓝 + REFUTER 红)
+// 紫色主色调 (语义色: 融合 PROPOSER 蓝 + REFUTER 红, 跨主题保持综合语义)
 const PURPLE = '#a07cb8';
 const PURPLE_DEEP = '#7e5b96';
+// WARM 暖色 — 紫底融合节点上需要稳定可见的暖色字, 用固定 hex 保证对比度
+// (深紫底固定, 暖色字也固定才能保证 6 主题下都不灰飞)
 const WARM = '#c8a882';
 
 function SynthesisNodeImpl({ id, data, selected }) {

@@ -15,7 +15,7 @@ const safeString = (val) => {
   return String(val)
 }
 
-// 常见网站品牌配色
+// 常见网站品牌配色 (语义色: brand 色板, 不随主题切换)
 const BRAND_COLORS = {
   'google.com': '#4285F4',
   'github.com': '#181717',
@@ -52,7 +52,7 @@ const HANDLE_STYLE = {
   width: 10, height: 10,
   border: '2px solid white',
   borderRadius: '50%',
-  backgroundColor: '#c8a882',
+  backgroundColor: 'var(--accent)',
   opacity: 1,
   cursor: 'crosshair',
 }
@@ -67,7 +67,7 @@ function BookmarkNode({ id, data, selected }) {
 
   const url = data.url || ''
   const domain = extractDomain(url)
-  const brandColor = BRAND_COLORS[domain] || '#555'
+  const brandColor = BRAND_COLORS[domain] || 'var(--text-muted)'
   const isLoading = data.loading
 
   // 处理链接点击
@@ -109,14 +109,15 @@ function BookmarkNode({ id, data, selected }) {
   return (
     <div
       className={`
-        relative w-[280px] bg-white rounded-lg border-2 cursor-pointer
+        relative w-[280px] rounded-lg border-2 cursor-pointer
         transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]
         ${selected ? 'ring-2 ring-offset-2 scale-[1.02]' : 'hover:shadow-lg'}
       `}
       style={{
         overflow: 'visible',
-        borderColor: selected ? '#c8a882' : '#e8e8e8',
-        ringColor: selected ? '#c8a882' : undefined,
+        backgroundColor: 'var(--surface)',
+        borderColor: selected ? 'var(--accent)' : 'var(--border-subtle)',
+        ringColor: selected ? 'var(--accent)' : undefined,
         boxShadow: selected ? '0 4px 20px rgba(200, 168, 130, 0.15)' : '0 1px 3px rgba(0,0,0,0.06)',
       }}
       onClick={handleClick}
@@ -144,23 +145,23 @@ function BookmarkNode({ id, data, selected }) {
 
       {/* 加载状态 */}
       {isLoading && (
-        <div className="absolute inset-0 bg-white/80 rounded-lg flex items-center justify-center z-10">
+        <div className="absolute inset-0 rounded-lg flex items-center justify-center z-10" style={{ backgroundColor: 'rgba(250,250,250,0.8)' }}>
           <div className="flex flex-col items-center gap-2">
-            <svg className="w-6 h-6 animate-spin" style={{ color: '#c8a882' }} fill="none" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
-            <span className="text-xs" style={{ color: '#888' }}>获取链接信息...</span>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>获取链接信息...</span>
           </div>
         </div>
       )}
 
       {/* 预览图 */}
       {data.image && !imageError && (
-        <div className="relative overflow-hidden rounded-t-lg" style={{ borderBottom: '1px solid #e8e8e8' }}>
+        <div className="relative overflow-hidden rounded-t-lg" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
           {!imageLoaded && (
-            <div className="w-full h-32 flex items-center justify-center" style={{ backgroundColor: '#f5f0eb' }}>
-              <div className="animate-pulse text-sm" style={{ color: '#bbb' }}>加载中...</div>
+            <div className="w-full h-32 flex items-center justify-center" style={{ backgroundColor: 'var(--accent-bg)' }}>
+              <div className="animate-pulse text-sm" style={{ color: 'var(--text-faint)' }}>加载中...</div>
             </div>
           )}
           <img
@@ -180,7 +181,7 @@ function BookmarkNode({ id, data, selected }) {
         <h4
           className="font-medium text-sm line-clamp-2 mb-1"
           style={{
-            color: '#1a1a1a',
+            color: 'var(--text-primary)',
             fontFamily: '"Noto Sans SC", system-ui, sans-serif',
           }}
         >
@@ -192,7 +193,7 @@ function BookmarkNode({ id, data, selected }) {
           <p
             className="text-xs line-clamp-2 mb-2"
             style={{
-              color: '#888',
+              color: 'var(--text-muted)',
               fontFamily: '"Noto Sans SC", system-ui, sans-serif',
             }}
           >
@@ -212,9 +213,9 @@ function BookmarkNode({ id, data, selected }) {
             onClick={(e) => e.stopPropagation()}
             className="w-full px-2 py-1 text-xs border rounded focus:outline-none focus:ring-1"
             style={{
-              borderColor: '#e8d5c0',
-              color: '#555',
-              ringColor: '#c8a882',
+              borderColor: 'var(--accent-soft)',
+              color: 'var(--text-muted)',
+              ringColor: 'var(--accent)',
             }}
             placeholder="输入链接地址..."
           />
@@ -243,8 +244,8 @@ function BookmarkNode({ id, data, selected }) {
       <div
         className="absolute top-2 left-2 px-1.5 py-0.5 text-[10px] font-medium rounded"
         style={{
-          backgroundColor: '#c8a882',
-          color: '#fafafa',
+          backgroundColor: 'var(--accent)',
+          color: 'var(--surface)',
           letterSpacing: '0.1em',
         }}
       >

@@ -23,3 +23,9 @@ logs/
 .test-screenshots/
 e2e-orchestra-shots/
 e2e-real-run.png
+
+# 临时一次性测试脚本 (会话内调试用, 不进 main)
+.test-*.mjs
+
+# Claude Code 工作目录
+.claude/

@@ -45,7 +45,7 @@ const SOURCE_TYPE_ICONS = {
   ),
 }
 
-// 分类颜色映射
+// 分类颜色映射 (语义色: 节点身份色板 / 不随主题切换 / 概念=accent)
 const CATEGORY_COLORS = {
   '概念': '#c8a882',
   '技术': '#7c9eb2',
@@ -88,7 +88,7 @@ const HANDLE_STYLE = {
   height: 10,
   border: '2px solid white',
   borderRadius: '50%',
-  backgroundColor: '#c8a882',
+  backgroundColor: 'var(--accent)',
   opacity: 1,
 }
 
@@ -100,7 +100,7 @@ function ConceptNode({ id, data, selected }) {
 
   const sizeStyle = SIZE_SCALES[data.size] || SIZE_SCALES.medium
   const isMarked = data.marked
-  const markColor = data.markColor || '#c8a882'
+  const markColor = data.markColor || 'var(--accent)'
   const categoryColor = CATEGORY_COLORS[data.category] || '#c8a882'
   const sourceIcon = SOURCE_TYPE_ICONS[data.sourceType] || SOURCE_TYPE_ICONS.manual
 
@@ -164,9 +164,9 @@ function ConceptNode({ id, data, selected }) {
         ${isExpanded ? 'min-w-[320px] max-w-[400px]' : `${sizeStyle.minW} ${sizeStyle.maxW}`}
       `}
       style={{
-        backgroundColor: '#fafafa',
-        borderColor: selected ? '#c8a882' : '#e8e8e8',
-        ringColor: selected ? '#c8a882' : undefined,
+        backgroundColor: 'var(--surface)',
+        borderColor: selected ? 'var(--accent)' : 'var(--border-subtle)',
+        ringColor: selected ? 'var(--accent)' : undefined,
         boxShadow: isMarked
           ? `0 0 0 3px ${markColor}40, 0 4px 12px ${markColor}20`
           : selected
@@ -197,9 +197,9 @@ function ConceptNode({ id, data, selected }) {
           onClick={handleTogglePin}
           className="absolute -top-3 right-2 w-5 h-5 flex items-center justify-center rounded-full shadow-sm transition-all z-10"
           style={{
-            backgroundColor: isPinned ? '#c8a882' : '#fafafa',
-            color: isPinned ? '#fafafa' : '#888',
-            border: isPinned ? 'none' : '1px solid #e8e8e8',
+            backgroundColor: isPinned ? 'var(--accent)' : 'var(--surface)',
+            color: isPinned ? 'var(--surface)' : 'var(--text-faint)',
+            border: isPinned ? 'none' : '1px solid var(--border-subtle)',
           }}
           title={isPinned ? '取消钉住' : '钉住展开'}
         >
@@ -215,7 +215,7 @@ function ConceptNode({ id, data, selected }) {
           className="absolute -top-2.5 right-6 px-2 py-0.5 rounded text-[10px] font-medium tracking-wider"
           style={{
             backgroundColor: categoryColor,
-            color: '#fafafa',
+            color: 'var(--surface)',
             fontFamily: '"Noto Sans SC", system-ui, sans-serif',
             letterSpacing: '0.15em',
           }}
@@ -228,7 +228,7 @@ function ConceptNode({ id, data, selected }) {
       <div
         className="absolute top-0 left-0 right-0 h-[2px] rounded-t-lg transition-all duration-500"
         style={{
-          backgroundColor: '#c8a882',
+          backgroundColor: 'var(--accent)',
           opacity: selected || isHovered ? 1 : 0.4,
           transform: selected || isHovered ? 'scaleX(1)' : 'scaleX(0.3)',
           transformOrigin: 'left',
@@ -245,7 +245,7 @@ function ConceptNode({ id, data, selected }) {
         <h3
           className={`${sizeStyle.titleSize} font-bold truncate`}
           style={{
-            color: '#1a1a1a',
+            color: 'var(--text-primary)',
             fontFamily: '"Noto Serif SC", Georgia, serif',
             letterSpacing: '0.02em',
           }}
@@ -259,7 +259,7 @@ function ConceptNode({ id, data, selected }) {
         }`}>
           <p
             className={`${sizeStyle.textSize} mt-1 leading-relaxed line-clamp-2`}
-            style={{ color: '#555', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}
+            style={{ color: 'var(--text-muted)', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}
           >
             {getShortDescription()}
           </p>
@@ -272,7 +272,7 @@ function ConceptNode({ id, data, selected }) {
           <div
             className="text-xs mt-2 whitespace-pre-wrap leading-relaxed max-h-[380px] overflow-y-auto"
             style={{
-              color: '#2d2d2d',
+              color: 'var(--text-secondary)',
               fontFamily: '"Noto Sans SC", system-ui, sans-serif',
             }}
           >
@@ -288,9 +288,9 @@ function ConceptNode({ id, data, selected }) {
                 key={i}
                 className="text-[10px] px-1.5 py-0.5 rounded"
                 style={{
-                  backgroundColor: '#f5f0eb',
-                  color: '#c8a882',
-                  border: '1px solid #e8d5c0',
+                  backgroundColor: 'var(--accent-bg)',
+                  color: 'var(--accent)',
+                  border: '1px solid var(--accent-soft)',
                   fontFamily: '"Noto Sans SC", system-ui, sans-serif',
                 }}
               >
@@ -298,7 +298,7 @@ function ConceptNode({ id, data, selected }) {
               </span>
             ))}
             {data.tags.length > 3 && (
-              <span className="text-[10px]" style={{ color: '#bbb' }}>
+              <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>
                 +{data.tags.length - 3}
               </span>
             )}
@@ -313,9 +313,9 @@ function ConceptNode({ id, data, selected }) {
                 key={i}
                 className="text-[10px] px-1.5 py-0.5 rounded"
                 style={{
-                  backgroundColor: '#f5f0eb',
-                  color: '#c8a882',
-                  border: '1px solid #e8d5c0',
+                  backgroundColor: 'var(--accent-bg)',
+                  color: 'var(--accent)',
+                  border: '1px solid var(--accent-soft)',
                   fontFamily: '"Noto Sans SC", system-ui, sans-serif',
                 }}
               >
@@ -331,13 +331,13 @@ function ConceptNode({ id, data, selected }) {
         <div
           className="px-3 py-1.5 flex items-center gap-1.5"
           style={{
-            borderTop: '1px solid #e8e8e8',
+            borderTop: '1px solid var(--border-subtle)',
           }}
         >
-          <span style={{ color: '#bbb' }}>{sourceIcon}</span>
+          <span style={{ color: 'var(--text-faint)' }}>{sourceIcon}</span>
           <span
             className="text-[10px] truncate max-w-[120px]"
-            style={{ color: '#888', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}
+            style={{ color: 'var(--text-muted)', fontFamily: '"Noto Sans SC", system-ui, sans-serif' }}
           >
             {safeString(data.source)}
           </span>
@@ -347,7 +347,7 @@ function ConceptNode({ id, data, selected }) {
       {/* 悬停展开提示 */}
       {hasRichContent && !isExpanded && (
         <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
-          <div className="flex items-center gap-1 text-[10px] opacity-40 hover:opacity-80 transition-opacity" style={{ color: '#888' }}>
+          <div className="flex items-center gap-1 text-[10px] opacity-40 hover:opacity-80 transition-opacity" style={{ color: 'var(--text-muted)' }}>
             <svg className="w-3 h-3 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>

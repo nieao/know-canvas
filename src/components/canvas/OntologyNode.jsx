@@ -19,35 +19,35 @@ import useCanvasStore from '../../stores/useCanvasStore'
 const VARIANT_META = {
   goal: {
     label: 'GOAL',
-    bg: '#1a1a1a',
-    color: '#fafafa',
-    border: '#c8a882',
-    accent: '#c8a882',
+    bg: 'var(--text-primary)',     // 反色深底, 跟随主题切换
+    color: 'var(--surface)',
+    border: 'var(--accent)',
+    accent: 'var(--accent)',
     width: 280,
   },
   entity: {
     label: 'ENTITY',
-    bg: '#fafafa',
-    color: '#1a1a1a',
-    border: '#e8e8e8',
-    accent: '#c8a882',
+    bg: 'var(--surface)',
+    color: 'var(--text-primary)',
+    border: 'var(--border-subtle)',
+    accent: 'var(--accent)',
     width: 220,
   },
   constraint: {
     label: 'CONSTRAINT',
-    bg: '#f5f0eb',
-    color: '#1a1a1a',
-    border: '#c8a882',
-    accent: '#c8a882',
+    bg: 'var(--accent-bg)',
+    color: 'var(--text-primary)',
+    border: 'var(--accent)',
+    accent: 'var(--accent)',
     width: 220,
   },
   assumption: {
     label: 'ASSUMPTION',
-    bg: '#fafafa',
-    color: '#555',
-    border: '#bbb',
+    bg: 'var(--surface)',
+    color: 'var(--text-muted)',
+    border: 'var(--text-faint)',
     borderStyle: 'dashed',
-    accent: '#888',
+    accent: 'var(--text-muted)',
     width: 220,
   },
 }
@@ -86,7 +86,7 @@ function OntologyNodeImpl({ id, data, selected }) {
         width: meta.width,
         background: meta.bg,
         color: meta.color,
-        border: `${selected ? '2px' : '1px'} ${meta.borderStyle || 'solid'} ${selected ? '#c8a882' : meta.border}`,
+        border: `${selected ? '2px' : '1px'} ${meta.borderStyle || 'solid'} ${selected ? 'var(--accent)' : meta.border}`,
         borderRadius: 4,
       }}
     >
@@ -132,8 +132,8 @@ function OntologyNodeImpl({ id, data, selected }) {
               disabled={!title.trim()}
               className="flex-1 text-[10px] py-1 px-2 rounded-sm border transition-all"
               style={{
-                borderColor: title.trim() ? '#c8a882' : '#e5e5e5',
-                color: title.trim() ? '#1a1a1a' : '#bbb',
+                borderColor: title.trim() ? 'var(--accent)' : 'var(--border-subtle)',
+                color: title.trim() ? 'var(--text-primary)' : 'var(--text-faint)',
                 background: title.trim() ? 'rgba(245,240,235,0.6)' : 'transparent',
                 cursor: title.trim() ? 'pointer' : 'not-allowed',
               }}
@@ -141,13 +141,14 @@ function OntologyNodeImpl({ id, data, selected }) {
             >
               派 Hermes →
             </button>
+            {/* 反驳按钮: severity-high 粉灰色, 跨主题保持警示语义 */}
             <button
               onClick={onChallenge}
               disabled={!title.trim() || isChallenging}
               className="flex-1 text-[10px] py-1 px-2 rounded-sm border transition-all"
               style={{
-                borderColor: title.trim() ? '#b27c8b' : '#e5e5e5',
-                color: title.trim() ? '#7a3a4a' : '#bbb',
+                borderColor: title.trim() ? '#b27c8b' : 'var(--border-subtle)',
+                color: title.trim() ? '#7a3a4a' : 'var(--text-faint)',
                 background: title.trim() ? 'rgba(245,235,237,0.6)' : 'transparent',
                 cursor: title.trim() && !isChallenging ? 'pointer' : 'not-allowed',
               }}

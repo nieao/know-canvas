@@ -2379,18 +2379,66 @@ const useCanvasStore = create(
         const ts = Date.now()
         const rand = () => Math.random().toString(36).slice(2, 8)
         const COL_W = 240
-        const ROW_H = 150
+        const CARD_H = 170
+        const PAD = 30
         const newNodes = []
         const newEdges = []
 
-        // 子节点排成一横排, 在父节点下面
-        const startX = src.position.x - ((subitems.length - 1) * COL_W) / 2
+        // === 决定 decomposeGroup 容器 ===
+        // 拆解子节点散落在源下方会撞 ROLE/AGENT 行 (用户图 34 反馈)
+        // 改为统一收到 projectGroup 下方独立容器, 每个源节点一个 decomposeGroup
+        const projectGroup = src.parentNode ? nodes.find((n) => n.id === src.parentNode && n.type === 'group') : null
+
+        let dgId, dgPos
+        if (projectGroup) {
+          dgId = `${projectGroup.id}-decompose-${ontoNodeId}`
+          const groupX = projectGroup.position?.x || 0
+          const groupY = projectGroup.position?.y || 0
+          const groupH = Number(projectGroup.style?.height) || 1100
+          // 同一 projectGroup 下方按已有 decompose 容器数量错开 Y
+          const existingDgs = nodes.filter((n) => n.type === 'group' && n.data?.isDecomposeGroup && n.data?.relatedProjectGroupId === projectGroup.id)
+          dgPos = { x: groupX, y: groupY + groupH + 60 + existingDgs.length * (CARD_H + PAD * 2 + 40) }
+        } else {
+          dgId = `decomposeGroup-floating-${ontoNodeId}`
+          dgPos = { x: (src.position?.x || 0), y: (src.position?.y || 0) + 320 }
+        }
+
+        const existing = nodes.find((n) => n.id === dgId)
+        const existingChildren = nodes.filter((n) => n.parentNode === dgId && n.type === 'ontologyNode')
+        const startIdx = existingChildren.length
+        const totalAfter = startIdx + subitems.length
+        const containerW = Math.max(COL_W * totalAfter + PAD * 2, COL_W * 5 + PAD * 2)
+
+        if (!existing) {
+          newNodes.push({
+            id: dgId,
+            type: 'group',
+            position: dgPos,
+            style: {
+              width: containerW,
+              height: CARD_H + PAD * 2 + 24,
+              background: 'rgba(200,168,130,0.04)',
+              border: '1px dashed rgba(200,168,130,0.45)',
+              borderRadius: 14,
+            },
+            data: {
+              isDecomposeGroup: true,
+              label: `拆解 · ${src.data?.title || ''}`.slice(0, 32),
+              relatedProjectGroupId: projectGroup?.id || null,
+              sourceNodeId: ontoNodeId,
+            },
+          })
+        }
+
         subitems.forEach((s, i) => {
           const cid = `onto-${ts}-${rand()}`
+          const slotIdx = startIdx + i
           newNodes.push({
             id: cid,
             type: 'ontologyNode',
-            position: { x: startX + i * COL_W, y: src.position.y + ROW_H },
+            parentNode: dgId,
+            extent: 'parent',
+            position: { x: PAD + slotIdx * COL_W, y: PAD },
             data: {
               variant: 'entity',  // 二次拆出来的统一作为 entity, 用户可手动改
               title: s.title,
@@ -2410,9 +2458,15 @@ const useCanvasStore = create(
           })
         })
 
+        stampNodesInPlace(newNodes)
         set((state) => {
           state.nodes.push(...newNodes)
           state.edges.push(...newEdges)
+          // 复用已有容器: 撑大宽度
+          if (existing) {
+            const grp = state.nodes.find((n) => n.id === dgId)
+            if (grp) grp.style = { ...grp.style, width: containerW }
+          }
         })
         return subitems
       },

@@ -160,27 +160,22 @@ export async function synthesize(nodes = [], edges = [], weights = { logic: 1, c
       summary = '原始文本 (未结构化)'
     }
   } catch (err) {
-    summary = `综合调用异常: ${err.message || err}`
+    // mock 已彻底移除, LLM 失败直接 throw 让上层 runner 显示错误 banner
+    throw new Error(`综合官 LLM 调用失败: ${err.message || err}`)
   }
 
-  // mock / LLM 失败兜底: 基于 proposer + refuter 直接拼一份结构化方案, 不让节点空着
   if (actionItems.length === 0 && !actionPlanText) {
-    const built = buildFallbackPlan(proposers, refuters)
-    actionItems = built.actionItems
-    risks = built.risks
-    if (!summary || summary === '原始文本 (未结构化)' || summary.startsWith('综合调用异常')) {
-      summary = built.summary
-    }
+    throw new Error('综合官 LLM 返回空, actionItems/actionPlan 都没有')
   }
   if (risks.length === 0) {
     risks = refuters.slice(0, 3).map((r) => `[${r.severity}] ${r.text || r.label}`.slice(0, 80))
   }
-  // actionPlan 字符串保持兼容 (老的 ActionPlanModal 渲染会用)
+  // actionPlan 字符串保持兼容 (ActionPlanModal 渲染会用)
   const actionPlan = actionItems.length
     ? actionItems
-        .map((it, i) => `[${it.priority || 'P1'}] ${it.action} (负责人: ${it.owner || '-'} · ${it.deadline || '-'} · 验收: ${it.validation || '-'})`)
+        .map((it) => `[${it.priority || 'P1'}] ${it.action} (负责人: ${it.owner || '-'} · ${it.deadline || '-'} · 验收: ${it.validation || '-'})`)
         .join('\n')
-    : actionPlanText || '（暂无行动方案）'
+    : actionPlanText
 
   // 健康分：以本地启发式为准，LLM hint 只做轻量混合（30/70）
   const localHealth = calcHealth(nodes, edges, weights)
@@ -197,44 +192,4 @@ export async function synthesize(nodes = [], edges = [], weights = { logic: 1, c
     summary,
     ts,
   }
-}
-
-/**
- * 兜底拼装: LLM 不可用时, 基于 proposer + refuter 直接拼一份有结构的方案
- * 让 SynthesisNode 不会显示"综合失败", 同时对最严重的反驳点逐一给出对应行动
- */
-function buildFallbackPlan(proposers, refuters) {
-  const sevRank = { critical: 4, high: 3, medium: 2, low: 1 }
-  const sorted = [...refuters].sort((a, b) => (sevRank[b.severity] || 0) - (sevRank[a.severity] || 0))
-  const top = sorted.slice(0, 4)
-
-  const actionItems = top.map((r, i) => {
-    const todo = (r.todos && r.todos[0]) || r.text || '回应该反驳点'
-    const ev = (r.evidence && r.evidence[0]) || '反驳依据'
-    return {
-      priority: i === 0 ? 'P0' : i <= 1 ? 'P1' : 'P2',
-      action: todo.slice(0, 50),
-      owner: '主推 owner 待定',
-      deadline: i === 0 ? '本周内' : i <= 1 ? '2 周内' : '1 个月内',
-      validation: ev.slice(0, 40),
-    }
-  })
-  // 如果反驳数不够, 给 proposer 也派一条"验证假设"行动, 确保至少 3 条
-  while (actionItems.length < 3 && proposers.length > 0) {
-    const p = proposers[actionItems.length % proposers.length]
-    actionItems.push({
-      priority: 'P2',
-      action: `验证"${(p.label || '提议').slice(0, 20)}"的核心假设是否成立`,
-      owner: '主推 owner 待定',
-      deadline: '2 周内',
-      validation: '能给出 3 个量化判据 + 至少 1 个反例验证',
-    })
-  }
-
-  const risks = top.map((r) => `[${r.severity}] ${(r.text || r.label || '').slice(0, 60)}`)
-  const summary = top.length > 0
-    ? `本轮收到 ${refuters.length} 条反驳, 最严重的是${top[0].severity === 'critical' ? '合规风险' : '逻辑/商业漏洞'}, 优先回应.`
-    : `本轮 ${proposers.length} 个提议未引发反驳, 可推进.`
-
-  return { actionItems, risks, summary }
 }

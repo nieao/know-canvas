@@ -41,149 +41,8 @@ const extractText = (n) => ({
   body: String(n.data?.description || n.data?.summary || n.data?.content || n.data?.claim || n.data?.text || '').slice(0, 200),
 })
 
-/** 兜底 mock — LLM 不可用时仍然产出结构化反驳 (含 evidence 论据 + todos 待办)
- *  按 persona 区分口吻, 让节点内容真实、详细、可下手 */
-const MOCK_TONES = {
-  reddit: [
-    {
-      severity: 'high', tag: 'logic',
-      text: '这个前提你默认成立, 但根本没人验过 — 举个反例就崩',
-      evidence: [
-        '论据 1: 没有列出前提的边界条件 (用户规模/资源约束/外部依赖)',
-        '论据 2: 缺乏对照组数据 — 不做这件事会怎样? 没说',
-        '论据 3: 历史上类似项目 70% 死在"前提没验证"上 (参考 PMF 失败统计)',
-      ],
-      todos: [
-        '✅ 列出 3 个最致命的隐含假设, 每个写一句反例',
-        '✅ 找 2 个反例案例 (失败的项目), 验证你的前提是否对它们成立',
-        '✅ 设计一个 A/B 实验, 1 周内可证伪',
-      ],
-    },
-    {
-      severity: 'medium', tag: 'business',
-      text: '收益模型只算了顺境, 顺境占多大比例你说不出来',
-      evidence: [
-        '论据 1: 顺境概率未量化 — 是 80% 还是 30%?',
-        '论据 2: 逆境成本未估算 (回滚/退款/品牌损失)',
-        '论据 3: 单位经济模型 (CAC/LTV) 缺失',
-      ],
-      todos: [
-        '✅ 把场景拆成 3 档: 乐观/中性/悲观, 各给概率',
-        '✅ 算出每档的 ROI 和回收周期',
-        '✅ 标出关键阈值 (低于多少就该停)',
-      ],
-    },
-    {
-      severity: 'low', tag: 'logic',
-      text: '术语堆砌掩盖了"看情况"式答辩, 给个可证伪判据',
-      evidence: [
-        '论据 1: 关键概念缺定义 (XX/YY 怎么算)',
-        '论据 2: 没有量化判据 — "做得好"是多好?',
-        '论据 3: 后退条件未声明 (失败什么时候止损)',
-      ],
-      todos: [
-        '✅ 把每个名词替换成可观测的指标',
-        '✅ 给出"成功"的数字阈值',
-        '✅ 给出"失败止损"的硬条件',
-      ],
-    },
-  ],
-  audit: [
-    {
-      severity: 'critical', tag: 'compliance',
-      text: '数据隐私边界未明确, 10x 用户量时合规风险指数级上升',
-      evidence: [
-        '论据 1: 个人数据收集范围超出"必要最小化"原则 (GDPR Art. 5)',
-        '论据 2: 跨境传输路径未声明, 涉及《个保法》第 38 条审批',
-        '论据 3: 没有数据保留期上限 — 监管会盯',
-      ],
-      todos: [
-        '⚠ 立即: 做 DPIA (数据保护影响评估)',
-        '⚠ 1 周内: 补充数据收集清单 + 用户授权弹窗',
-        '⚠ 上线前: 跨境传输走 SCC 或本地化部署',
-      ],
-    },
-    {
-      severity: 'high', tag: 'business',
-      text: 'ROI 假设忽略运营成本中位数, 实际回收周期翻倍',
-      evidence: [
-        '论据 1: 漏算客服/运维/合规人力 (通常 = 开发成本 1.5x)',
-        '论据 2: 没考虑获客成本上升曲线 (后期 CAC 通常涨 3-5 倍)',
-        '论据 3: 折旧/资产损失未计入',
-      ],
-      todos: [
-        '⚠ 算 TCO (Total Cost of Ownership), 不只是开发成本',
-        '⚠ 列出未来 3 年 CAC 预测曲线',
-        '⚠ 给出现金流转正的时间点和资金缺口',
-      ],
-    },
-    {
-      severity: 'medium', tag: 'logic',
-      text: '边界条件失效场景未列举, 异常输入下行为未定义',
-      evidence: [
-        '论据 1: 没有写过 failure mode analysis',
-        '论据 2: 极端值/空值/恶意输入下行为未声明',
-        '论据 3: 依赖服务挂了的降级方案缺失',
-      ],
-      todos: [
-        '⚠ 写一份 FMEA (失效模式与影响分析)',
-        '⚠ 至少识别 5 类典型失败场景, 各给降级路径',
-        '⚠ 加上"灰度回滚"的硬指标',
-      ],
-    },
-  ],
-  socratic: [
-    {
-      severity: 'medium', tag: 'logic',
-      text: '如果用户量减半, 这个结论还成立吗? 边界在哪?',
-      evidence: [
-        '论据 1: 当前结论依赖"规模红利"假设',
-        '论据 2: 没有给出最低生存规模 (MAU/DAU 阈值)',
-        '论据 3: 网络效应曲线未画 — 拐点在哪?',
-      ],
-      todos: [
-        '🔍 给出"规模 50% 时"的备选方案',
-        '🔍 标出最低可行规模 (Minimum Viable Scale)',
-        '🔍 推演 3 种规模档位下的核心指标',
-      ],
-    },
-    {
-      severity: 'low', tag: 'business',
-      text: '你说的"成功"用什么具体指标衡量? 阈值是多少?',
-      evidence: [
-        '论据 1: "成功"是定性的, 不是定量的',
-        '论据 2: 没有给出 north star metric',
-        '论据 3: 没有给出失败的反向阈值',
-      ],
-      todos: [
-        '🔍 选 1 个北极星指标 (NSM)',
-        '🔍 列出 3 个二级指标 (leading indicator)',
-        '🔍 给出每个指标的"成功"和"失败"阈值',
-      ],
-    },
-    {
-      severity: 'medium', tag: 'logic',
-      text: '路径上最脆弱的一环是什么? 它断了怎么办?',
-      evidence: [
-        '论据 1: 关键路径依赖未识别',
-        '论据 2: 单点故障 (SPOF) 未排查',
-        '论据 3: 备选路径未设计',
-      ],
-      todos: [
-        '🔍 画一张端到端的依赖图, 标出关键节点',
-        '🔍 对每个关键节点写"如果挂了怎么办"',
-        '🔍 至少给出 1 条独立备选路径',
-      ],
-    },
-  ],
-}
-function mockChallenges(proposers, personaId) {
-  const pool = MOCK_TONES[personaId] || MOCK_TONES.reddit
-  return proposers.slice(0, 3).map((p, i) => {
-    const tpl = pool[i % pool.length]
-    return { source: p.id, ...tpl }
-  })
-}
+// MOCK 已彻底移除 — LLM 不可用时直接报错让用户去配置 AI Provider, 不再演示数据.
+// 默认 Provider 是 vps-proxy (同源 /canvas/api/llm), 凭据在 VPS systemd, 浏览器零配置.
 
 /** 主循环: 一轮 Aletheia 对抗 */
 export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProgress }) {
@@ -236,19 +95,19 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
   const systemPrompt = '你是 Aletheia 决策引擎中的反驳 agent。\n'
     + getPersonaPrompt(personaId, '请按下文要求对画布提议进行反驳, 严格输出 JSON 数组.')
 
-  // 3) 调 LLM (失败 / 空返回都走 mock 兜底, 让 UI 仍能演示节点流)
+  // 3) 调 LLM (强制真跑, 不再 mock 兜底 — 失败/空就直接报错让用户看到)
   let challenges = []
-  let usedMock = false
   try {
     const raw = await callLLM({ system: systemPrompt, prompt: userPrompt, temperature: 0.6, jsonMode: true })
     challenges = parseJsonArray(raw)
-    if (challenges.length === 0) {
-      usedMock = true; challenges = mockChallenges(proposers, personaId)
-      emit({ stage: 'analyze', message: 'LLM 返回空, 已切换 mock 演示数据', hint: 'mock' })
-    }
   } catch (err) {
-    usedMock = true; challenges = mockChallenges(proposers, personaId)
-    emit({ stage: 'analyze', message: `LLM 调用失败: ${err.message || err}`, hint: 'LLM 调用失败, 已用本地 mock 演示节点流' })
+    const msg = `LLM 调用失败: ${err.message || err}`
+    emit({ stage: 'error', message: msg, hint: '请在右上⚙ AI 设置里检查 Provider 和 API Key' })
+    return { ok: false, reason: 'llm-error', error: String(err.message || err) }
+  }
+  if (challenges.length === 0) {
+    emit({ stage: 'error', message: 'LLM 返回空数组, 反驳生成失败', hint: '提示可能太抽象, 试着让提议节点写得更具体' })
+    return { ok: false, reason: 'llm-empty' }
   }
 
   // 校验回填: source 找不到就落到第一个 proposer; evidence/todos 各保留最多 5 条
@@ -329,9 +188,16 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
     id: synId, type: 'synthesisNode',
     position: { x: avgX + 300, y: avgY + 300 },
     data: {
-      label: 'Aletheia 综合', summary: r.summary, actionPlan: r.actionPlan, healthScore: r.healthScore,
-      sourceProposerIds: proposers.map((p) => p.id), sourceRefuterIds: newChallengeIds,
-      ts: r.ts, round: round + 1, mock: usedMock,
+      label: 'Aletheia 综合',
+      summary: r.summary,
+      actionPlan: r.actionPlan,
+      actionItems: r.actionItems || [],
+      risks: r.risks || [],
+      healthScore: r.healthScore,
+      sourceProposerIds: proposers.map((p) => p.id),
+      sourceRefuterIds: newChallengeIds,
+      ts: r.ts,
+      round: round + 1,
     },
   }
   const synEdges = [...proposers.map((p) => p.id), ...newChallengeIds].map((srcId, idx) => ({

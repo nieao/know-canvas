@@ -22,10 +22,21 @@ if (savedTheme && THEME_CLASSES.includes(`theme-${savedTheme}`)) {
 attachConsoleBridge()
 pushLog({ level: 'info', source: 'bus', msg: 'ALETHEIA 启动 · ' + new Date().toLocaleString() })
 
-// Dev / E2E：把 store 暴露到 window 便于调试和测试
+// Dev / E2E：把所有核心 store 暴露到 window 便于调试和测试
+// 全部从 page bundle import (而不是测试脚本里 dynamic import) 共享同一个 module instance, 避免 HMR 双实例
 if (import.meta.env.DEV || (typeof window !== 'undefined' && window.location.search.includes('e2e'))) {
-  import('./stores/useCanvasStore').then((m) => {
-    window.__canvasStore = m.default
+  Promise.all([
+    import('./stores/useCanvasStore'),
+    import('./stores/useAletheiaStore'),
+    import('./stores/useCostMeterStore'),
+    import('./stores/useProjectLibraryStore'),
+    import('./services/aletheia/runner'),
+  ]).then(([canvas, ale, cms, pls, runner]) => {
+    window.__canvasStore = canvas.default
+    window.__aletheiaStore = ale.default
+    window.__costMeterStore = cms.default
+    window.__projectLibraryStore = pls.default
+    window.__runAletheiaCycle = runner.runAletheiaCycle
   })
 }
 

@@ -61,3 +61,28 @@ npm run build  # 生产构建
 | hermes-proxy (Hermes 中转) | 17081 | `npm run hermes` |
 
 或直接双击 `start-full.bat` 一键起全部 + 浏览器.
+
+---
+
+## 🛡 自检 skill (强制) — `know-canvas-self-check`
+
+**何时必须触发**:
+- 用户说"自查"、"画布自检"、"canvas 检查"、"ppt 设计审查"、"声明完成前"
+- 我自己改了 `useCanvasStore.js` 的 collision 逻辑 / `KnowledgeCanvas.jsx` 的 hidden 处理 / 任何 `docs/*.html` PPT
+- push 完成后 (检查 deploy-marker)
+
+调用: `Skill("know-canvas-self-check")` → 读 `~/.claude/skills/know-canvas-self-check/SKILL.md` 看三道闸 + 13 项执行清单.
+
+**已沉淀的 5 个核心 bug** (在 `domain-knowledge.md`):
+1. React Flow 002 "Parent node X not found" — cascade hidden + filter (4 轮迭代)
+2. 节点组团跑得远 + 重叠 — collision 用真实尺寸 + MAX_TRIES 限 16
+3. PPT list 标题断行 — `.list li b { white-space: nowrap }`
+4. USER A/B/C 名字不统一 — 锁定 `lichang (hermes 框架策划) · 小叶子 (产品策划) · 你想猫 (架构策划)` + SVG 双行
+5. 项目库不共享 — 接 `yjs.getMap('projects')` + observe
+
+**称呼锁定** (任何文件不允许变格式):
+```
+lichang (hermes 框架策划) · 小叶子 (产品策划) · 你想猫 (架构策划)
+```
+
+**不要重新发明轮子** — 看到 React Flow 002 / 组团重叠 / list 标题断行 → 先读 `domain-knowledge.md` 对应 section, 直接套正例代码.

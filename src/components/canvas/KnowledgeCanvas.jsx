@@ -282,23 +282,42 @@ function KnowledgeCanvasInner({
   children,
 }) {
   // === 渲染前 sanitize: 检测 parentNode 引用不存在的节点 ===
-  // React Flow 11 在 child.parentNode 找不到时会直接 throw "Parent node X not found"
-  // 整个画布崩 (用户报告 ErrorBoundary, 图 37)。这里清掉 dangling parentNode,
-  // 让孤儿子节点退化成普通根节点继续渲染 — 协作场景下 yjs 同步顺序 / undo 都可能造成短暂不一致。
+  // React Flow 11 在 child.parentNode 找不到时直接 throw "Parent node X not found"
+  // 整个画布崩 (图 37)。
+  //
+  // 历经两版 trade-off:
+  // v1 清 parentNode → 容器内坐标变绝对, 全堆左上 (图 41)
+  // v2 filter 孤儿 → PDF 等顶层节点偶尔被误判 parent 也消失 (图 42)
+  // v3 (当前) 给所有孤儿挂一个隐形 fallback group, 不丢节点也不堆叠
+  const ORPHAN_FALLBACK_ID = '__orphan-fallback-root__'
   const nodes = useMemo(() => {
     const idSet = new Set(rawNodes.map((n) => n.id))
-    let dirty = false
-    const cleaned = rawNodes.map((n) => {
+    let hasOrphan = false
+    const remapped = rawNodes.map((n) => {
       if (n.parentNode && !idSet.has(n.parentNode)) {
-        dirty = true
-        // eslint-disable-next-line no-unused-vars
-        const { parentNode, extent, ...rest } = n
-        return rest
+        hasOrphan = true
+        return { ...n, parentNode: ORPHAN_FALLBACK_ID, extent: undefined }
       }
       return n
     })
-    if (dirty) console.warn('[KnowledgeCanvas] 清理了孤儿 parentNode 引用, count =', cleaned.length)
-    return cleaned
+    if (hasOrphan) {
+      // 透明大 group, 不显示边框 / 背景, 不阻挡交互, 让子节点用原相对坐标继续渲染
+      remapped.unshift({
+        id: ORPHAN_FALLBACK_ID,
+        type: 'group',
+        position: { x: 0, y: 0 },
+        style: {
+          width: 8000,
+          height: 8000,
+          background: 'transparent',
+          border: 'none',
+          pointerEvents: 'none',
+        },
+        data: { isOrphanFallback: true },
+      })
+      console.warn('[KnowledgeCanvas] 检测到孤儿子节点, 已挂 fallback root, 等 yjs sync 后实际 parent 到位会自动接管')
+    }
+    return remapped
   }, [rawNodes])
 
   const reactFlowInstance = useReactFlow()

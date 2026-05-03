@@ -168,12 +168,12 @@ export default function TimelineDock() {
 
   return (
     <>
-      {/* 折叠 chip — 底部居中 */}
+      {/* 折叠 chip — 底部居中, 抬到 BottomAIBar (fixed bottom-0 z-40) 上方 */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="absolute z-30 flex items-center gap-2 px-4 py-2 rounded-full transition-all"
+        className="absolute z-50 flex items-center gap-2 px-4 py-2 rounded-full transition-all"
         style={{
-          bottom: '12px',
+          bottom: '76px',
           left: '50%',
           transform: 'translateX(-50%)',
           background: 'var(--surface-elevated, var(--surface))',
@@ -207,12 +207,12 @@ export default function TimelineDock() {
         </span>
       </button>
 
-      {/* 展开抽屉 */}
+      {/* 展开抽屉 — 在 chip (bottom 76px) 上方再让出 8px 间距 */}
       {open && (
         <div
-          className="absolute z-30"
+          className="absolute z-50"
           style={{
-            bottom: '60px',
+            bottom: '128px',
             left: '50%',
             transform: 'translateX(-50%)',
             width: 'min(960px, 88vw)',

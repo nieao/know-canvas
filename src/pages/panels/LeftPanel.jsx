@@ -99,9 +99,23 @@ function LeftPanel({
   const nodeCount = useCanvasStore((s) => s.nodes?.length || 0)
 
   // 日志 count: logBus 是 ring buffer, 订阅 onAppend 触发 rerender
+  // 注意: pushLog 是同步广播 listeners, 如果在其他组件 (EdgeRenderer / React Flow 内部
+  // console.warn 经 attachConsoleBridge) 渲染期间触发 pushLog, 同步 setState 会引发
+  // "Cannot update a component while rendering a different component" 警告。
+  // 解决: 用 queueMicrotask 把 setState 推迟到当前渲染栈之外, 同时合并同一 tick 内的
+  // 多次 append 为一次 rerender。
   const [logTick, setLogTick] = useState(0)
   useEffect(() => {
-    const unsub = onAppend(() => setLogTick((t) => (t + 1) & 0xffff))
+    let scheduled = false
+    const schedule = () => {
+      if (scheduled) return
+      scheduled = true
+      queueMicrotask(() => {
+        scheduled = false
+        setLogTick((t) => (t + 1) & 0xffff)
+      })
+    }
+    const unsub = onAppend(schedule)
     return () => unsub && unsub()
   }, [])
   const logCount = useMemo(() => getAllLogs().length, [logTick])

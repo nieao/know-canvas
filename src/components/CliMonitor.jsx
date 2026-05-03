@@ -39,15 +39,28 @@ export default function CliMonitor() {
   const [paused, setPaused] = useState(false)
   const scrollRef = useRef(null)
 
-  // 订阅 logBus
+  // 订阅 logBus — 用 queueMicrotask 把 setLogs 推到渲染栈之外
+  // (logBus.pushLog 桥接了 console.log, 其它组件渲染期间 console 输出会同步触发, 直接 setState 会引发 setState-in-render)
   useEffect(() => {
+    let pending = []
+    let scheduled = false
+    const flush = () => {
+      if (pending.length === 0) { scheduled = false; return }
+      const batch = pending
+      pending = []
+      scheduled = false
+      setLogs((prev) => {
+        const merged = prev.concat(batch)
+        return merged.length > 1000 ? merged.slice(-1000) : merged
+      })
+    }
     const off = onAppend((e) => {
       if (paused) return
-      setLogs((prev) => {
-        // ring buffer 同步（最多 1000 条）
-        const next = prev.length >= 1000 ? prev.slice(-999).concat([e]) : prev.concat([e])
-        return next
-      })
+      pending.push(e)
+      if (!scheduled) {
+        scheduled = true
+        queueMicrotask(flush)
+      }
     })
     return off
   }, [paused])

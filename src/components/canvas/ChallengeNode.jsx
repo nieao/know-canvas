@@ -39,6 +39,9 @@ function ChallengeNodeImpl({ data, selected }) {
       }}
     >
       <Handle type="target" position={Position.Left} style={{ background: meta.color }} />
+      <Handle type="target" position={Position.Top} style={{ background: meta.color }} />
+      <Handle type="source" position={Position.Right} style={{ background: meta.color }} />
+      <Handle type="source" position={Position.Bottom} style={{ background: meta.color }} />
 
       {/* 顶部色条 */}
       <div style={{ height: 3, background: meta.color }} />

@@ -141,6 +141,13 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
   // 4) 一条条加 ChallengeNode (sleep 600ms 让用户能看见生长)
   const ts = Date.now()
   const newChallengeIds = []
+  // 方向感知: LR 横排走右出/左入命名 handle; TB 竖排不指定 handle (react-flow 用节点 default top/bottom)
+  const layoutDir = useCanvasStore.getState().layoutDirection || 'TB'
+  const isLR = layoutDir === 'LR'
+  const handleProps = isLR ? { sourceHandle: 'right', targetHandle: 'left' } : {}
+  const positionProps = isLR
+    ? { sourcePosition: 'right', targetPosition: 'left' }
+    : { sourcePosition: 'bottom', targetPosition: 'top' }
   for (let i = 0; i < challenges.length; i++) {
     const c = challenges[i]
     const src = canvasNodes.find((n) => n.id === c.source) || proposers[0]
@@ -151,6 +158,7 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
     const newNode = {
       id: cid, type: 'challengeNode',
       position: { x: (src.position?.x ?? 100) + 320, y: (src.position?.y ?? 100) + i * 220 },
+      ...positionProps,
       data: {
         label: c.text.slice(0, 40), text: c.text, claim: c.text, angle, tag: c.tag,
         severity: c.severity === 'critical' ? 'high' : c.severity,
@@ -163,6 +171,7 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
     const newEdge = {
       id: `edge-${ts}-${i}-${Math.random().toString(36).slice(2, 6)}`,
       source: c.source, target: cid, type: 'smoothstep', label: '反驳',
+      ...handleProps,
       data: { relationType: '反驳' },
       style: { stroke: sevColor(c.severity), strokeWidth: 1.5, strokeDasharray: '4 4' },
     }
@@ -195,6 +204,7 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
   const synNode = {
     id: synId, type: 'synthesisNode',
     position: { x: avgX + 300, y: avgY + 300 },
+    ...positionProps,
     data: {
       label: 'Aletheia 综合',
       summary: r.summary,
@@ -211,6 +221,7 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
   const synEdges = [...proposers.map((p) => p.id), ...newChallengeIds].map((srcId, idx) => ({
     id: `edge-${ts}-syn-${idx}-${Math.random().toString(36).slice(2, 5)}`,
     source: srcId, target: synId, type: 'smoothstep', label: '吸收',
+    ...handleProps,
     data: { relationType: '吸收' },
     style: { stroke: '#a07cb8', strokeWidth: 1, strokeDasharray: '2 4', opacity: 0.6 },
   }))

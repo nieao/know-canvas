@@ -196,18 +196,35 @@ export async function synthesize(nodes = [], edges = [], weights = { logic: 1, c
         .join('\n')
     : actionPlanText
 
-  // 健康分：以本地启发式为准，LLM hint 只做轻量混合（30/70）
+  // 健康分：本地启发式 + LLM 主观判断 1:1 混合 (原 0.7/0.3 让 LLM 几乎无影响,
+  // 同 P/R 数量场景永远落同一档导致用户感觉"健康度永远 45")
   const localHealth = calcHealth(nodes, edges, weights)
-  const healthScore =
-    typeof healthHint === 'number'
-      ? Math.round(localHealth * 0.7 + Math.max(0, Math.min(100, healthHint)) * 0.3)
-      : localHealth
+  const hintClamped = typeof healthHint === 'number' ? Math.max(0, Math.min(100, healthHint)) : null
+  const healthScore = hintClamped !== null
+    ? Math.round(localHealth * 0.5 + hintClamped * 0.5)
+    : localHealth
+
+  // 暴露分数构成给 SynthesisNode tooltip — 让用户看见为什么是这个值
+  const healthBreakdown = {
+    localHeuristic: localHealth,
+    llmHint: hintClamped,
+    proposerCount: nodes.filter((n) => ['ontologyNode', 'proposerNode'].includes(n.type)).length,
+    refuterCount: nodes.filter((n) => ['challengeNode', 'refuterNode'].includes(n.type)).length,
+    severityHistogram: nodes
+      .filter((n) => ['challengeNode', 'refuterNode'].includes(n.type))
+      .reduce((acc, r) => {
+        const sev = r.data?.severity || 'medium'
+        acc[sev] = (acc[sev] || 0) + 1
+        return acc
+      }, {}),
+  }
 
   return {
     actionPlan,        // string 兼容字段
     actionItems,       // 结构化 [{priority, action, owner, deadline, validation}]
     risks,             // [string]
     healthScore,
+    healthBreakdown,
     summary,
     ts,
   }

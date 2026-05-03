@@ -36,6 +36,8 @@ function RightPanel({
   onUpdateNode,
   onAddEdge,
   onRemoveEdge,
+  expanded = false,
+  onToggleExpanded,
 }) {
   const [editingField, setEditingField] = useState(null)
   const [editValue, setEditValue] = useState('')
@@ -108,9 +110,23 @@ function RightPanel({
   // 无选中节点时的空状态
   if (!selectedNode) {
     return (
-      <div className="w-80 h-full flex flex-col border-l" style={{ borderColor: 'var(--gray-100)', background: 'var(--white)' }}>
+      <div className="h-full flex flex-col border-l transition-[width] duration-500" style={{ width: expanded ? 640 : 320, borderColor: 'var(--gray-100)', background: 'var(--white)' }}>
         <div className="px-5 pt-5 pb-3">
-          <div className="section-label mb-2">02 / 详情</div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="section-label">02 / 详情</div>
+            <button
+              onClick={onToggleExpanded}
+              className="text-[10px] px-2 py-1 rounded-md transition-all"
+              style={{
+                color: 'var(--text-muted, #555)',
+                border: '1px solid var(--border-subtle, #e8e8e8)',
+                background: expanded ? 'var(--warm-bg, #f5f0eb)' : 'transparent',
+              }}
+              title={expanded ? '还原侧栏宽度' : '放大侧栏 — 展开完整结论 / 抉择引擎产出'}
+            >
+              {expanded ? '⇥ 还原' : '⇤ 放大'}
+            </button>
+          </div>
           <h2 className="heading-serif text-base font-semibold" style={{ color: 'var(--black)' }}>
             概念详情
           </h2>
@@ -131,12 +147,26 @@ function RightPanel({
   const nodeData = selectedNode.data || {}
 
   return (
-    <div className="w-80 h-full flex flex-col border-l" style={{ borderColor: 'var(--gray-100)', background: 'var(--white)' }}>
-      {/* 头部 */}
+    <div className="h-full flex flex-col border-l transition-[width] duration-500" style={{ width: expanded ? 640 : 320, borderColor: 'var(--gray-100)', background: 'var(--white)' }}>
+      {/* 头部 — 加放大/还原 toggle, 挤占画布比例展示完整结论 */}
       <div className="px-5 pt-5 pb-3">
-        <div className="section-label mb-2">02 / 详情</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="section-label">02 / 详情</div>
+          <button
+            onClick={onToggleExpanded}
+            className="text-[10px] px-2 py-1 rounded-md transition-all"
+            style={{
+              color: 'var(--text-muted, #555)',
+              border: '1px solid var(--border-subtle, #e8e8e8)',
+              background: expanded ? 'var(--warm-bg, #f5f0eb)' : 'transparent',
+            }}
+            title={expanded ? '还原侧栏宽度' : '放大侧栏 — 展开完整结论 / 抉择引擎产出'}
+          >
+            {expanded ? '⇥ 还原' : '⇤ 放大'}
+          </button>
+        </div>
         <h2 className="heading-serif text-base font-semibold" style={{ color: 'var(--black)' }}>
-          概念详情
+          {expanded ? '完整结论 · 抉择引擎产出' : '概念详情'}
         </h2>
       </div>
 

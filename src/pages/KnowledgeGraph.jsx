@@ -13,7 +13,8 @@ import useKnowledgeStore from '../stores/useKnowledgeStore'
 import { extractConcepts, suggestRelations, parseMarkdown, parseCSV, parseJSON } from '../services/aiService'
 import { useCollabSession } from '../collab/useCollabSession'
 import CollabHeader from '../collab/CollabHeader'
-import { CursorAwarenessLayer, useRemoteSelections } from '../collab/PresenceLayer'
+import { CursorAwarenessLayer, NodeBadgeLayer, useRemoteSelections } from '../collab/PresenceLayer'
+import { setLocalMovedNode } from '../collab/yjsClient'
 import AiSettingsPanel from '../components/AiSettingsPanel'
 import CliMonitor from '../components/CliMonitor'
 import CostMeterChip from '../components/cost/CostMeterChip'
@@ -58,6 +59,9 @@ export default function KnowledgeGraph() {
   const wrapperRef = useRef(null)
   const [showLeftPanel, setShowLeftPanel] = useState(true)
   const [showRightPanel, setShowRightPanel] = useState(true)
+  // RightPanel 横向放大状态 — 挤占画布比例展示完整结论 / 抉择引擎产出
+  const [rightPanelExpanded, setRightPanelExpanded] = useState(false)
+  const rightPanelWidth = showRightPanel ? (rightPanelExpanded ? 640 : 320) : 0
   const [selectedNode, setSelectedNode] = useState(null)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [showAiSettings, setShowAiSettings] = useState(false)
@@ -111,6 +115,11 @@ export default function KnowledgeGraph() {
 
   // 选中边（预留扩展）
   const handleEdgeClick = useCallback(() => {}, [])
+
+  // 节点拖拽完成 — 广播给其他用户做"呼吸 + 气泡"
+  const handleNodeDragStop = useCallback((_event, node) => {
+    if (node?.id) setLocalMovedNode(node.id)
+  }, [])
 
   // 更新节点数据
   const handleUpdateNode = useCallback((nodeId, updates) => {
@@ -370,6 +379,42 @@ export default function KnowledgeGraph() {
           }
           break
         }
+        case 'arrangeSelected': {
+          // 圈选自动排列: mode = horizontal / vertical / grid
+          const sel = store.nodes.filter((n) => n.selected)
+          if (sel.length < 2) {
+            console.warn('[selection] 排列至少需要 2 个节点')
+            break
+          }
+          // 按当前 X+Y 排序保持视觉顺序
+          sel.sort((a, b) => (a.position.x + a.position.y) - (b.position.x + b.position.y))
+          // 用排序后第一个节点的 position 当原点 (保持其位置不变)
+          const origin = { x: sel[0].position.x, y: sel[0].position.y }
+          const COL_W = 260
+          const ROW_H = 200
+          const arrangeMode = mode || e.detail.arrangeMode || 'horizontal'
+          let positions = []
+          if (arrangeMode === 'horizontal') {
+            positions = sel.map((_, i) => ({ x: origin.x + i * COL_W, y: origin.y }))
+          } else if (arrangeMode === 'vertical') {
+            positions = sel.map((_, i) => ({ x: origin.x, y: origin.y + i * ROW_H }))
+          } else if (arrangeMode === 'grid') {
+            const cols = Math.ceil(Math.sqrt(sel.length))
+            positions = sel.map((_, i) => ({
+              x: origin.x + (i % cols) * COL_W,
+              y: origin.y + Math.floor(i / cols) * ROW_H,
+            }))
+          }
+          // 一次性写回 (走 setNodes 触发 yjsSync)
+          const idToPos = new Map(sel.map((n, i) => [n.id, positions[i]]))
+          const next = store.nodes.map((n) => {
+            const p = idToPos.get(n.id)
+            return p ? { ...n, position: p } : n
+          })
+          store.setNodes(next)
+          console.log(`[selection] 排列 ${sel.length} 节点 → ${arrangeMode}`)
+          break
+        }
         case 'createGroup':
           store.createGroup(name || '')
           break
@@ -418,6 +463,29 @@ export default function KnowledgeGraph() {
       useCanvasStore.getState().updateNode(e.detail.groupId, { color: e.detail.color })
     }
 
+    // 反驳节点的"下一步"按钮 — 把 todos 派给元认知, 串成下一轮可执行项目
+    const onChainTodos = (e) => {
+      const { challengeId, todos = [], claim = '', sourceTitle = '' } = e.detail || {}
+      if (!challengeId || !Array.isArray(todos) || todos.length === 0) return
+      const store = useCanvasStore.getState()
+      // 标记 chainRunning, 让按钮显示"规划中..."
+      store.updateNode(challengeId, { chainRunning: true })
+      // 把 todos 拼成 prompt
+      const prompt = [
+        `针对反驳"${claim}"产出的待办事项, 请规划成下一轮可执行任务并自主推导:`,
+        ...todos.map((t, i) => `${i + 1}. ${t}`),
+        sourceTitle ? `\n上下文: 这些待办源于对"${sourceTitle}"的反驳。` : '',
+      ].filter(Boolean).join('\n')
+      // 派给元认知 (异步, 不阻塞)
+      Promise.resolve()
+        .then(() => store.askAndStartMetaProject(prompt))
+        .catch((err) => console.error('[chain-todos] 派单失败:', err))
+        .finally(() => {
+          // 无论成功失败, 解除按钮 loading 状态
+          useCanvasStore.getState().updateNode(challengeId, { chainRunning: false })
+        })
+    }
+
     window.addEventListener('canvas-file-drop', onCanvasFileDrop)
     window.addEventListener('canvas-url-drop', onCanvasUrlDrop)
     window.addEventListener('canvas-paste', onCanvasPaste)
@@ -428,6 +496,7 @@ export default function KnowledgeGraph() {
     window.addEventListener('node-update', onNodeUpdate)
     window.addEventListener('node-change-type', onNodeChangeType)
     window.addEventListener('group-color-change', onGroupColorChange)
+    window.addEventListener('challenge:chain-todos', onChainTodos)
 
     return () => {
       window.removeEventListener('canvas-file-drop', onCanvasFileDrop)
@@ -440,6 +509,7 @@ export default function KnowledgeGraph() {
       window.removeEventListener('node-update', onNodeUpdate)
       window.removeEventListener('node-change-type', onNodeChangeType)
       window.removeEventListener('group-color-change', onGroupColorChange)
+      window.removeEventListener('challenge:chain-todos', onChainTodos)
     }
   }, [handleFileDrop, addBookmarkNode, addConceptNode, addNoteNode, addImageNode, addVideoNode, addFileNode, onNodesChange])
 
@@ -520,8 +590,11 @@ export default function KnowledgeGraph() {
           onExit={exitSession}
         />
 
-        {/* 面板切换按钮 + ALETHEIA 品牌名 */}
-        <div className="absolute top-4 left-4 z-30 flex items-center gap-3">
+        {/* 面板切换按钮 + ALETHEIA 品牌名 — left 跟 LeftPanel 联动偏移, 防遮挡 */}
+        <div
+          className="absolute top-4 z-30 flex items-center gap-3 transition-all duration-500"
+          style={{ left: showLeftPanel ? 272 : 16 }}
+        >
           <button
             onClick={() => setShowLeftPanel(prev => !prev)}
             className="p-2 rounded-lg shadow-sm transition-all duration-300"
@@ -530,7 +603,7 @@ export default function KnowledgeGraph() {
               border: `1px solid ${showLeftPanel ? 'var(--warm)' : 'var(--gray-100)'}`,
               color: showLeftPanel ? 'var(--warm)' : 'var(--gray-500)',
             }}
-            title="切换知识源面板 (Ctrl+B)"
+            title="切换左侧面板 (Ctrl+B)"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
@@ -560,7 +633,10 @@ export default function KnowledgeGraph() {
           </div>
         </div>
 
-        <div className="absolute top-4 right-4 z-30 flex gap-2 items-center">
+        <div
+          className="absolute top-4 z-30 flex gap-2 items-center transition-all duration-500"
+          style={{ right: showRightPanel ? rightPanelWidth + 16 : 16 }}
+        >
           <ProjectLibraryButton onOpen={() => setShowProjectLibrary(true)} />
           <button
             onClick={() => setShowRightPanel(prev => !prev)}
@@ -586,15 +662,18 @@ export default function KnowledgeGraph() {
           onConnect={onConnect}
           onNodeClick={handleNodeClick}
           onEdgeClick={handleEdgeClick}
+          onNodeDragStop={handleNodeDragStop}
           showMiniMap={true}
         >
           <CursorAwarenessLayer wrapperRef={wrapperRef} nodes={nodes} />
+          <NodeBadgeLayer wrapperRef={wrapperRef} nodes={nodes} />
           {nodes.length === 0 && <WelcomeOverlay onShowShortcuts={() => setShowShortcuts(true)} />}
         </KnowledgeCanvas>
 
         <BottomAIBar
           showLeftPanel={showLeftPanel}
           showRightPanel={showRightPanel}
+          rightPanelWidth={rightPanelWidth}
           onExtractConcepts={handleExtractConcepts}
           onSuggestRelations={handleSuggestRelations}
           concepts={conceptsForAI}
@@ -609,6 +688,8 @@ export default function KnowledgeGraph() {
           selectedNode={selectedNode}
           edges={edges}
           nodes={nodes}
+          expanded={rightPanelExpanded}
+          onToggleExpanded={() => setRightPanelExpanded(v => !v)}
           onUpdateNode={handleUpdateNode}
           onAddEdge={onConnect}
           onRemoveEdge={(edgeId) => {

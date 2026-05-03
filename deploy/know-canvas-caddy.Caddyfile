@@ -38,13 +38,10 @@
 	}
 
 	# === Yjs 协作 WebSocket ===
+	# Caddy v2 默认透传 Connection/Upgrade 头给 ws — 不要写老 v1 风格的
+	# header_up Connection {>Connection} / Upgrade {>Upgrade}, 那个语法在 v2 反而会让 upgrade 失败 (返 200 而不是 101)
 	handle_path /yws/* {
-		reverse_proxy 127.0.0.1:1234 {
-			header_up Host {host}
-			header_up X-Real-IP {remote_host}
-			header_up Connection {>Connection}
-			header_up Upgrade {>Upgrade}
-		}
+		reverse_proxy 127.0.0.1:1234
 	}
 
 	# === 前端静态资源 ===

@@ -1,0 +1,280 @@
+#!/usr/bin/env node
+/**
+ * know-canvas CLI — 反向调用画布的命令行入口
+ *
+ * 用法:
+ *   know-canvas submit "在上海开一家咖啡馆" --mode meta --room demo-railway --wait
+ *   know-canvas status htmlpage-1730000000-abc123 --room demo-railway
+ *   know-canvas tail --room demo-railway
+ *   know-canvas health
+ *
+ * 选项:
+ *   --mode meta|hermes        派单模式 (默认 meta)
+ *   --room <id>               房间 ID (默认 demo-railway)
+ *   --wait                    submit 后 polling 直到 done/failed
+ *   --json                    机器可读 JSON 输出 (默认 markdown)
+ *   --bridge <url>            cli-bridge 地址 (默认 http://127.0.0.1:17082)
+ *   --callback-url <url>      submit 时的 callback URL (Hermes 一般直接调 HTTP API, 不用这个)
+ *   --callback-token <token>  callback 的 X-Canvas-Token
+ *   --timeout <sec>           --wait 模式的 polling 超时 (默认 600 秒)
+ *
+ * 通过 fetch 直接调本机 cli-bridge 的 HTTP API.
+ */
+
+const DEFAULT_BRIDGE = process.env.CANVAS_BRIDGE_URL || 'http://127.0.0.1:17082'
+const DEFAULT_ROOM = process.env.CANVAS_ROOM || 'demo-railway'
+
+// ───── argv 解析 (轻量, 不引第三方库) ─────
+function parseArgs(argv) {
+  const opts = {
+    bridge: DEFAULT_BRIDGE,
+    room: DEFAULT_ROOM,
+    mode: 'meta',
+    wait: false,
+    json: false,
+    callbackUrl: null,
+    callbackToken: null,
+    timeout: 600,
+    _: [],
+  }
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    if (a === '--bridge') opts.bridge = argv[++i]
+    else if (a === '--room') opts.room = argv[++i]
+    else if (a === '--mode') opts.mode = argv[++i]
+    else if (a === '--wait') opts.wait = true
+    else if (a === '--json') opts.json = true
+    else if (a === '--callback-url') opts.callbackUrl = argv[++i]
+    else if (a === '--callback-token') opts.callbackToken = argv[++i]
+    else if (a === '--timeout') opts.timeout = parseInt(argv[++i], 10) || 600
+    else if (a === '--help' || a === '-h') { printHelp(); process.exit(0) }
+    else opts._.push(a)
+  }
+  return opts
+}
+
+function printHelp() {
+  console.log(`know-canvas CLI — 反向调用画布
+
+用法:
+  know-canvas submit "<prompt>" [--mode meta|hermes] [--room <id>] [--wait] [--json]
+  know-canvas status <node_id> [--room <id>] [--json]
+  know-canvas tail [--room <id>]
+  know-canvas health
+
+环境变量:
+  CANVAS_BRIDGE_URL  默认 http://127.0.0.1:17082
+  CANVAS_ROOM        默认 demo-railway`)
+}
+
+async function callJson(url, opts = {}) {
+  const r = await fetch(url, opts)
+  const text = await r.text()
+  let data
+  try { data = JSON.parse(text) } catch { data = { ok: false, error: text } }
+  return { status: r.status, ok: r.ok, data }
+}
+
+// ───── submit ─────
+async function cmdSubmit(opts) {
+  const prompt = opts._[1]
+  if (!prompt) {
+    console.error('错误: 缺少 prompt. 用法: know-canvas submit "<text>"')
+    process.exit(2)
+  }
+  const body = {
+    prompt,
+    mode: opts.mode,
+    room: opts.room,
+  }
+  if (opts.callbackUrl) body.callback_url = opts.callbackUrl
+  if (opts.callbackToken) body.callback_token = opts.callbackToken
+
+  const r = await callJson(`${opts.bridge}/api/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!r.ok || !r.data.ok) {
+    if (opts.json) console.log(JSON.stringify(r.data))
+    else console.error(`派单失败: ${r.data.error || r.status}`)
+    process.exit(1)
+  }
+
+  const { node_id, room, watch_url } = r.data
+  if (opts.json && !opts.wait) { console.log(JSON.stringify(r.data)); return }
+  if (!opts.wait) {
+    console.log(`✓ 已派单`)
+    console.log(`  node_id: ${node_id}`)
+    console.log(`  room:    ${room}`)
+    console.log(`  mode:    ${opts.mode}`)
+    console.log(`  watch:   ${watch_url}`)
+    return
+  }
+
+  // --wait: polling 状态
+  if (!opts.json) {
+    console.log(`✓ 派单成功 ${node_id}, 等待完成...`)
+  }
+  const start = Date.now()
+  let lastStatus = null
+  while (true) {
+    if ((Date.now() - start) / 1000 > opts.timeout) {
+      if (opts.json) console.log(JSON.stringify({ ok: false, error: 'timeout', node_id }))
+      else console.error(`✗ 超时 (${opts.timeout}s)`)
+      process.exit(3)
+    }
+    await sleep(2000)
+    const s = await callJson(`${opts.bridge}/api/status/${encodeURIComponent(node_id)}?room=${encodeURIComponent(room)}`)
+    if (!s.ok) {
+      // 404 = 节点还没同步过来, 继续轮询
+      if (s.status === 404) continue
+      if (opts.json) console.log(JSON.stringify(s.data))
+      else console.error(`✗ 查询失败: ${s.data.error || s.status}`)
+      process.exit(1)
+    }
+    const status = s.data.status
+    if (status !== lastStatus) {
+      if (!opts.json) console.log(`  · ${status}`)
+      lastStatus = status
+    }
+    if (status === 'done' || status === 'failed') {
+      if (opts.json) { console.log(JSON.stringify(s.data)); return }
+      printStatusMd(s.data)
+      if (status === 'failed') process.exit(1)
+      return
+    }
+  }
+}
+
+// ───── status ─────
+async function cmdStatus(opts) {
+  const nodeId = opts._[1]
+  if (!nodeId) {
+    console.error('错误: 缺少 node_id. 用法: know-canvas status <node_id>')
+    process.exit(2)
+  }
+  const r = await callJson(`${opts.bridge}/api/status/${encodeURIComponent(nodeId)}?room=${encodeURIComponent(opts.room)}`)
+  if (opts.json) { console.log(JSON.stringify(r.data)); return }
+  if (!r.ok) {
+    console.error(`查询失败: ${r.data.error || r.status}`)
+    process.exit(1)
+  }
+  printStatusMd(r.data)
+}
+
+function printStatusMd(d) {
+  console.log('')
+  console.log(`# Node ${d.node_id}`)
+  console.log('')
+  console.log(`- 状态: **${d.status}**`)
+  console.log(`- 模式: ${d.mode}`)
+  console.log(`- Room: ${d.room}`)
+  console.log(`- 输入: ${d.prompt}`)
+  if (Array.isArray(d.tasks) && d.tasks.length) {
+    console.log('')
+    console.log('## 任务清单')
+    for (const t of d.tasks) {
+      const mark = t.status === 'done' ? '[x]' : t.status === 'failed' ? '[!]' : t.status === 'running' ? '[~]' : '[ ]'
+      console.log(`- ${mark} ${t.label} (${t.status})`)
+    }
+  }
+  if (d.error) {
+    console.log('')
+    console.log(`## 错误`)
+    console.log('```')
+    console.log(d.error)
+    console.log('```')
+  }
+  if (d.html) {
+    console.log('')
+    console.log(`## HTML 输出 (${d.html.length} 字符)`)
+    console.log(`> 完整 HTML 已生成. 用 \`know-canvas status ${d.node_id} --json\` 拿原始数据.`)
+  }
+  console.log('')
+}
+
+// ───── tail (SSE) ─────
+async function cmdTail(opts) {
+  const url = `${opts.bridge}/api/watch/${encodeURIComponent(opts.room)}`
+  if (!opts.json) console.log(`tail ${opts.room} (Ctrl+C 退出)...`)
+  // SSE: 用 fetch + reader 手动解析
+  const resp = await fetch(url)
+  if (!resp.ok) {
+    console.error(`订阅失败: HTTP ${resp.status}`)
+    process.exit(1)
+  }
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buf = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let idx
+    while ((idx = buf.indexOf('\n\n')) !== -1) {
+      const evt = buf.slice(0, idx)
+      buf = buf.slice(idx + 2)
+      // 解析 event: foo\ndata: {...}
+      const lines = evt.split('\n').filter(Boolean)
+      let eventName = 'message'
+      let dataStr = ''
+      for (const ln of lines) {
+        if (ln.startsWith('event:')) eventName = ln.slice(6).trim()
+        else if (ln.startsWith('data:')) dataStr = ln.slice(5).trim()
+        else if (ln.startsWith(':')) { /* keepalive */ }
+      }
+      if (!dataStr) continue
+      let parsed
+      try { parsed = JSON.parse(dataStr) } catch { continue }
+      if (opts.json) {
+        console.log(JSON.stringify({ event: eventName, ...parsed }))
+      } else {
+        if (eventName === 'hello') console.log(`[${new Date().toISOString()}] connected room=${parsed.room}`)
+        else console.log(`[${new Date().toISOString()}] ${parsed.node_id} → ${parsed.status}  (${(parsed.prompt || '').slice(0, 50)})`)
+      }
+    }
+  }
+}
+
+// ───── health ─────
+async function cmdHealth(opts) {
+  const r = await callJson(`${opts.bridge}/health`)
+  if (opts.json) { console.log(JSON.stringify(r.data)); return }
+  if (!r.ok) {
+    console.error(`✗ cli-bridge 不可达 ${opts.bridge}`)
+    process.exit(1)
+  }
+  console.log(`✓ cli-bridge ${r.data.version} on :${r.data.port}`)
+  console.log(`  yws:      ${r.data.yws_url}`)
+  console.log(`  rooms:    ${r.data.room_count} (${(r.data.rooms || []).join(', ') || 'none'})`)
+  console.log(`  watchers: ${r.data.watcher_count}`)
+}
+
+// ───── 主入口 ─────
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)) }
+
+async function main() {
+  const opts = parseArgs(process.argv.slice(2))
+  const cmd = opts._[0]
+  try {
+    switch (cmd) {
+      case 'submit': await cmdSubmit(opts); break
+      case 'status': await cmdStatus(opts); break
+      case 'tail':   await cmdTail(opts); break
+      case 'health': await cmdHealth(opts); break
+      default:
+        if (!cmd) { printHelp(); process.exit(0) }
+        console.error(`未知命令: ${cmd}`)
+        printHelp()
+        process.exit(2)
+    }
+  } catch (err) {
+    console.error(`✗ ${err?.message || err}`)
+    if (process.env.DEBUG) console.error(err.stack)
+    process.exit(1)
+  }
+}
+
+main()

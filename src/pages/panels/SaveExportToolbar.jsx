@@ -105,7 +105,7 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
   // 导出为 Markdown 知识库
   const handleExportMarkdown = () => {
     const conceptNodes = nodes.filter(n => n.type === 'conceptNode' && n.data?.title)
-    let md = `# 知识图谱导出\n\n`
+    let md = `# ALETHEIA 画布导出\n\n`
     md += `> 导出时间：${new Date().toLocaleString()}\n`
     md += `> 概念数量：${conceptNodes.length}，关系数量：${edges.length}\n\n`
     md += `---\n\n`
@@ -250,7 +250,7 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
   if (aletheiaActive) return null
 
   return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex gap-2">
+    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex gap-2">
       {/* 保存按钮 */}
       <div className="relative">
         <button

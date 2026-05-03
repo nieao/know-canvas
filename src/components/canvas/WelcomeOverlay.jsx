@@ -2,18 +2,23 @@
  * WelcomeOverlay — 画布空状态欢迎覆盖层
  *
  * 当 nodes.length === 0 时显示在画布上层，引导用户导入文件 / 添加节点。
- *
- * 拆出来的目的：把"空态视觉"这块 60+ 行 JSX 从 KnowledgeGraph 主组件剥离。
+ * Aletheia 激活时自动隐藏，避免遮挡 banner / ScenarioSwitcher / 决策 UI。
  */
 
+import useAletheiaStore from '../../stores/useAletheiaStore'
+
 const STEPS = [
-  { step: '01', text: '导入文件或粘贴文本', desc: '图片 / 视频 / PDF / MD / TXT / JSON / CSV' },
-  { step: '02', text: '自动提取关键概念', desc: '标题、关键词、高频术语' },
-  { step: '03', text: '发现概念间关系', desc: '层级、共现、语义关联' },
-  { step: '04', text: '导出知识图谱', desc: 'Markdown / JSON-LD / PNG' },
+  { step: '01', text: '一句话目标 / 想法 / 问题', desc: '在底部输入框给出, 默认走 6 阶段元认知' },
+  { step: '02', text: '上下文 → 任务 → 角色涌现', desc: '画布上看着拆分结构和 Agent 一个个长出来' },
+  { step: '03', text: '逻辑对抗 + 反驳引擎', desc: 'Devil\'s Advocate · 共识综合 · 反思循环' },
+  { step: '04', text: '派 Hermes / 联调 telegram', desc: '画布产出 → CLI 接口 → 远端 worker' },
 ]
 
 export default function WelcomeOverlay({ onShowShortcuts }) {
+  // Aletheia 激活时自动隐藏 — 避免顶部 banner / ScenarioSwitcher 挡住 ALETHEIA 大字
+  const aletheiaActive = useAletheiaStore((s) => s?.aletheiaActive ?? false)
+  if (aletheiaActive) return null
+
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
       <div className="text-center max-w-md mx-auto px-8 pointer-events-none">
@@ -23,14 +28,44 @@ export default function WelcomeOverlay({ onShowShortcuts }) {
           <div className="absolute top-0 bottom-0 left-1/2 w-px" style={{ background: 'var(--text-primary)' }} />
         </div>
 
-        <div className="section-label mb-6">KNOW / CANVAS</div>
-        <h1 className="heading-serif text-2xl font-light mb-4" style={{ color: 'var(--text-primary)' }}>
-          知识图谱
+        <div
+          className="mb-6"
+          style={{
+            fontSize: '0.72rem',
+            letterSpacing: '0.45em',
+            color: 'var(--accent, #c8a882)',
+            fontWeight: 500,
+          }}
+        >
+          A · L · E · T · H · E · I · A
+        </div>
+        <h1
+          className="heading-serif font-light mb-4"
+          style={{
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-serif), Georgia, serif',
+            fontSize: '3rem',
+            letterSpacing: '0.04em',
+            lineHeight: 1.1,
+          }}
+        >
+          ALETHEIA
         </h1>
+        <div
+          className="mb-6 text-xs"
+          style={{
+            color: 'var(--text-muted, #888)',
+            letterSpacing: '0.2em',
+            fontFamily: 'var(--font-serif), Georgia, serif',
+            fontStyle: 'italic',
+          }}
+        >
+          逻辑对抗决策引擎
+        </div>
         <p className="text-sm leading-relaxed mb-8" style={{ color: 'var(--text-muted)' }}>
-          将文档、链接和文本导入画布，<br />
-          AI 自动提取概念、发现关系，<br />
-          构建你的知识网络。
+          一句话给出目标, 看 6 阶段元认知在画布上展开,<br />
+          上下文 → 拆解 → 角色涌现 → 拓扑 → 执行 → 反思.<br />
+          画布是过程, 不是结果.
         </p>
 
         {/* 操作引导 */}

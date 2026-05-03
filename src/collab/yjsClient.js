@@ -114,6 +114,32 @@ export function setLocalSelection(nodeIds) {
   if (aw) aw.setLocalStateField('selectedNodeIds', nodeIds)
 }
 
+// 临时态：本地刚拖完一个节点 — 广播给其他客户端做"呼吸 + 气泡"
+// 字段 3 秒后自动清空，避免 awareness 留垃圾
+let _movedNodeTimer = null
+export function setLocalMovedNode(nodeId) {
+  const aw = getAwareness()
+  if (!aw) return
+  if (!nodeId) {
+    aw.setLocalStateField('movedNode', null)
+    return
+  }
+  aw.setLocalStateField('movedNode', { nodeId, ts: Date.now() })
+  if (_movedNodeTimer) clearTimeout(_movedNodeTimer)
+  _movedNodeTimer = setTimeout(() => {
+    const aw2 = getAwareness()
+    if (aw2) aw2.setLocalStateField('movedNode', null)
+  }, 3500)
+}
+
+/** 读取本地 awareness 用户态，给节点工厂注入 createdBy 用 */
+export function getLocalUser() {
+  const aw = getAwareness()
+  if (!aw) return null
+  const state = aw.getLocalState()
+  return state?.user || null
+}
+
 export function getRemoteStates() {
   const aw = getAwareness()
   if (!aw) return []

@@ -12,6 +12,31 @@ import {
   applyEdgeChanges,
 } from 'reactflow'
 import { fetchLinkMetadata, detectVideoUrl } from '../utils/linkPreview'
+import { getUsername, getUserColor } from '../collab/session'
+
+// 节点出生印记：写入 createdBy = { name, color, ts } —— 角标 UI 永久显示创建者
+function getCreatedByStamp() {
+  try {
+    const name = getUsername()
+    if (!name) return null
+    return { name, color: getUserColor(), ts: Date.now() }
+  } catch (_e) {
+    return null
+  }
+}
+
+// 给"非工厂创建"的节点统一补出生印记（mutate 节点对象）
+function applyCreatedByStamp(node) {
+  if (!node || !node.data || node.data.createdBy) return
+  const stamp = getCreatedByStamp()
+  if (stamp) node.data.createdBy = stamp
+}
+
+// 批量补印：用于 askAndStartMetaProject / analyzeGroupMeta 等批量 push 场景
+function stampNodesInPlace(arr) {
+  if (!Array.isArray(arr)) return
+  for (const n of arr) applyCreatedByStamp(n)
+}
 
 // 元认知 5 步顺序 (与 services/metaCognitiveExecutor STEP_DEFS 同步, 避免循环 import)
 const META_STEP_ORDER = ['intent', 'decompose', 'execute', 'reflect', 'synthesize']
@@ -61,11 +86,15 @@ const createNodeFactory = (get, set) => (type, idPrefix, data, position = null) 
   const rand = Math.random().toString(36).slice(2, 8)
   const nodeId = `${idPrefix}-${Date.now()}-${rand}`
 
+  // 出生印记：本地用户作为创建者，落到 data.createdBy（不覆盖已有值，便于导入数据保留原作者）
+  const createdBy = data?.createdBy || getCreatedByStamp()
+  const dataWithStamp = createdBy ? { ...data, createdBy } : data
+
   const newNode = {
     id: nodeId,
     type,
     position: pos,
-    data,
+    data: dataWithStamp,
   }
 
   set((state) => {
@@ -188,20 +217,36 @@ const useCanvasStore = create(
       },
 
       // 计算下一个可用网格位置（螺旋算法避免重叠）
+      // 用户独立区域: 按用户名 hash 给每个用户分配独立的 X 偏移区, 避免多用户协作时项目互相重叠
       getNextGridPosition: () => {
         const { nodes } = get()
-        if (nodes.length === 0) return { x: 100, y: 100 }
 
-        // 构建已占用网格位置集合
+        // 计算本地用户的"分区偏移"
+        // 简单 hash: 取用户名字符 codePoint 之和 mod 4, 给 0/2400/4800/7200 px 偏移
+        // 4 列足够 4 个并发用户互不打架, 超过时取模仍有错位
+        let userZoneX = 0
+        try {
+          const name = getUsername() || 'anonymous'
+          let h = 0
+          for (let i = 0; i < name.length; i++) h = (h + name.charCodeAt(i) * 31) | 0
+          userZoneX = (Math.abs(h) % 4) * 2400
+        } catch (_e) {}
+
+        if (nodes.length === 0) return { x: 100 + userZoneX, y: 100 }
+
+        // 构建已占用网格位置集合 (含所有用户已落的节点)
         const occupied = new Set()
         nodes.forEach(n => {
+          // 子节点 (parentNode 关系) 跳过, 它们的 position 是相对父的, 不参与全局占位
+          if (n.parentNode) return
           const gridX = Math.round(n.position.x / LAYOUT.GRID_GAP_X)
           const gridY = Math.round(n.position.y / LAYOUT.GRID_GAP_Y)
           occupied.add(`${gridX},${gridY}`)
         })
 
-        // 从原点螺旋向外寻找第一个可用位置
-        let x = 0, y = 0
+        // 从用户专区原点螺旋向外寻找第一个可用位置
+        const baseGridX = Math.round(userZoneX / LAYOUT.GRID_GAP_X)
+        let x = baseGridX, y = 0
         let dx = 1, dy = 0
         let steps = 1, stepCount = 0, turnCount = 0
 
@@ -254,6 +299,7 @@ const useCanvasStore = create(
           },
         }
 
+        applyCreatedByStamp(newNode)
         set((state) => {
           state.nodes.push(newNode)
         })
@@ -283,6 +329,7 @@ const useCanvasStore = create(
           },
         }
 
+        applyCreatedByStamp(newNode)
         set((state) => {
           state.nodes.push(newNode)
         })
@@ -359,6 +406,7 @@ const useCanvasStore = create(
           data: { src, alt },
         }
 
+        applyCreatedByStamp(newNode)
         set((state) => {
           state.nodes.push(newNode)
         })
@@ -445,6 +493,7 @@ const useCanvasStore = create(
           data: { content },
         }
 
+        applyCreatedByStamp(newNode)
         set((state) => {
           state.nodes.push(newNode)
         })
@@ -470,6 +519,7 @@ const useCanvasStore = create(
           },
         }
 
+        applyCreatedByStamp(newNode)
         set((state) => {
           state.nodes.push(newNode)
         })
@@ -502,6 +552,7 @@ const useCanvasStore = create(
           data: { name, url, size },
         }
 
+        applyCreatedByStamp(newNode)
         set((state) => {
           state.nodes.push(newNode)
         })
@@ -1335,8 +1386,8 @@ const useCanvasStore = create(
             data: {
               variant: 'goal',
               title: 'AI 知识助手',
-              description: '为团队构建可对抗的知识图谱画布',
-              sentence: '为团队构建可对抗的知识图谱画布',
+              description: '为团队构建可对抗的决策画布',
+              sentence: '为团队构建可对抗的决策画布',
               created_at: ts,
             },
           },
@@ -1905,6 +1956,7 @@ const useCanvasStore = create(
             created_at: Date.now(),
           },
         }
+        applyCreatedByStamp(newNode)
         set((state) => {
           state.nodes.push(newNode)
         })
@@ -1930,9 +1982,14 @@ const useCanvasStore = create(
 
         let task
         try {
+          // 派单时强制中文输出 (防止 Hermes worker 默认 system prompt 走英文)
+          const userBody = node.data.body || ''
+          const enrichedBody = userBody.includes('中文输出')
+            ? userBody
+            : `【输出语言要求】必须用简体中文输出, 禁止英文回答, 禁止英文标签或英文 title.\n\n${userBody}`
           task = await dispatchTask({
             title: node.data.title,
-            body: node.data.body || '',
+            body: enrichedBody,
             assignee: node.data.assignee || null,
             priority: node.data.priority || 3,
           })
@@ -2172,6 +2229,28 @@ const useCanvasStore = create(
         const src = nodes.find((n) => n.id === ontoNodeId)
         if (!src) throw new Error(`dispatchChallenge: 找不到节点 ${ontoNodeId}`)
 
+        // 反驳节点要落到 projectGroup 外 (不污染原项目)
+        // 算源节点的 absolute position (考虑 parentNode 嵌套)
+        const getAbsolutePos = (node) => {
+          if (!node?.parentNode) return node?.position || { x: 0, y: 0 }
+          const parent = nodes.find((n) => n.id === node.parentNode)
+          if (!parent) return node.position
+          return {
+            x: (parent.position?.x || 0) + (node.position?.x || 0),
+            y: (parent.position?.y || 0) + (node.position?.y || 0),
+          }
+        }
+        const srcAbs = getAbsolutePos(src)
+        // 如果源在 projectGroup 内, 反驳节点要跳出 group 右边界 + 50px 缓冲
+        let baseX = srcAbs.x + 320
+        if (src.parentNode) {
+          const group = nodes.find((n) => n.id === src.parentNode)
+          if (group?.style?.width) {
+            const groupRight = (group.position?.x || 0) + Number(group.style.width)
+            baseX = Math.max(baseX, groupRight + 50)
+          }
+        }
+
         const svc = await import('../services/aiService')
         const challenges = await svc.challengeNode({
           title: src.data?.title || '',
@@ -2194,8 +2273,8 @@ const useCanvasStore = create(
             id: cid,
             type: 'challengeNode',
             position: {
-              x: src.position.x + 320,
-              y: src.position.y + i * 130 - ((challenges.length - 1) * 130) / 2,
+              x: baseX,
+              y: srcAbs.y + i * 130 - ((challenges.length - 1) * 130) / 2,
             },
             data: {
               source_node_id: ontoNodeId,
@@ -2221,6 +2300,7 @@ const useCanvasStore = create(
           })
         })
 
+        stampNodesInPlace(newNodes)
         set((state) => {
           state.nodes.push(...newNodes)
           state.edges.push(...newEdges)
@@ -2291,86 +2371,53 @@ const useCanvasStore = create(
         return subitems
       },
 
-      // 圈选组合元认知 — 把多个节点当一个系统看, 生成一个新节点 (variant=group-meta)
-      // 自动连到所有选中节点, 折叠区直接展开 5 维度组合分析
+      // 圈选组合元认知 — 把多个节点合成一句话 → 走 6-stage 多节点拆解 + agent + 决策
+      // (老行为: 单节点 5 维度大纲已废弃, 用户反馈"应该直接调元认知 LLM 对内容做分解和再推导")
+      // 新行为: askAndStartMetaProject(合成 prompt) 拿到 root, 再把 root 用"组合源"边连回选中节点
       analyzeGroupMetaCognitive: async (nodeIds) => {
         if (!Array.isArray(nodeIds) || nodeIds.length < 2) {
           throw new Error('analyzeGroupMetaCognitive: 至少需要 2 个节点')
         }
-        const { nodes } = get()
+        const { nodes, askAndStartMetaProject } = get()
         const srcNodes = nodeIds.map((id) => nodes.find((n) => n.id === id)).filter(Boolean)
         if (srcNodes.length < 2) throw new Error('找不到足够的源节点')
 
-        // 1. 先建占位节点 (analyzing: true), 用户立刻能看到
+        // 1. 把选中节点合成一句话 prompt — 让 LLM 当作完整问题重新拆解
+        const titles = srcNodes.map((n) => (n.data?.title || n.data?.label || '未命名节点')).filter(Boolean)
+        const descs = srcNodes
+          .map((n) => (n.data?.description || n.data?.summary || n.data?.text || ''))
+          .filter((s) => s && s.length > 0)
+          .map((s) => String(s).slice(0, 180))
+        const prompt = [
+          `请把下列 ${srcNodes.length} 个节点当作一个整体系统, 重新拆解 / 推导出可执行的 task DAG + 角色分工 + 决策建议:`,
+          '',
+          `节点标题: ${titles.join(' · ')}`,
+          descs.length ? `节点详情: ${descs.join(' / ')}` : '',
+        ].filter(Boolean).join('\n')
+
+        // 2. 调 askAndStartMetaProject (同步返回 rootId, 6-stage 异步跑)
+        const rootId = askAndStartMetaProject(prompt)
+
+        // 3. 给 root 加 sourceNodeIds 标记 + 用边连回所有选中节点
         const ts = Date.now()
         const rand = Math.random().toString(36).slice(2, 8)
-        const groupId = `group-meta-${ts}-${rand}`
-        // 位置: 选中节点的几何中心上方 200px
-        const minX = Math.min(...srcNodes.map((n) => n.position.x))
-        const maxX = Math.max(...srcNodes.map((n) => n.position.x))
-        const minY = Math.min(...srcNodes.map((n) => n.position.y))
-        const cx = (minX + maxX) / 2
-        const cy = minY - 220
-
-        const placeholderNode = {
-          id: groupId,
-          type: 'ontologyNode',
-          position: { x: cx, y: cy },
-          data: {
-            variant: 'goal',  // 视觉用 goal (深底反色) 凸显这是组合分析
-            title: `组合分析 (${srcNodes.length} 节点)`,
-            description: srcNodes.map((n) => n.data?.title || '').filter(Boolean).join(' · '),
-            metaAnalyzing: true,
-            isGroupMeta: true,
-            sourceNodeIds: nodeIds,
-            created_at: ts,
-          },
-        }
-        const newEdges = nodeIds.map((targetId) => ({
-          id: `edge-group-${ts}-${rand}-${targetId.slice(-6)}`,
-          source: groupId,
+        const newEdges = nodeIds.map((targetId, i) => ({
+          id: `edge-group-${ts}-${rand}-${i}`,
+          source: rootId,
           target: targetId,
           type: 'smoothstep',
-          data: { relationType: '组合分析' },
-          style: { stroke: '#c8a882', strokeWidth: 1.5, strokeDasharray: '6 3' },
+          data: { relationType: '组合源' },
+          label: '组合源',
+          style: { stroke: '#c8a882', strokeWidth: 1.2, strokeDasharray: '6 3', opacity: 0.7 },
         }))
-        set((state) => {
-          state.nodes.push(placeholderNode)
-          state.edges.push(...newEdges)
+        get().updateNode(rootId, {
+          isGroupMeta: true,
+          sourceNodeIds: nodeIds,
+          title: `组合分析: ${titles.slice(0, 2).join(' · ')}${titles.length > 2 ? ` 等 ${titles.length} 项` : ''}`,
         })
+        set((state) => { state.edges.push(...newEdges) })
 
-        // 2. 调 LLM 做组合分析
-        try {
-          const svc = await import('../services/aiService')
-          const result = await svc.analyzeGroupMeta(
-            srcNodes.map((n) => ({
-              title: n.data?.title || '',
-              description: n.data?.description || '',
-              variant: n.data?.variant,
-            }))
-          )
-          if (!result) {
-            get().updateNode(groupId, {
-              metaAnalyzing: false,
-              metaAnalysisError: 'LLM 输出无法解析',
-            })
-            return null
-          }
-          get().updateNode(groupId, {
-            metaAnalysis: { ...result, analyzedAt: Date.now() },
-            metaAnalyzing: false,
-            metaAnalysisError: null,
-            metaExpanded: true,
-          })
-          return { groupId, result }
-        } catch (err) {
-          console.error('[analyzeGroupMetaCognitive] failed:', err)
-          get().updateNode(groupId, {
-            metaAnalyzing: false,
-            metaAnalysisError: err?.message || String(err),
-          })
-          throw err
-        }
+        return { groupId: rootId, sourceCount: srcNodes.length }
       },
 
       // 批量推进 — 对选中的多个节点并发执行同一类元认知动作
@@ -2437,6 +2484,770 @@ const useCanvasStore = create(
             metaAnalysisError: err?.message || String(err),
           })
           throw err
+        }
+      },
+
+      // ──────────────────────────────────────────────────────────────────────
+      // 一句话 → HtmlPageNode (BottomAIBar 主交互)
+      //   - 立即创建 htmlPageNode 占位 (status='running' + 任务清单)
+      //   - 异步走 LLM (元认知) 或 Hermes 派单, 完成回填 html
+      //   - 提供 retryHtmlAnswer 复用同一节点重跑
+      // ──────────────────────────────────────────────────────────────────────
+      askAndCreateHtmlNode: async (input, mode = 'meta') => {
+        const text = String(input || '').trim()
+        if (!text) throw new Error('askAndCreateHtmlNode: 输入为空')
+
+        const { getNextGridPosition } = get()
+        const ts = Date.now()
+        const rand = Math.random().toString(36).slice(2, 8)
+        const nodeId = `htmlpage-${ts}-${rand}`
+        const pos = getNextGridPosition()
+
+        const tasksMeta = [
+          { label: '解析输入意图', status: 'running' },
+          { label: '推理 5 维度元认知', status: 'pending' },
+          { label: '渲染 HTML 页面', status: 'pending' },
+        ]
+        const tasksHermes = [
+          { label: '派单到 Hermes', status: 'running' },
+          { label: '等待 worker 接手', status: 'pending' },
+          { label: '抓取结果包装 HTML', status: 'pending' },
+        ]
+
+        set((state) => {
+          state.nodes.push({
+            id: nodeId,
+            type: 'htmlPageNode',
+            position: pos,
+            data: {
+              prompt: text,
+              mode,
+              taskStatus: 'running',
+              html: '',
+              error: '',
+              tasks: mode === 'hermes' ? tasksHermes : tasksMeta,
+              created_at: ts,
+            },
+          })
+        })
+
+        // 异步执行核心 — 不 await, 让节点先呈现
+        get()._runHtmlAnswer(nodeId).catch((err) => {
+          console.error('[askAndCreateHtmlNode] run failed:', err)
+        })
+
+        return nodeId
+      },
+
+      retryHtmlAnswer: (nodeId) => {
+        const { nodes, updateNode, _runHtmlAnswer } = get()
+        const node = nodes.find((n) => n.id === nodeId)
+        if (!node || node.type !== 'htmlPageNode') return
+        const mode = node.data?.mode || 'meta'
+        const tasks = mode === 'hermes'
+          ? [
+              { label: '派单到 Hermes', status: 'running' },
+              { label: '等待 worker 接手', status: 'pending' },
+              { label: '抓取结果包装 HTML', status: 'pending' },
+            ]
+          : [
+              { label: '解析输入意图', status: 'running' },
+              { label: '推理 5 维度元认知', status: 'pending' },
+              { label: '渲染 HTML 页面', status: 'pending' },
+            ]
+        updateNode(nodeId, {
+          taskStatus: 'running',
+          html: '',
+          error: '',
+          tasks,
+        })
+        _runHtmlAnswer(nodeId).catch((err) => console.error('[retryHtmlAnswer] failed:', err))
+      },
+
+      // 内部: 实际跑 LLM/Hermes 的核心, askAndCreate + retry 共用
+      _runHtmlAnswer: async (nodeId) => {
+        const { nodes, updateNode } = get()
+        const node = nodes.find((n) => n.id === nodeId)
+        if (!node) return
+        const text = node.data?.prompt || ''
+        const mode = node.data?.mode || 'meta'
+
+        const setTasks = (tasks) => updateNode(nodeId, { tasks })
+
+        if (mode === 'meta') {
+          try {
+            const svc = await import('../services/aiService')
+            // step1 done, step2 running
+            setTasks([
+              { label: '解析输入意图', status: 'done' },
+              { label: '推理 5 维度元认知', status: 'running' },
+              { label: '渲染 HTML 页面', status: 'pending' },
+              { label: '决策引擎评判', status: 'pending' },
+            ])
+            const html = await svc.generateAnswerHtml(text)
+            // step2/3 done, step4 running (决策引擎)
+            updateNode(nodeId, {
+              taskStatus: 'done',
+              html,
+              tasks: [
+                { label: '解析输入意图', status: 'done' },
+                { label: '推理 5 维度元认知', status: 'done' },
+                { label: '渲染 HTML 页面', status: 'done' },
+                { label: '决策引擎评判', status: 'running' },
+              ],
+            })
+            // 决策引擎 (failure 不阻断, html 已经在了)
+            const decision = await svc.runDecisionEngine(text, html).catch((e) => {
+              console.warn('[runDecisionEngine] 失败:', e)
+              return null
+            })
+            updateNode(nodeId, {
+              decision,
+              tasks: [
+                { label: '解析输入意图', status: 'done' },
+                { label: '推理 5 维度元认知', status: 'done' },
+                { label: '渲染 HTML 页面', status: 'done' },
+                { label: '决策引擎评判', status: decision ? 'done' : 'failed' },
+              ],
+            })
+            // 自动入项目库 — 存全字段 (prompt/mode/html/decision/tasks)
+            await get()._saveProjectFromHtmlNode(nodeId)
+          } catch (err) {
+            updateNode(nodeId, {
+              taskStatus: 'failed',
+              error: err?.message || '生成失败',
+              tasks: [
+                { label: '解析输入意图', status: 'done' },
+                { label: '推理 5 维度元认知', status: 'failed' },
+                { label: '渲染 HTML 页面', status: 'pending' },
+              ],
+            })
+          }
+        } else if (mode === 'hermes') {
+          try {
+            const svc = await import('../services/hermesService')
+            const task = await svc.dispatchTask({
+              title: text.slice(0, 80),
+              body: `【输出语言要求】必须用简体中文输出, 禁止英文回答, 禁止英文标签或英文 title.\n\n${text}`,
+            })
+            setTasks([
+              { label: '派单到 Hermes', status: 'done' },
+              { label: '等待 worker 接手', status: 'running' },
+              { label: '抓取结果包装 HTML', status: 'pending' },
+            ])
+            // 包成 HTML 派单回执 (poll 完整结果留 v0.2)
+            const escape = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+            const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><style>
+body{font-family:'Noto Sans SC',system-ui,sans-serif;background:#fafafa;color:#1a1a1a;padding:48px;max-width:720px;margin:0 auto;line-height:1.7}
+h1{font-family:'Noto Serif SC',Georgia,serif;font-size:1.3rem;letter-spacing:0.02em;margin:0 0 32px;font-weight:500}
+.label{font-size:0.7rem;letter-spacing:0.35em;color:#c8a882;margin-bottom:8px;text-transform:uppercase}
+.row{margin:18px 0;display:flex;gap:16px;font-size:0.85rem}
+.row b{color:#888;font-weight:400;letter-spacing:0.1em;font-size:0.7rem;text-transform:uppercase;min-width:90px}
+.note{margin-top:40px;font-size:0.78rem;color:#888;border-left:2px solid #e8d5c0;padding:8px 16px;line-height:1.8}
+.divider{height:1px;background:#e8e8e8;margin:32px 0}
+</style></head><body>
+<div class="label">Hermes Dispatch · 派单回执</div>
+<h1>${escape(text)}</h1>
+<div class="divider"></div>
+<div class="row"><b>任务 ID</b><span>${escape(task.id)}</span></div>
+<div class="row"><b>状态</b><span>${escape(task.status || 'ready')}</span></div>
+<div class="row"><b>派发时间</b><span>${new Date().toLocaleString('zh-CN')}</span></div>
+${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}</span></div>` : ''}
+<div class="note">Worker 在 Hermes 端运行中, 完成后 result 会写到画布右侧 ResultNode. 当前是派单回执. 此节点可作为页面索引保留.</div>
+</body></html>`
+            updateNode(nodeId, {
+              taskStatus: 'done',
+              html,
+              hermesTaskId: task.id,
+              tasks: [
+                { label: '派单到 Hermes', status: 'done' },
+                { label: '等待 worker 接手', status: 'done' },
+                { label: '抓取结果包装 HTML', status: 'done' },
+                { label: '决策引擎评判', status: 'running' },
+              ],
+            })
+            // 决策引擎 (Hermes 模式也跑)
+            const aiSvc = await import('../services/aiService')
+            const decision = await aiSvc.runDecisionEngine(text, html).catch(() => null)
+            updateNode(nodeId, {
+              decision,
+              tasks: [
+                { label: '派单到 Hermes', status: 'done' },
+                { label: '等待 worker 接手', status: 'done' },
+                { label: '抓取结果包装 HTML', status: 'done' },
+                { label: '决策引擎评判', status: decision ? 'done' : 'failed' },
+              ],
+            })
+            await get()._saveProjectFromHtmlNode(nodeId)
+          } catch (err) {
+            updateNode(nodeId, {
+              taskStatus: 'failed',
+              error: err?.message || '派单失败',
+              tasks: [
+                { label: '派单到 Hermes', status: 'failed' },
+                { label: '等待 worker 接手', status: 'pending' },
+                { label: '抓取结果包装 HTML', status: 'pending' },
+              ],
+            })
+          }
+        } else {
+          updateNode(nodeId, {
+            taskStatus: 'failed',
+            error: `未知模式 "${mode}"`,
+          })
+        }
+      },
+
+      // ──────────────────────────────────────────────────────────────────────
+      // ALETHEIA 项目模式 — 一句话 → 真实项目拆分 + Agent 涌现 (画布展示推理过程)
+      //   1. 立即建项目根节点 (ontologyNode goal)
+      //   2. 一次 LLM 调用拿 6 stage 结构 (project_profile/task_dag/roles/topology/reflection)
+      //   3. 串行揭示 6 阶段: CONTEXT → DECOMPOSE (建 task 节点) → EMERGE (建 agent 节点)
+      //      → TOPOLOGY (画依赖虚线 + 染 stage 同色) → EXECUTE (按 stage 切 running/done)
+      //      → REFLECT (跑决策引擎, 入项目库)
+      // ──────────────────────────────────────────────────────────────────────
+      askAndStartMetaProject: (input) => {
+        const text = String(input || '').trim()
+        if (!text) throw new Error('askAndStartMetaProject: 输入为空')
+
+        const { getNextGridPosition, updateNode } = get()
+        const ts = Date.now()
+        const rand = () => Math.random().toString(36).slice(2, 8)
+        const rootId = `project-${ts}-${rand()}`
+        const projectGroupId = `pgroup-${rootId}`  // 整个项目的 group 容器
+        const pos = getNextGridPosition()
+
+        // 0. 项目独立"频道" — 用 react-flow group 节点把 root + tasks + agents + conclusion 全包起来
+        //    用户拖 group 时整个项目跟随; 不同项目的 group 互不重叠 (用户独立 X 区已分配)
+        const stamp = (() => { try { return getCreatedByStamp() } catch { return null } })()
+        const projectGroupNode = {
+          id: projectGroupId,
+          type: 'group',
+          position: pos,
+          // 预留尺寸 (root + 5 task + 4 agent + conclusion 大致占地); 子节点位置都是相对 group 的偏移
+          style: {
+            width: 1600,
+            height: 1100,
+            background: stamp?.color ? `${stamp.color}10` : 'rgba(200,168,130,0.06)',
+            border: `1px dashed ${stamp?.color || '#c8a882'}55`,
+            borderRadius: 14,
+          },
+          data: {
+            isProjectGroup: true,
+            ownerName: stamp?.name || '',
+            ownerColor: stamp?.color || '#c8a882',
+            createdBy: stamp,
+          },
+          draggable: true,
+          selectable: true,
+        }
+        set((state) => { state.nodes.push(projectGroupNode) })
+
+        // 1. 立即建项目根节点 (goal variant) — 作为 group 的子节点, position 改成相对 group
+        const rootNode = {
+          id: rootId,
+          type: 'ontologyNode',
+          position: { x: 700, y: 60 },  // 相对 group 居中靠上
+          parentNode: projectGroupId,
+          data: {
+            variant: 'goal',
+            title: text.slice(0, 40),
+            description: '',
+            sentence: text,
+            projectMode: true,
+            projectStatus: 'running',
+            projectStage: 'CONTEXT',
+            created_at: ts,
+          },
+        }
+        applyCreatedByStamp(rootNode)
+        set((state) => { state.nodes.push(rootNode) })
+
+        // 串行揭示用的延时
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+        // 整个 6-stage 流程异步跑 — 立即返回 rootId, 让 BottomAIBar 解锁 submitting
+        ;(async () => {
+
+        // 项目模式 stage 同组配色 — 用 accent-bg 偏色调区分 parallel stage
+        const stageGroupColors = [
+          'rgba(200,168,130,0.10)', // 暖
+          'rgba(124,158,178,0.10)', // 蓝灰
+          'rgba(139,158,124,0.10)', // 绿灰
+          'rgba(158,124,178,0.08)', // 紫灰
+        ]
+
+        try {
+          // 2. 一次 LLM 调用拿整个 6 stage 结构
+          const svc = await import('../services/aiService')
+          const structure = await svc.generateMetaProjectStructure(text)
+
+          if (!structure?.task_dag?.length || !structure?.roles?.length) {
+            throw new Error('LLM 没产出有效的 task_dag / roles')
+          }
+
+          // ───── Stage 1 CONTEXT (1.2s 后) ─────
+          await sleep(1200)
+          updateNode(rootId, {
+            projectStage: 'DECOMPOSE',
+            description: structure.project_profile.target,
+            project_profile: structure.project_profile,
+            structure, // 整个 6 stage 全字段都存一份, 入库时直接用
+          })
+
+          // ───── Stage 2 DECOMPOSE (1.2s 后) — 建 task 节点 ─────
+          await sleep(1200)
+          const COL_W = 260
+          const ROW_H = 220
+          const GROUP_CENTER_X = 800  // root 居中在 group 中心
+          const ROOT_Y = 60
+          const TASK_Y = ROOT_Y + ROW_H
+          const taskCount = structure.task_dag.length
+          // task 位置: 相对 group 的偏移 (parentNode = projectGroupId, 与 root 平级当 group 子)
+          // 横向以 group 中心为基准, 居中分布
+          const taskOffsetX0 = GROUP_CENTER_X - ((taskCount - 1) * COL_W) / 2
+          const taskIdMap = {} // T1 → 真实 nodeId
+          // 给每个 task 预算一个 stageGroupColor: 由"承担它的 role 的 stage"决定
+          // 同 stage 的 task + agent 用同色, 视觉上一目了然属于一组
+          const taskStageColorMap = {}
+          structure.execution_topology.stages.forEach((s) => {
+            const color = stageGroupColors[(s.stage_index - 1) % stageGroupColors.length]
+            s.role_ids.forEach((rid) => {
+              const role = structure.roles.find((r) => r.id === rid)
+              if (role?.assigned_tasks) {
+                role.assigned_tasks.forEach((tid) => {
+                  if (!taskStageColorMap[tid]) taskStageColorMap[tid] = color
+                })
+              }
+            })
+          })
+          const taskNodes = structure.task_dag.map((t, i) => {
+            const nid = `task-${rootId}-${t.id}`
+            taskIdMap[t.id] = nid
+            return {
+              id: nid,
+              type: 'ontologyNode',
+              position: { x: taskOffsetX0 + i * COL_W, y: TASK_Y },
+              parentNode: projectGroupId,  // 整组移动: parent = projectGroup, 与 root 平级
+              data: {
+                variant: 'entity',
+                title: t.title,
+                description: t.desc,
+                projectTaskId: t.id,
+                projectRootId: rootId,
+                stageGroupColor: taskStageColorMap[t.id] || stageGroupColors[0],  // 同组同色
+                created_at: ts,
+              },
+            }
+          })
+          const taskEdges = taskNodes.map((tn) => ({
+            id: `edge-${ts}-${rand()}`,
+            source: rootId,
+            target: tn.id,
+            type: 'smoothstep',
+            data: { relationType: '拆解' },
+            label: '拆解',
+            style: { stroke: 'var(--accent, #c8a882)', strokeWidth: 1.5 },
+          }))
+          stampNodesInPlace(taskNodes)
+          set((state) => {
+            state.nodes.push(...taskNodes)
+            state.edges.push(...taskEdges)
+          })
+          updateNode(rootId, { projectStage: 'EMERGE' })
+
+          // ───── Stage 3 EMERGE — 每个 role 间隔 0.6s ─────
+          // 计算 role -> stage_index 映射 (用于布局 + 染色)
+          const roleStageMap = {}
+          structure.execution_topology.stages.forEach((s) => {
+            s.role_ids.forEach((rid) => {
+              roleStageMap[rid] = s
+            })
+          })
+
+          const roleIdMap = {}
+          // role 的 y 按它所在 stage_index 错位排, x 跟随 assigned_tasks 第一个 task
+          for (let i = 0; i < structure.roles.length; i++) {
+            const role = structure.roles[i]
+            const firstTaskId = role.assigned_tasks[0]
+            const anchorTaskNode = firstTaskId ? taskNodes.find((n) => n.data.projectTaskId === firstTaskId) : null
+            const stageInfo = roleStageMap[role.id]
+            const stageIndex = stageInfo?.stage_index || 1
+            // 同 stage 多 role 横向错开 — 计算这个 stage 里它的位置
+            const sameStageRoles = structure.execution_topology.stages.find((s) => s.stage_index === stageIndex)?.role_ids || [role.id]
+            const sameStageIdx = sameStageRoles.indexOf(role.id)
+            const sameStageCount = sameStageRoles.length
+
+            // anchorTaskNode.position 已经是相对 projectGroup 的偏移
+            const anchorX = anchorTaskNode ? anchorTaskNode.position.x : taskOffsetX0 + i * COL_W
+            const xOffset = sameStageCount > 1 ? (sameStageIdx - (sameStageCount - 1) / 2) * 60 : 0
+            const x = anchorX + xOffset
+            // agent 作为 projectGroup 子, y = task 行下面 + stage 错开
+            const AGENT_Y_BASE = TASK_Y + ROW_H
+            const y = AGENT_Y_BASE + (stageIndex - 1) * 40
+
+            const nid = `agent-${rootId}-${role.id}`
+            roleIdMap[role.id] = nid
+
+            const stageGroupColor = stageGroupColors[(stageIndex - 1) % stageGroupColors.length]
+            const newRoleNode = {
+              id: nid,
+              type: 'agentRoleNode',
+              position: { x, y },
+              parentNode: projectGroupId,  // 整组移动: parent = projectGroup
+              data: {
+                roleId: role.id,
+                name: role.name,
+                responsibility: role.responsibility,
+                assigned_tasks: role.assigned_tasks,
+                tools: role.tools,
+                status: 'pending',
+                stageIndex,
+                stageKind: stageInfo?.kind || 'parallel',
+                stageGroupColor,
+                projectRootId: rootId,
+                created_at: ts,
+              },
+            }
+            // 从该 role 承担的每个 task → role 节点连边
+            const newRoleEdges = role.assigned_tasks
+              .map((tid) => taskIdMap[tid])
+              .filter(Boolean)
+              .map((taskNodeId) => ({
+                id: `edge-${ts}-${rand()}`,
+                source: taskNodeId,
+                target: nid,
+                type: 'smoothstep',
+                data: { relationType: '承担' },
+                label: '承担',
+                style: { stroke: 'var(--accent, #c8a882)', strokeWidth: 1.5 },
+              }))
+            applyCreatedByStamp(newRoleNode)
+            set((state) => {
+              state.nodes.push(newRoleNode)
+              state.edges.push(...newRoleEdges)
+            })
+            await sleep(600)
+          }
+
+          updateNode(rootId, { projectStage: 'TOPOLOGY' })
+
+          // ───── Stage 4 TOPOLOGY (1.2s 后) — 串行 stage 之间画虚线依赖 ─────
+          await sleep(1200)
+          const stages = [...structure.execution_topology.stages].sort((a, b) => a.stage_index - b.stage_index)
+          const topologyEdges = []
+          for (let i = 1; i < stages.length; i++) {
+            const prev = stages[i - 1]
+            const cur = stages[i]
+            // 给每对 (prev role → cur role) 画依赖虚线
+            prev.role_ids.forEach((prid) => {
+              cur.role_ids.forEach((crid) => {
+                const sourceNid = roleIdMap[prid]
+                const targetNid = roleIdMap[crid]
+                if (!sourceNid || !targetNid) return
+                topologyEdges.push({
+                  id: `edge-${ts}-${rand()}`,
+                  source: sourceNid,
+                  target: targetNid,
+                  type: 'smoothstep',
+                  data: { relationType: '依赖' },
+                  label: '依赖',
+                  style: { stroke: '#888', strokeWidth: 1, strokeDasharray: '4 4' },
+                })
+              })
+            })
+          }
+          if (topologyEdges.length > 0) {
+            set((state) => {
+              state.edges.push(...topologyEdges)
+            })
+          }
+          updateNode(rootId, { projectStage: 'EXECUTE' })
+
+          // ───── Stage 5 EXECUTE — 按 topology stage 顺序派真 Hermes worker ─────
+          // 优先派真 worker; hermes-proxy 健康检查失败时退化到前端模拟保 demo 不挂
+          let hermesAvailable = false
+          let hermesSvc = null
+          try {
+            hermesSvc = await import('../services/hermesService')
+            const hc = await hermesSvc.healthCheck()
+            hermesAvailable = !!hc?.ok
+          } catch {
+            hermesAvailable = false
+          }
+
+          for (const stage of stages) {
+            await sleep(800)
+            const runningRoleNodeIds = stage.role_ids.map((rid) => roleIdMap[rid]).filter(Boolean)
+            // 该 stage 所有 role 同时切 running
+            set((state) => {
+              runningRoleNodeIds.forEach((nid) => {
+                const n = state.nodes.find((x) => x.id === nid)
+                if (n) n.data.status = 'running'
+              })
+            })
+
+            if (hermesAvailable && hermesSvc) {
+              // 真 worker 路径 — 并行派单, 拿到 hermesTaskId 立即写回, 然后 polling 完成
+              const dispatches = stage.role_ids.map(async (rid) => {
+                const role = structure.roles.find((r) => r.id === rid)
+                const nid = roleIdMap[rid]
+                if (!role || !nid) return
+                const assignedTitles = (role.assigned_tasks || [])
+                  .map((tid) => structure.task_dag.find((t) => t.id === tid)?.title)
+                  .filter(Boolean)
+                  .join(' / ') || role.responsibility
+                const title = `${role.name}: ${assignedTitles}`.slice(0, 80)
+                const body = `【输出语言要求】必须用简体中文输出, 禁止英文回答, 禁止英文标签或英文 title.
+
+项目目标: ${structure.project_profile?.target || text}
+
+角色: ${role.name}
+职责: ${role.responsibility}
+负责任务: ${assignedTitles}
+工具: ${(role.tools || []).join(', ')}
+
+请按角色职责给出执行计划摘要 (用中文, 不超过 120 字).`
+                try {
+                  const task = await hermesSvc.dispatchTask({ title, body, max_runtime_seconds: 180 })
+                  set((state) => {
+                    const n = state.nodes.find((x) => x.id === nid)
+                    if (n) {
+                      n.data.hermesTaskId = task.id
+                      n.data.dispatchedAt = Date.now()
+                    }
+                  })
+                  // polling 直到 done/failed 或 90s 上限
+                  const result = await hermesSvc.pollTask(task.id, { intervalMs: 5000, timeoutMs: 90000 }).catch(() => null)
+                  set((state) => {
+                    const n = state.nodes.find((x) => x.id === nid)
+                    if (!n) return
+                    if (result && result.status === 'done') {
+                      n.data.status = 'done'
+                      n.data.output_summary = (result.result || result.summary || '').slice(0, 200) || `${role.name} 已完成`
+                    } else if (result && (result.status === 'blocked' || result.status === 'failed')) {
+                      n.data.status = 'failed'
+                      n.data.output_summary = `Hermes ${result.status}: ${(result.error || '').slice(0, 100)}`
+                    } else {
+                      // timeout — 标 done 但说明走超时 fallback
+                      n.data.status = 'done'
+                      n.data.output_summary = `${role.name} 已派单, worker 超时未返回 (taskId: ${task.id.slice(0, 12)}…)`
+                    }
+                  })
+                } catch (err) {
+                  // dispatch 本身失败 — 退化到模拟
+                  await sleep(1200)
+                  set((state) => {
+                    const n = state.nodes.find((x) => x.id === nid)
+                    if (n) {
+                      n.data.status = 'done'
+                      n.data.output_summary = `Hermes 派单失败 (${(err?.message || '').slice(0, 60)}), 用模拟产出`
+                    }
+                  })
+                }
+              })
+              await Promise.all(dispatches)
+            } else {
+              // 模拟路径 — 1.5s 后切 done
+              await sleep(1500)
+              set((state) => {
+                stage.role_ids.forEach((rid) => {
+                  const role = structure.roles.find((r) => r.id === rid)
+                  const nid = roleIdMap[rid]
+                  const n = state.nodes.find((x) => x.id === nid)
+                  if (n) {
+                    n.data.status = 'done'
+                    n.data.output_summary = role
+                      ? `已完成 ${role.name} 的工作 (Hermes 不可用, 模拟产出)`
+                      : '已完成 (模拟产出)'
+                  }
+                })
+              })
+            }
+          }
+
+          updateNode(rootId, { projectStage: 'REFLECT' })
+
+          // ───── Stage 6 REFLECT — 跑决策引擎 + 入项目库 ─────
+          // 把整个 structure 序列化喂给决策引擎, 让它基于"项目拆解出来什么"来评判
+          const structText = JSON.stringify({
+            target: structure.project_profile.target,
+            tasks: structure.task_dag.map((t) => `${t.id}: ${t.title}`),
+            roles: structure.roles.map((r) => `${r.id}(${r.name}): ${r.responsibility}`),
+            topology: structure.execution_topology.stages.map((s) =>
+              `${s.kind} stage ${s.stage_index}: [${s.role_ids.join(', ')}]`
+            ),
+            reflection: structure.reflection_hint,
+          }, null, 2)
+          const decision = await svc.runDecisionEngine(text, structText).catch((e) => {
+            console.warn('[askAndStartMetaProject] runDecisionEngine 失败:', e)
+            return null
+          })
+
+          updateNode(rootId, {
+            projectStatus: 'done',
+            decision,
+          })
+
+          // 结论节点 — 把决策独立成一个深色"汇聚"节点, 放在所有 agent 之下
+          // 视觉效果: root → tasks → agents → 结论 (从上到下严格层级)
+          if (decision) {
+            const stageMaxIdx = Math.max(1, ...Object.values(roleStageMap).map((s) => s.stage_index || 1))
+            const conclusionId = `conclusion-${rootId}`
+            const conclusionNode = {
+              id: conclusionId,
+              type: 'ontologyNode',
+              // 相对 projectGroup: 居中横向, 纵向在所有 agent 之下
+              position: { x: GROUP_CENTER_X, y: TASK_Y + ROW_H + (stageMaxIdx - 1) * 40 + 220 },
+              parentNode: projectGroupId,
+              data: {
+                variant: 'goal',  // 深色显示
+                title: `结论: ${decision.verdict?.toUpperCase() || '?'}${decision.score ? ` · ${decision.score} 分` : ''}`,
+                description: decision.summary || '',
+                isConclusion: true,
+                projectRootId: rootId,
+                conclusion: decision,
+                created_at: ts,
+              },
+            }
+            applyCreatedByStamp(conclusionNode)
+            // 从所有 agent 节点指向结论 (汇聚虚线)
+            const conclusionEdges = Object.values(roleIdMap).map((agentId) => ({
+              id: `edge-${ts}-conc-${agentId.slice(-6)}`,
+              source: agentId,
+              target: conclusionId,
+              type: 'smoothstep',
+              data: { relationType: '汇聚' },
+              label: '',
+              style: { stroke: '#1a1a1a', strokeWidth: 1.2, strokeDasharray: '4 3', opacity: 0.55 },
+            }))
+            set((state) => {
+              state.nodes.push(conclusionNode)
+              state.edges.push(...conclusionEdges)
+            })
+          }
+
+          // 入项目库 — snapshot 含整个 structure + decision + 创建的所有节点 id
+          await get()._saveProjectFromMetaProject(rootId)
+        } catch (err) {
+          console.error('[askAndStartMetaProject] failed:', err)
+          updateNode(rootId, {
+            projectStatus: 'failed',
+            error: err?.message || '项目拆解失败',
+          })
+        }
+        })()  // IIFE 结束 - 6-stage 异步流程
+
+        // 同步返回 rootId, BottomAIBar 立刻解锁 submitting
+        return rootId
+      },
+
+      // 内部: 把一个 done 的 ALETHEIA 项目入项目库, source='aletheia'
+      // snapshot 含整个 6-stage structure + decision + 所有节点/边的 id 引用
+      _saveProjectFromMetaProject: async (rootId) => {
+        try {
+          const { nodes, edges } = get()
+          const root = nodes.find((n) => n.id === rootId)
+          if (!root || root.type !== 'ontologyNode') return null
+          const d = root.data || {}
+          const lib = (await import('./useProjectLibraryStore')).default.getState()
+          if (!lib?.saveProject) return null
+
+          // 收集这次创建的所有节点/边 (包含 root 自己 + task_dag + agent_role 节点)
+          const projectNodeIds = new Set([rootId])
+          nodes.forEach((n) => {
+            if (n.data?.projectRootId === rootId) projectNodeIds.add(n.id)
+          })
+          const projectNodes = nodes.filter((n) => projectNodeIds.has(n.id))
+          const projectEdges = edges.filter((e) => projectNodeIds.has(e.source) && projectNodeIds.has(e.target))
+
+          const verdict = d.decision?.verdict
+          const score = d.decision?.score
+          const titleBase = (d.sentence || d.title || '未命名项目').slice(0, 60)
+          const title = verdict
+            ? `${titleBase} · ${verdict.toUpperCase()}${score ? ` ${score}` : ''}`
+            : titleBase
+          const summary = d.decision?.summary
+            || (d.project_profile?.target ? `ALETHEIA 项目: ${d.project_profile.target}` : '')
+
+          const id = lib.saveProject({
+            title,
+            summary,
+            source: 'aletheia',
+            tags: ['aletheia', 'project', verdict, d.project_profile?.domain].filter(Boolean),
+            snapshot: {
+              kind: 'aletheiaProject',
+              prompt: d.sentence,
+              project_profile: d.project_profile,
+              structure: d.structure,
+              decision: d.decision,
+              // 整个项目相关的节点和边都存一份, 方便重载
+              nodes: JSON.parse(JSON.stringify(projectNodes)),
+              edges: JSON.parse(JSON.stringify(projectEdges)),
+              rootId,
+              created_at: d.created_at || Date.now(),
+            },
+            stats: {
+              nodeCount: projectNodes.length,
+              edgeCount: projectEdges.length,
+            },
+          })
+          if (id) {
+            const { updateNode } = get()
+            updateNode(rootId, { libraryId: id })
+          }
+          return id
+        } catch (err) {
+          console.error('[_saveProjectFromMetaProject] 失败:', err)
+          return null
+        }
+      },
+
+      // 内部: 把一个 done 的 HtmlPageNode 入项目库, 存全字段
+      // (prompt + mode + html + decision + tasks + 节点 snapshot 引用)
+      _saveProjectFromHtmlNode: async (nodeId) => {
+        try {
+          const node = get().nodes.find((n) => n.id === nodeId)
+          if (!node || node.type !== 'htmlPageNode') return null
+          const d = node.data || {}
+          const lib = (await import('./useProjectLibraryStore')).default.getState()
+          if (!lib?.saveProject) return null
+          const verdict = d.decision?.verdict
+          const score = d.decision?.score
+          // 项目库 entry 标题 = prompt 前 60 字 + verdict 后缀
+          const titleBase = (d.prompt || '未命名项目').slice(0, 60)
+          const title = verdict ? `${titleBase} · ${verdict.toUpperCase()}${score ? ` ${score}` : ''}` : titleBase
+          const summary = d.decision?.summary || (d.html ? `${d.mode === 'hermes' ? 'Hermes 派单' : '元认知 5 维度'}, ${(d.html.length / 1024).toFixed(1)} KB HTML` : '')
+          const id = lib.saveProject({
+            title,
+            summary,
+            source: d.mode === 'hermes' ? 'hermes' : 'meta-cognitive',
+            tags: [d.mode, verdict].filter(Boolean),
+            // 把整条 HtmlPageNode 数据快照下来 — 全字段, 后续可重载
+            snapshot: {
+              kind: 'htmlPage',
+              prompt: d.prompt,
+              mode: d.mode,
+              html: d.html,
+              decision: d.decision,
+              tasks: d.tasks,
+              hermesTaskId: d.hermesTaskId || null,
+              // 把节点本身也存一份 (id/position 让重载能放回画布)
+              nodes: [JSON.parse(JSON.stringify(node))],
+              edges: [],
+              created_at: d.created_at || Date.now(),
+            },
+            stats: { nodeCount: 1, edgeCount: 0 },
+          })
+          // 在节点 data 里记一下 libraryId, UI 可显示"已入库"
+          if (id) {
+            const { updateNode } = get()
+            updateNode(nodeId, { libraryId: id })
+          }
+          return id
+        } catch (err) {
+          console.error('[_saveProjectFromHtmlNode] 失败:', err)
+          return null
         }
       },
 

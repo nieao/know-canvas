@@ -1,5 +1,6 @@
 // 场景切换器 - 顶部水平 tab，三选项 ToB/ToC/ToG，并显示当前场景描述
-import React from 'react';
+// 默认折叠成一个胶囊 (避免遮挡画布), 点击展开后才显示三选项 + 描述
+import React, { useState } from 'react';
 import { useAletheiaStore } from '../../stores/useAletheiaStore';
 
 // 场景列表（顺序固定：ToB / ToC / ToG）
@@ -52,6 +53,43 @@ export default function ScenarioSwitcher() {
     }
   };
 
+  // 折叠状态 — 默认收起, 点击 chip 展开
+  const [expanded, setExpanded] = useState(false);
+  const currentLabel = SCENARIO_TABS.find((t) => t.id === scenario)?.label || 'ToB';
+
+  // 折叠时只渲染一个小胶囊 (不挡画布)
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '4px 12px',
+          background: 'var(--surface)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid #e8e8e8',
+          borderRadius: '999px',
+          fontFamily: '"Noto Sans SC", system-ui, sans-serif',
+          fontSize: '11px',
+          letterSpacing: '0.15em',
+          color: 'var(--text-faint)',
+          cursor: 'pointer',
+          userSelect: 'none',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}
+        title="点击展开场景切换"
+      >
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
+        <span>场景: {currentLabel}</span>
+        <span style={{ fontSize: 10, opacity: 0.6 }}>▾</span>
+      </button>
+    );
+  }
+
   return (
     <div
       style={{
@@ -64,9 +102,35 @@ export default function ScenarioSwitcher() {
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         borderBottom: '1px solid #e8e8e8',
+        borderRadius: 8,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
         userSelect: 'none',
+        position: 'relative',
       }}
     >
+      {/* 收起按钮 (右上角小 ×) */}
+      <button
+        type="button"
+        onClick={() => setExpanded(false)}
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 8,
+          width: 18,
+          height: 18,
+          padding: 0,
+          background: 'transparent',
+          border: 'none',
+          color: 'var(--text-faint)',
+          cursor: 'pointer',
+          fontSize: 14,
+          lineHeight: 1,
+        }}
+        title="收起场景切换"
+      >
+        ×
+      </button>
+
       {/* tab 行 */}
       <div style={{ display: 'flex', gap: '8px' }}>
         {SCENARIO_TABS.map((tab) => {

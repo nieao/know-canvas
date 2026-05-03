@@ -21,6 +21,18 @@ function SynthesisNodeImpl({ id, data, selected }) {
   const sourceRefuters = Array.isArray(data?.sourceRefuterIds)
     ? data.sourceRefuterIds.length
     : 0;
+  // 健康分构成 tooltip — 让用户看见为什么是这个数 (避免"健康度永远 45"的疑问)
+  const breakdown = data?.healthBreakdown;
+  const sevHist = breakdown?.severityHistogram || {};
+  const breakdownTitle = breakdown
+    ? [
+        `本地启发式: ${breakdown.localHeuristic}`,
+        `LLM 主观: ${breakdown.llmHint == null ? '—' : breakdown.llmHint}`,
+        `提议 ${breakdown.proposerCount} · 反驳 ${breakdown.refuterCount}`,
+        `严重度: critical=${sevHist.critical || 0} high=${sevHist.high || 0} medium=${sevHist.medium || 0} low=${sevHist.low || 0}`,
+        '混合公式: 本地×0.5 + LLM×0.5',
+      ].join('\n')
+    : '健康度由本地启发式 + LLM 主观打分混合得出';
 
   // 触发外层弹窗 - 用 CustomEvent 解耦, AletheiaLayer / 父级组件监听该事件
   const onShowActionPlan = (e) => {
@@ -113,6 +125,7 @@ function SynthesisNodeImpl({ id, data, selected }) {
           {healthScore !== null ? (
             <>
               <div
+                title={breakdownTitle}
                 style={{
                   fontFamily: '"Noto Serif SC", Georgia, serif',
                   fontSize: '64px',
@@ -121,6 +134,7 @@ function SynthesisNodeImpl({ id, data, selected }) {
                   fontWeight: 500,
                   letterSpacing: '0.02em',
                   textShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                  cursor: 'help',
                 }}
               >
                 {healthScore}

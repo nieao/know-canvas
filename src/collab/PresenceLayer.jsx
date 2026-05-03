@@ -14,6 +14,7 @@ import {
   setLocalSelection,
   onAwarenessChange,
   getRemoteStates,
+  getAwareness,
 } from './yjsClient'
 
 // 节流：远端光标 30fps
@@ -228,4 +229,194 @@ export function useRemoteSelections() {
   }, [])
 
   return map
+}
+
+/**
+ * Hook：订阅远端 + 本地的"最近移动节点"awareness 字段
+ * 返回 { nodeId → { name, color, ts } }，命中后 3 秒自动清除
+ *
+ * 包含本地用户：自己刚拖完一个节点也呼吸（直观反馈）
+ * 远端：通过 awareness movedNode 字段同步
+ */
+export function useRecentMovers(windowMs = 3000) {
+  const [map, setMap] = useState({})
+
+  useEffect(() => {
+    let timer = null
+
+    const update = () => {
+      // 收集所有 client（含本地）的 movedNode
+      const states = getRemoteStates() // 远端
+      const all = [...states]
+      // 本地 awareness 也读一下，让自己拖也呼吸（远端列表不含自己）
+      const localAw = getAwareness()
+      if (localAw) {
+        const local = localAw.getLocalState()
+        if (local) all.push({ ...local, clientId: localAw.clientID })
+      }
+
+      const now = Date.now()
+      setMap((prev) => {
+        const next = { ...prev }
+        // 清理过期
+        for (const k of Object.keys(next)) {
+          if (now - next[k].ts > windowMs) delete next[k]
+        }
+        for (const s of all) {
+          if (s?.user && s?.movedNode?.nodeId) {
+            // 仅在 ts 比 prev 新时更新（避免重复触发气泡）
+            const exist = next[s.movedNode.nodeId]
+            if (!exist || exist.ts < s.movedNode.ts) {
+              next[s.movedNode.nodeId] = {
+                name: s.user.name,
+                color: s.user.color || '#888',
+                ts: s.movedNode.ts,
+              }
+            }
+          }
+        }
+        return next
+      })
+    }
+
+    update()
+    const off = onAwarenessChange(update)
+    // 周期性清扫，让过期项主动退场（不依赖下一次 awareness change）
+    timer = setInterval(() => {
+      const now = Date.now()
+      setMap((prev) => {
+        let dirty = false
+        const next = {}
+        for (const [k, v] of Object.entries(prev)) {
+          if (now - v.ts <= windowMs) next[k] = v
+          else dirty = true
+        }
+        return dirty ? next : prev
+      })
+    }, 500)
+
+    return () => {
+      off()
+      if (timer) clearInterval(timer)
+    }
+  }, [windowMs])
+
+  return map
+}
+
+/**
+ * NodeBadgeLayer — 叠加在画布上的节点临时事件层（**只**渲染移动呼吸 ring + 气泡）
+ *
+ * 历史: 这里曾渲染过持久 createdBy 小圆头像浮层, 由于
+ *   1) 浮层在 ReactFlow stacking context 内, z-index 低于 fixed panel 仍透出, 跑到 DebateStream 面板里
+ *   2) 用户语义诉求是"任务节点本体带创建者名字", 不是空中飞的小头像
+ * 已下线 createdBy 浮层。
+ * 创建者名字现在直接由节点组件读 data.createdBy 自渲, 见 OntologyNode 等节点的 created-by-stamp。
+ */
+export function NodeBadgeLayer({ wrapperRef, nodes }) {
+  const reactFlowInstance = useReactFlow()
+  const recentMovers = useRecentMovers(3000)
+  const [, forceUpdate] = useState(0)
+
+  // 视口缩放/平移时重渲染（屏幕坐标重算）
+  useEffect(() => {
+    const id = setInterval(() => forceUpdate((n) => n + 1), 200)
+    return () => clearInterval(id)
+  }, [])
+
+  if (!nodes || nodes.length === 0) return null
+
+  const wrapperRect = wrapperRef?.current?.getBoundingClientRect()
+  let zoom = 1
+  try { zoom = reactFlowInstance.getZoom() } catch (_e) {}
+
+  return (
+    <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 26 }}>
+      <style>{`
+        @keyframes node-breathe {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(1.03); }
+        }
+        @keyframes badge-pop {
+          0% { transform: translate(-50%, -100%) scale(0.6); opacity: 0; }
+          40% { transform: translate(-50%, -110%) scale(1.05); opacity: 1; }
+          100% { transform: translate(-50%, -100%) scale(1); opacity: 1; }
+        }
+      `}</style>
+
+      {nodes.map((node) => {
+        const mover = recentMovers[node.id]
+        if (!mover) return null  // 没有移动事件就完全不渲染（不再渲染 createdBy 浮层）
+
+        // flow 坐标 → 屏幕坐标 → wrapper 内坐标
+        let pos
+        try {
+          pos = reactFlowInstance.flowToScreenPosition({
+            x: node.position.x,
+            y: node.position.y,
+          })
+        } catch (_e) {
+          return null
+        }
+        const x = wrapperRect ? pos.x - wrapperRect.left : pos.x
+        const y = wrapperRect ? pos.y - wrapperRect.top : pos.y
+
+        // 节点尺寸（react-flow 在 measure 后填充）
+        const nodeW = (node.width || node.measured?.width || 200) * zoom
+        const nodeH = (node.height || node.measured?.height || 80) * zoom
+
+        return (
+          <div
+            key={node.id}
+            style={{
+              position: 'absolute',
+              left: x,
+              top: y,
+              width: nodeW,
+              height: nodeH,
+            }}
+          >
+            {/* 呼吸 ring */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: -3,
+                borderRadius: 12,
+                border: `2px solid ${mover.color}`,
+                boxShadow: `0 0 12px ${mover.color}66`,
+                animation: 'node-breathe 1.4s ease-in-out infinite',
+                pointerEvents: 'none',
+                transformOrigin: 'center center',
+              }}
+            />
+
+            {/* 移动气泡 — 节点上方"X 移动了"（key=ts 让重复移动重播动画） */}
+            <div
+              key={mover.ts}
+              style={{
+                position: 'absolute',
+                top: -8,
+                left: '50%',
+                transform: 'translate(-50%, -100%)',
+                background: mover.color,
+                color: 'white',
+                fontSize: 10,
+                lineHeight: 1.3,
+                padding: '3px 8px',
+                borderRadius: 999,
+                whiteSpace: 'nowrap',
+                fontFamily: '"Noto Sans SC", system-ui, sans-serif',
+                fontWeight: 500,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+                animation: 'badge-pop 0.25s ease-out',
+                zIndex: 3,
+              }}
+            >
+              {mover.name} 移动了
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }

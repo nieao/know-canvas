@@ -133,7 +133,7 @@ export default function DebateStreamPanel() {
         borderRight: '1px solid var(--border-subtle)',
         display: 'flex',
         flexDirection: 'column',
-        zIndex: 30,
+        zIndex: 100,
         fontFamily: '"Noto Sans SC", system-ui, sans-serif',
       }}
     >

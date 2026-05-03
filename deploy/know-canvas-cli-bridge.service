@@ -1,0 +1,62 @@
+# Know Canvas CLI Bridge systemd unit
+#
+# 作用:
+#   反向调用入口 — Hermes Agent / 命令行工具 / 任何外部 HTTP 客户端通过这个 daemon
+#   把任务投递到画布的 yjs 黑板上, 让前端任意 tab 自动跑 _runHtmlAnswer.
+#   完成后把状态推回 callback_url (Hermes → telegram bot).
+#
+# 端口 17082, 跟其他 daemon 协同:
+#   - 1234   y-ws-server   (Yjs sync)
+#   - 17080  llm-proxy     (LLM 出向)
+#   - 17081  hermes-proxy  (Hermes 出向)
+#   - 17082  cli-bridge    (反向入口, 本服务)
+#   - 18080  claude-bridge (本机 claude CLI)
+#
+# 安装:
+#   sudo cp deploy/know-canvas-cli-bridge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable know-canvas-cli-bridge
+#   sudo systemctl start know-canvas-cli-bridge
+#   sudo systemctl status know-canvas-cli-bridge
+#
+# 查看日志:
+#   sudo journalctl -u know-canvas-cli-bridge -f
+#
+# Hermes 集成参考:
+#   docs/HERMES-CALLBACK.md
+
+[Unit]
+Description=Know Canvas CLI Bridge (reverse-call entrypoint for Hermes)
+Documentation=file:///opt/know-canvas/docs/HERMES-CALLBACK.md
+After=network.target know-canvas-yws.service
+Wants=know-canvas-yws.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/know-canvas/server
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=17082
+Environment=YWS_URL=ws://127.0.0.1:1234
+Environment=ROOM=demo-railway
+
+ExecStart=/usr/bin/node /opt/know-canvas/server/canvas-cli-bridge.mjs
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 资源限制
+MemoryMax=256M
+CPUQuota=30%
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,5 @@
 /**
- * 知识图谱 AI 服务
+ * ALETHEIA 画布 AI 服务
  * v0.2: provider 工厂模式
  *  - extractConcepts / suggestRelations / parseMarkdown 等沿用客户端规则解析（不烧 API）
  *  - 新增 extractConceptsLLM / suggestRelationsLLM 走配置的 provider（claude-cli / openai-like）
@@ -12,7 +12,7 @@ import { callLLM } from './aiProvider'
 // ============================================================
 // 系统提示词（供 LLM 调用使用）
 // ============================================================
-export const SYSTEM_PROMPT = `你是知识图谱助手。分析用户输入的文本，提取关键概念和它们之间的关系。输出严格的 JSON 格式，不要包含 markdown 代码块。
+export const SYSTEM_PROMPT = `你是 ALETHEIA 画布概念抽取助手。分析用户输入的文本，提取关键概念和它们之间的关系。输出严格的 JSON 格式，不要包含 markdown 代码块。
 
 输出格式要求（JSON）：
 {
@@ -747,7 +747,7 @@ export async function challengeNode(node) {
 export async function suggestRelationsLLM(concepts) {
   if (!concepts || concepts.length < 2) return []
   const list = concepts.map((c, i) => `${i + 1}. ${c.title}${c.description ? ' — ' + c.description : ''}`).join('\n')
-  const system = '你是知识图谱关系推断助手。给定一组概念，推断它们之间最有价值的连接关系。'
+  const system = '你是画布关系推断助手。给定一组概念，推断它们之间最有价值的连接关系。'
   const prompt = `下列是用户画布上的概念列表，请推断它们之间最值得连线的关系（最多 12 条），输出 JSON：
 
 ${list}
@@ -767,4 +767,233 @@ ${list}
       type: r.type || '相关',
       reason: r.reason || '',
     }))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 一句话 → HTML 页面 (元认知洞察)
+// 用在 BottomAIBar: 输入一句话, LLM 直接产出建筑极简风格 HTML 页面, 落画布渲染
+// ─────────────────────────────────────────────────────────────────────────────
+const ANSWER_HTML_SYSTEM_PROMPT = `你是元认知洞察引擎. 给定用户的一句话输入 (问题/目标/想法), 直接产出一份**完整的 HTML 页面字符串**, 把 5 维度元认知分析渲染成建筑极简风格的页面. 用户会把这个页面作为画布节点查看.
+
+5 维度内容必须涵盖:
+1. 核心意图 (core_intent) — 一句话点破用户真正想解决的问题
+2. 隐含目标 (implicit_goals) — 2-3 条用户没明说但想要的
+3. 关键风险 (key_risks) — 2-3 条最容易翻车的点 (具体, 不要"风险大"这种空话)
+4. 前置依赖 (dependencies) — 2-3 条推进前必须先确认/完成的
+5. 下一步行动 (next_actions) — 1-3 条具体动作
+
+设计风格 (建筑极简唯美):
+- 配色: 黑白基调 (#1a1a1a 主文字, #fafafa 背景, #888 辅助), 暖色点缀 (#c8a882) 仅用于强调元素
+- 字体: 标题用 'Noto Serif SC', Georgia, serif; 正文用 'Noto Sans SC', system-ui, sans-serif
+- 标题 letter-spacing 0.02em, 标签 letter-spacing 0.15-0.35em
+- 间距: 8px 倍数, 大量留白
+- 段落标签: 'CORE_INTENT' '01' '02' 这种带序号的全大写英文标签 (font-size 0.7rem, letter-spacing 0.35em, color #c8a882)
+- 段落编号格式: '01 / CORE INTENT'
+- 关键风险用左侧 2px 暖色边线 + 微红 (#7a3a4a) 文字
+- 卡片式分块, border 1px solid #e8e8e8
+
+输出严格要求:
+- 只输出 HTML, 从 <!DOCTYPE html> 开始, 到 </html> 结束
+- HTML 内联 <style>, 不要外部 CSS / JS
+- 不要 markdown 围栏 (没有 \`\`\`html 这种), 不要前言后语解释
+- 全程中文文案
+- 页面宽度自适应, 内容居中 max-width 720px
+- 顶部一行细暖色横线作装饰`
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 决策引擎 — HtmlPageNode 完成后追加一步, 给最终评判
+// 输出 verdict (go/hold/pivot) + score + summary + key_insights + improvements + next_steps
+// ─────────────────────────────────────────────────────────────────────────────
+const DECISION_ENGINE_SYSTEM_PROMPT = `你是 ALETHEIA 决策引擎. 给定一个用户输入和它的元认知/Hermes 产出页面, 给出最终决策评判.
+
+判定规则:
+- verdict 三选一: 'go' (推荐立即推进) / 'hold' (前置条件 ok 后再推进) / 'pivot' (建议调整方向)
+- score: 0-100 整数, 综合可行性 + 信息完备度 + 风险可控性
+- summary: 一句决策结论, 30 字内, 直接说"推进/暂缓/转向"和最关键原因
+- key_insights: 2-3 条核心洞察, 每条 20 字内, 必须是这次产出新发现的, 不是复读输入
+- improvements: 1-3 条具体改进建议, 必须可执行 (不要"加强 xx""完善 yy")
+- next_steps: 1-3 条下一步动作, 每条带可量化标准 (24h 内 / 3 城市 / etc)
+
+输出严格 JSON, 不要 markdown 围栏:
+{
+  "verdict": "go|hold|pivot",
+  "score": 0-100,
+  "summary": "...",
+  "key_insights": ["..."],
+  "improvements": ["..."],
+  "next_steps": ["..."]
+}`
+
+/**
+ * 决策引擎 — 给一个 HtmlPageNode 的产出做最终评判.
+ * @param {string} prompt 用户的一句话输入
+ * @param {string} html  产出的 HTML 页面 (会截前 3000 字符喂 LLM, 防 token 爆)
+ * @returns {Promise<{verdict:string, score:number, summary:string, key_insights:string[], improvements:string[], next_steps:string[]} | null>}
+ */
+export async function runDecisionEngine(prompt, html) {
+  if (!prompt || !html) return null
+  const stripped = String(html).replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2400)
+  const promptText = `用户输入:
+${prompt}
+
+产出页面纯文本摘要 (HTML 标签已剥离):
+${stripped}
+
+按 schema 输出决策 JSON.`
+  const raw = await callLLM({ system: DECISION_ENGINE_SYSTEM_PROMPT, prompt: promptText, jsonMode: true })
+  const parsed = tryParseLLMJson(raw)
+  if (!parsed) return null
+  const allowed = ['go', 'hold', 'pivot']
+  return {
+    verdict: allowed.includes(parsed.verdict) ? parsed.verdict : 'hold',
+    score: Math.max(0, Math.min(100, parseInt(parsed.score, 10) || 0)),
+    summary: String(parsed.summary || '').slice(0, 100),
+    key_insights: Array.isArray(parsed.key_insights) ? parsed.key_insights.filter(Boolean).slice(0, 4) : [],
+    improvements: Array.isArray(parsed.improvements) ? parsed.improvements.filter(Boolean).slice(0, 4) : [],
+    next_steps: Array.isArray(parsed.next_steps) ? parsed.next_steps.filter(Boolean).slice(0, 4) : [],
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ALETHEIA Project — 一句话 → 6 stage 项目拆解结构
+// 一次 LLM 调用产出整个结构 (project_profile / task_dag / roles / topology / reflection),
+// 前端拿到后串行揭示 (CONTEXT → DECOMPOSE → EMERGE → TOPOLOGY → EXECUTE → REFLECT).
+// ─────────────────────────────────────────────────────────────────────────────
+const META_PROJECT_SYSTEM_PROMPT = `你是 ALETHEIA 元认知项目拆解引擎. 给定用户的一句话目标 (问题/项目/想法), 输出整个项目的 6 阶段元认知拆解 JSON.
+
+阶段语义:
+- CONTEXT (project_profile): 把目标抽象成 target/domain/complexity/key_constraints
+- DECOMPOSE (task_dag): 把目标拆成 3-5 个串行/并行的可执行任务, 任务之间有依赖
+- EMERGE (roles): 涌现 2-4 个 agent 角色, 每个角色承担 1+ 任务, 有具体工具
+- TOPOLOGY (execution_topology): 角色按 stage 分组, parallel / serial 执行顺序
+- REFLECT (reflection_hint): 1-2 句对这次拆解的元思考
+
+输出 schema (严格 JSON, 不要 markdown 代码块, 不要前言后语):
+{
+  "project_profile": {
+    "target": "一句话项目目标 (30 字内)",
+    "domain": "领域分类 (e.g. 电商/SaaS/线下零售/创作)",
+    "complexity": "low|medium|high",
+    "key_constraints": ["关键约束 1", "关键约束 2"]
+  },
+  "task_dag": [
+    {
+      "id": "T1",
+      "title": "任务标题 (15 字内)",
+      "desc": "任务描述 (40 字内)",
+      "deps": []
+    }
+  ],
+  "roles": [
+    {
+      "id": "R1",
+      "name": "角色名称 (e.g. 选址调研员/财务建模师)",
+      "responsibility": "一句话职责 (30 字内)",
+      "assigned_tasks": ["T1"],
+      "tools": ["实地踩点", "Excel 建模"]
+    }
+  ],
+  "execution_topology": {
+    "stages": [
+      { "stage_index": 1, "role_ids": ["R1", "R2"], "kind": "parallel" },
+      { "stage_index": 2, "role_ids": ["R3"], "kind": "serial" }
+    ]
+  },
+  "reflection_hint": "1-2 句对这次拆解的元思考 (50 字内)"
+}
+
+约束:
+- task_dag 3-5 条, 不要超过 5
+- roles 2-4 个 (跟 task_dag 大致对应, 每个角色至少承担 1 个任务)
+- task id 用 T1/T2..., role id 用 R1/R2...
+- assigned_tasks 必须从 task_dag 的 id 里选
+- execution_topology.stages 至少 1 个 stage, role_ids 必须从 roles 的 id 里选, 同一 role 只能出现在一个 stage
+- tools 每个角色 1-3 个具体工具/方法
+- 字段名英文 (按 schema), 字段值全部中文`
+
+/**
+ * 一句话 → ALETHEIA 项目 6 stage 结构
+ * @param {string} input 用户一句话
+ * @returns {Promise<object>} { project_profile, task_dag, roles, execution_topology, reflection_hint }
+ */
+export async function generateMetaProjectStructure(input) {
+  if (!input || !input.trim()) throw new Error('generateMetaProjectStructure: 输入为空')
+  const prompt = `用户输入: ${input.trim()}
+
+请按 system 中的 schema 输出完整 JSON.`
+  const raw = await callLLM({ system: META_PROJECT_SYSTEM_PROMPT, prompt, jsonMode: true })
+  const parsed = tryParseLLMJson(raw)
+  if (!parsed) throw new Error('generateMetaProjectStructure: LLM 输出无法解析为 JSON')
+
+  // 容错归一化, 防止下游 store 崩溃
+  const profile = parsed.project_profile || {}
+  const tasks = Array.isArray(parsed.task_dag) ? parsed.task_dag : []
+  const roles = Array.isArray(parsed.roles) ? parsed.roles : []
+  const topology = parsed.execution_topology || {}
+  const stages = Array.isArray(topology.stages) ? topology.stages : []
+
+  // 任务 id 集合, 用来过滤无效 deps
+  const validTaskIds = new Set(tasks.map((t) => t?.id).filter(Boolean))
+  const validRoleIds = new Set(roles.map((r) => r?.id).filter(Boolean))
+
+  return {
+    project_profile: {
+      target: String(profile.target || input).slice(0, 60),
+      domain: String(profile.domain || '通用').slice(0, 20),
+      complexity: ['low', 'medium', 'high'].includes(profile.complexity) ? profile.complexity : 'medium',
+      key_constraints: Array.isArray(profile.key_constraints) ? profile.key_constraints.filter(Boolean).slice(0, 4) : [],
+    },
+    task_dag: tasks
+      .map((t, i) => ({
+        id: String(t?.id || `T${i + 1}`),
+        title: String(t?.title || '').slice(0, 30),
+        desc: String(t?.desc || t?.description || '').slice(0, 80),
+        deps: Array.isArray(t?.deps) ? t.deps.filter((d) => validTaskIds.has(d)) : [],
+      }))
+      .filter((t) => t.title)
+      .slice(0, 5),
+    roles: roles
+      .map((r, i) => ({
+        id: String(r?.id || `R${i + 1}`),
+        name: String(r?.name || '').slice(0, 20),
+        responsibility: String(r?.responsibility || r?.desc || '').slice(0, 60),
+        assigned_tasks: Array.isArray(r?.assigned_tasks) ? r.assigned_tasks.filter((t) => validTaskIds.has(t)) : [],
+        tools: Array.isArray(r?.tools) ? r.tools.filter(Boolean).slice(0, 3) : [],
+      }))
+      .filter((r) => r.name)
+      .slice(0, 4),
+    execution_topology: {
+      stages: stages
+        .map((s, i) => ({
+          stage_index: Number.isInteger(s?.stage_index) ? s.stage_index : i + 1,
+          role_ids: Array.isArray(s?.role_ids) ? s.role_ids.filter((rid) => validRoleIds.has(rid)) : [],
+          kind: ['parallel', 'serial'].includes(s?.kind) ? s.kind : 'parallel',
+        }))
+        .filter((s) => s.role_ids.length > 0),
+    },
+    reflection_hint: String(parsed.reflection_hint || '').slice(0, 120),
+  }
+}
+
+/**
+ * 一句话 → 完整 HTML 页面字符串 (元认知洞察).
+ * @param {string} input 用户一句话
+ * @returns {Promise<string>} 完整 HTML 页面字符串
+ */
+export async function generateAnswerHtml(input) {
+  if (!input || !input.trim()) throw new Error('generateAnswerHtml: 输入为空')
+  const prompt = `用户输入: ${input.trim()}
+
+请按 system 里的 5 维度规范, 直接输出完整 HTML 页面.`
+  const raw = await callLLM({ system: ANSWER_HTML_SYSTEM_PROMPT, prompt, jsonMode: false })
+  // 兼容 LLM 偶尔加 ``` 围栏的情况
+  let html = String(raw || '').trim()
+  if (html.startsWith('```')) {
+    html = html.replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/, '').trim()
+  }
+  // 没有 <!DOCTYPE 时, 包一个最小骨架兜底 (LLM 偶尔忘记)
+  if (!/<!DOCTYPE/i.test(html) && !/^<html/i.test(html)) {
+    html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><style>body{font-family:'Noto Sans SC',system-ui;background:#fafafa;color:#1a1a1a;padding:48px;max-width:720px;margin:0 auto;line-height:1.7}</style></head><body>${html}</body></html>`
+  }
+  return html
 }

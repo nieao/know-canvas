@@ -133,6 +133,35 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
           <span>组合分析</span>
         </button>
 
+        {/* 自动排列 — 横排 / 竖排 / 九宫格 */}
+        <button
+          onClick={() => { closeAllMenus(); dispatch('arrangeSelected', { mode: 'horizontal' }) }}
+          className={btnClass}
+          style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent)' }}
+          title="把选中节点横向等距排列"
+        >
+          <span>⇿</span>
+          <span>横排</span>
+        </button>
+        <button
+          onClick={() => { closeAllMenus(); dispatch('arrangeSelected', { mode: 'vertical' }) }}
+          className={btnClass}
+          style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent)' }}
+          title="把选中节点竖向等距排列"
+        >
+          <span>⇕</span>
+          <span>竖排</span>
+        </button>
+        <button
+          onClick={() => { closeAllMenus(); dispatch('arrangeSelected', { mode: 'grid' }) }}
+          className={btnClass}
+          style={{ backgroundColor: 'var(--accent-bg)', color: 'var(--accent)' }}
+          title="把选中节点排成 ceil(√N)×ceil(√N) 网格 (九宫格风格)"
+        >
+          <span>⊞</span>
+          <span>九宫格</span>
+        </button>
+
         {/* 批量推进 — 对每个选中节点并发跑同一种推进动作 */}
         <div className="relative">
           <button

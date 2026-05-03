@@ -16,7 +16,7 @@ class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('知识图谱渲染错误:', error, errorInfo)
+    console.error('ALETHEIA 渲染错误:', error, errorInfo)
   }
 
   handleReset = () => {

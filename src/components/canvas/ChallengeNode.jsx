@@ -20,7 +20,7 @@ const SEVERITY_META = {
   low:    { label: '轻微', color: 'var(--text-muted)', bg: 'var(--border-subtle)' },
 }
 
-function ChallengeNodeImpl({ data, selected }) {
+function ChallengeNodeImpl({ id, data, selected }) {
   const angle = data.angle || '反驳'
   const claim = data.claim || ''
   const severity = data.severity || 'medium'
@@ -28,6 +28,15 @@ function ChallengeNodeImpl({ data, selected }) {
   const meta = SEVERITY_META[severity] || SEVERITY_META.medium
   const evidence = Array.isArray(data.evidence) ? data.evidence : []
   const todos = Array.isArray(data.todos) ? data.todos : []
+  const chainRunning = data.chainRunning === true
+
+  const onChainTodos = (e) => {
+    e.stopPropagation()
+    if (chainRunning || todos.length === 0) return
+    window.dispatchEvent(new CustomEvent('challenge:chain-todos', {
+      detail: { challengeId: id, todos, claim, sourceTitle },
+    }))
+  }
 
   return (
     <div
@@ -100,14 +109,33 @@ function ChallengeNodeImpl({ data, selected }) {
           </div>
         )}
 
-        {/* 待办事项 (todos) - 分项 checkbox 风格 */}
+        {/* 待办事项 (todos) - 分项 checkbox 风格 + 下一步按钮 */}
         {todos.length > 0 && (
           <div className="mt-2.5 pt-2" style={{ borderTop: `1px dashed ${meta.color}40` }}>
-            <div
-              className="text-[9px] mb-1.5"
-              style={{ color: meta.color, letterSpacing: '0.18em', fontWeight: 600 }}
-            >
-              待办 · TODO
+            <div className="flex items-center justify-between mb-1.5">
+              <span
+                className="text-[9px]"
+                style={{ color: meta.color, letterSpacing: '0.18em', fontWeight: 600 }}
+              >
+                待办 · TODO
+              </span>
+              <button
+                type="button"
+                onClick={onChainTodos}
+                disabled={chainRunning}
+                className="text-[9px] px-2 py-0.5 rounded transition-all duration-300"
+                style={{
+                  border: `1px solid ${meta.color}`,
+                  color: chainRunning ? 'var(--text-faint)' : meta.color,
+                  background: 'transparent',
+                  cursor: chainRunning ? 'wait' : 'pointer',
+                  letterSpacing: '0.1em',
+                  fontWeight: 500,
+                }}
+                title="把这些待办派给 LLM 继续规划成下一轮可执行任务"
+              >
+                {chainRunning ? '规划中…' : '下一步 ▸'}
+              </button>
             </div>
             <ul className="space-y-1">
               {todos.map((t, i) => (

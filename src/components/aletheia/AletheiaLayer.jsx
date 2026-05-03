@@ -18,7 +18,6 @@ import { useAletheiaStore } from '../../stores/useAletheiaStore'
 import useCanvasStore from '../../stores/useCanvasStore'
 import { runAletheiaCycle } from '../../services/aletheia/runner'
 import HealthScoreRing from './HealthScoreRing'
-import ImpossibleTriangle from './ImpossibleTriangle'
 import LoopStatusBar from './LoopStatusBar'
 import ScenarioSwitcher from './ScenarioSwitcher'
 import DebateStreamPanel from './DebateStreamPanel'
@@ -178,13 +177,7 @@ export default function AletheiaLayer() {
         <DebateStreamPanel />
       </div>
 
-      {/* 中央 - 不可能三角 (装饰, 鼠标穿透) */}
-      <div
-        className="absolute inset-0 z-10 flex items-center justify-center"
-        style={{ pointerEvents: 'none' }}
-      >
-        <ImpossibleTriangle />
-      </div>
+      {/* 中央装饰图 (ImpossibleTriangle) 已移除 — 用户反馈干扰画布观察 */}
 
       {/* 右侧 - Health Score 圆环 (在 banner 下, 避开 RightPanel) */}
       <div

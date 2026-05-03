@@ -101,8 +101,11 @@ export default function CliMonitor() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="absolute bottom-3 right-3 z-40 flex items-center gap-2 px-3 py-1.5 rounded-md shadow-lg transition-all hover:translate-y-[-2px]"
+        // 抬到 CostMeterChip (bottom 12 right 12) 上方, 不重叠
+        className="absolute z-40 flex items-center gap-2 px-3 py-1.5 rounded-md shadow-lg transition-all hover:translate-y-[-2px]"
         style={{
+          bottom: 56,
+          right: 12,
           background: '#1a1a1a',
           color: '#fafafa',
           border: '1px solid #2d2d2d',

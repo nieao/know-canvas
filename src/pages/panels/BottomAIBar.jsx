@@ -1,115 +1,120 @@
 /**
- * BottomAIBar - AI 知识分析助手栏
- * 功能：使用本地 claude CLI 分析文本，提取概念和关系
- * v0.1: 客户端解析模式（无需 AI 后端）
+ * BottomAIBar — 一句话 → HTML 页面节点
+ *
+ * 交互:
+ *   - 输入一句话 (问题/目标/想法)
+ *   - 默认走"元认知"模式: LLM 一次调用 → 5 维度建筑极简 HTML 页面 → 落画布
+ *   - 切到"Hermes"模式: 派单到 Hermes worker, 节点即派单回执 HTML, 后台跑
+ *   - 提交后立即拿到节点 (running 状态), 完成后 iframe 渲染
+ *
+ * 历史的 4 个 AI_FUNCTIONS (extract / relations / aletheia / summary) 已下线 —
+ * 元认知模式已经覆盖"一句话直接出洞察"的核心需求.
  */
 
-import { useState } from 'react'
-import { extractConcepts, suggestRelations, summarizeKnowledge } from '../../services/aiService'
+import { useState, useRef, useEffect } from 'react'
 import useCanvasStore from '../../stores/useCanvasStore'
+import { parseFile } from '../../utils/fileParser'
 
-// AI 分析功能选项
-const AI_FUNCTIONS = [
-  { id: 'aletheia', label: '一句话生成框架', icon: '本', description: 'Aletheia: 本体拆解, 一句话→Goal+实体+约束+假设, 每节点可派 Hermes / 反驳' },
-  { id: 'extract', label: '提取概念', icon: '概', description: '从文本中提取关键概念' },
-  { id: 'relations', label: '发现关系', icon: '关', description: '分析概念间的关系' },
-  { id: 'summary', label: '知识摘要', icon: '摘', description: '生成知识结构摘要' },
+const MODES = [
+  {
+    id: 'meta',
+    label: '元认知',
+    desc: '元认知 6 stage: 上下文 → 拆解 → Agent 涌现 → 拓扑 → 执行 → 决策反思. 画布上看真实拆分 + 多 agent 多节点',
+  },
+  {
+    id: 'hermes',
+    label: 'Hermes',
+    desc: '派单给 Hermes worker, 节点显示派单回执. 远端跑完后 result 落到 ResultNode',
+  },
+  {
+    id: 'oneshot',
+    label: '极简 HTML',
+    desc: '一句话 → 5 维度 HTML 页面 (单节点, 不拆解, 适合快速回答)',
+  },
 ]
 
-function BottomAIBar({
-  showLeftPanel = true,
-  showRightPanel = true,
-  onExtractConcepts,
-  onSuggestRelations,
-  concepts = [],
-}) {
+function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWidth = 320 }) {
   const [input, setInput] = useState('')
-  const [activeFunction, setActiveFunction] = useState('aletheia')
-  const [isLoading, setIsLoading] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
-  const [messages, setMessages] = useState([])
-  const addOntologyFramework = useCanvasStore((s) => s.addOntologyFramework)
+  const [mode, setMode] = useState('meta')
+  const [submitting, setSubmitting] = useState(false)
+  const [lastNodeId, setLastNodeId] = useState(null)
+  const [importedFile, setImportedFile] = useState(null)  // { name, text } — MD/TXT 文件预览
+  const fileInputRef = useRef(null)
+  const textareaRef = useRef(null)
 
-  // 执行分析
-  const handleAnalyze = async () => {
-    if (!input.trim() && (activeFunction === 'extract' || activeFunction === 'aletheia')) return
-    if (isLoading) return
+  // textarea 自动撑高 — 长文本不再被截断, 用户可整体阅读指令
+  // 单行 ~36px, 上限 5 行 ~ 140px
+  useEffect(() => {
+    const ta = textareaRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    const next = Math.min(ta.scrollHeight, 140)
+    ta.style.height = `${next}px`
+  }, [input])
 
-    setIsLoading(true)
-    const userMessage = {
-      role: 'user',
-      content: input || `[${AI_FUNCTIONS.find(f => f.id === activeFunction)?.label}] 基于当前 ${concepts.length} 个概念`,
-      function: activeFunction,
-    }
-    setMessages(prev => [...prev, userMessage])
+  const askAndCreateHtmlNode = useCanvasStore((s) => s.askAndCreateHtmlNode)
+  const askAndStartMetaProject = useCanvasStore((s) => s.askAndStartMetaProject)
 
+  // 文件选择 → 解析 → 预览到 input 提示
+  const handleFilePick = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
     try {
-      let result = ''
-
-      switch (activeFunction) {
-        case 'aletheia': {
-          const out = await addOntologyFramework(input)
-          const { struct, nodeCount, edgeCount } = out
-          result =
-            `已生成 Aletheia 本体框架: ${nodeCount} 节点 / ${edgeCount} 边\n\n` +
-            `目标: ${struct.goal}\n` +
-            `实体 (${struct.entities.length}): ${struct.entities.map((e) => e.title).join('、')}\n` +
-            (struct.constraints.length ? `约束 (${struct.constraints.length}): ${struct.constraints.map((c) => c.title).join('、')}\n` : '') +
-            (struct.assumptions.length ? `假设 (${struct.assumptions.length}): ${struct.assumptions.map((a) => a.title).join('、')}\n` : '') +
-            `\n→ 接下来在画布的每个节点上点 4 个推进按钮:\n` +
-            `   🔧 拆解 (再下一层) · ⚡ 元认知 (5 步流程) · 🚀 派 Hermes · ⚔ 反驳`
-          break
-        }
-        case 'extract': {
-          const extracted = await extractConcepts(input)
-          if (extracted.length > 0) {
-            onExtractConcepts?.(extracted)
-            result = `成功提取 ${extracted.length} 个概念：\n${extracted.map(c => `  - ${c.title}（${c.description}）`).join('\n')}`
-          } else {
-            result = '未能从文本中提取到有效概念，请尝试输入更多内容。'
-          }
-          break
-        }
-        case 'relations': {
-          if (concepts.length < 2) {
-            result = '需要至少 2 个概念才能分析关系。请先添加更多概念到画布。'
-          } else {
-            const relations = await suggestRelations(concepts, input)
-            if (relations.length > 0) {
-              onSuggestRelations?.(relations)
-              result = `发现 ${relations.length} 组关系：\n${relations.map(r => `  - ${r.source} → ${r.target}（${r.type}：${r.reason}）`).join('\n')}`
-            } else {
-              result = '未发现明确的概念间关系。'
-            }
-          }
-          break
-        }
-        case 'summary': {
-          const summary = await summarizeKnowledge(concepts)
-          result = summary
-          break
-        }
-      }
-
-      const aiMessage = { role: 'assistant', content: result, function: activeFunction }
-      setMessages(prev => [...prev, aiMessage])
-    } catch (error) {
-      console.error('AI 分析失败:', error)
-      const errorMessage = {
-        role: 'assistant',
-        content: `分析失败: ${error.message}\n\n当前为客户端解析模式（v0.1），不依赖外部 AI 服务。`,
-      }
-      setMessages(prev => [...prev, errorMessage])
+      const parsed = await parseFile(file)
+      const text = String(parsed.content || '').trim()
+      if (!text) throw new Error('文件为空或解析失败')
+      // 截断到 8000 字符防止 prompt 过大 (LLM context 限制)
+      const truncated = text.length > 8000 ? text.slice(0, 8000) + '\n\n...(已截断, 原文 ' + text.length + ' 字)' : text
+      setImportedFile({ name: file.name, text: truncated, fullSize: text.length })
+      // 自动填到 input 作为引导
+      setInput(`基于附件《${file.name}》内容做元认知拆解 + 推导`)
+    } catch (err) {
+      alert(`文件解析失败: ${err?.message || err}`)
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
 
-    setInput('')
-    setIsLoading(false)
+  const clearImportedFile = () => setImportedFile(null)
+
+  const canSubmit = input.trim().length > 0 && !submitting
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return
+    let text = input.trim()
+    // 如果有附件 MD/TXT, 把内容拼到 prompt 后面给 LLM 当作上下文
+    if (importedFile?.text) {
+      text = `${text}\n\n=== 附件: ${importedFile.name} ===\n${importedFile.text}`
+    }
+    setSubmitting(true)
+    try {
+      let nodeId
+      if (mode === 'meta') {
+        // 元认知 = 6-stage 多节点 (上下文/拆解/agent涌现/拓扑/执行/决策反思)
+        // 画布上看真实拆分 + agent 涌现, 整个流程在 store 里串行揭示
+        nodeId = await askAndStartMetaProject(text)
+      } else if (mode === 'oneshot') {
+        // 极简 HTML = 一次性单节点 5 维度 HTML
+        nodeId = await askAndCreateHtmlNode(text, 'meta')
+      } else {
+        // hermes 派单
+        nodeId = await askAndCreateHtmlNode(text, 'hermes')
+      }
+      setLastNodeId(nodeId)
+      setInput('')
+      setImportedFile(null)  // 提交后清空附件
+    } catch (err) {
+      console.error('[BottomAIBar] submit failed:', err)
+      alert(`提交失败: ${err?.message || err}`)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleAnalyze()
+      handleSubmit()
     }
   }
 
@@ -118,149 +123,199 @@ function BottomAIBar({
       className="fixed bottom-0 z-40 transition-all duration-500"
       style={{
         left: showLeftPanel ? '256px' : '0px',
-        right: showRightPanel ? '320px' : '0px',
-        background: 'var(--white)',
-        borderTop: '1px solid var(--gray-100)',
+        right: showRightPanel ? `${rightPanelWidth}px` : '0px',
+        background: 'var(--white, #fafafa)',
+        borderTop: '1px solid var(--gray-100, #e8e8e8)',
       }}
     >
-      {/* 对话历史（展开区域） */}
-      {showHistory && messages.length > 0 && (
-        <div className="max-h-56 overflow-y-auto p-3" style={{ borderBottom: '1px solid var(--gray-100)', background: 'var(--warm-bg)' }}>
-          <div className="space-y-2">
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className="max-w-[80%] rounded-lg px-3 py-2 text-xs leading-relaxed"
-                  style={{
-                    background: msg.role === 'user' ? 'var(--warm)' : 'var(--white)',
-                    color: msg.role === 'user' ? 'white' : 'var(--dark)',
-                    border: msg.role === 'assistant' ? '1px solid var(--gray-100)' : 'none',
-                    fontFamily: 'var(--font-sans)',
-                  }}
-                >
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
-                  {msg.role === 'assistant' && (
-                    <div className="flex items-center gap-2 mt-1.5 pt-1.5" style={{ borderTop: '1px solid var(--gray-100)' }}>
-                      <span
-                        className="text-[10px] cursor-pointer transition-colors"
-                        style={{ color: 'var(--warm)' }}
-                        onClick={() => onExtractConcepts?.([{ title: '从回复中添加', content: msg.content }])}
-                      >
-                        添加到画布
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* === 模式切换条 === */}
+      <div className="flex items-center gap-2 px-3 pt-2.5">
+        <span
+          className="text-[9px]"
+          style={{ color: 'var(--gray-500, #888)', letterSpacing: '0.3em' }}
+        >
+          MODE
+        </span>
+        <div className="flex items-center gap-1">
+          {MODES.map((m) => {
+            const active = mode === m.id
+            return (
+              <button
+                key={m.id}
+                onClick={() => setMode(m.id)}
+                className="px-3 py-1 text-[10px] rounded-full transition-all duration-300"
+                style={{
+                  background: active ? 'var(--warm-bg, #f5f0eb)' : 'transparent',
+                  color: active ? 'var(--warm, #c8a882)' : 'var(--gray-500, #888)',
+                  border: `1px solid ${active ? 'var(--warm-light, #e8d5c0)' : 'var(--gray-100, #e8e8e8)'}`,
+                  fontWeight: active ? 500 : 400,
+                  letterSpacing: '0.05em',
+                }}
+                title={m.desc}
+              >
+                {m.label}
+              </button>
+            )
+          })}
         </div>
-      )}
-
-      {/* 功能选择条 */}
-      <div className="flex items-center gap-1 px-3 pt-2">
-        {AI_FUNCTIONS.map(fn => (
-          <button
-            key={fn.id}
-            onClick={() => setActiveFunction(fn.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] rounded-full transition-all duration-300"
-            style={{
-              background: activeFunction === fn.id ? 'var(--warm-bg)' : 'transparent',
-              color: activeFunction === fn.id ? 'var(--warm)' : 'var(--gray-500)',
-              border: `1px solid ${activeFunction === fn.id ? 'var(--warm-light)' : 'var(--gray-100)'}`,
-            }}
-            title={fn.description}
-          >
-            <span className="w-4 h-4 flex items-center justify-center text-[9px] rounded" style={{
-              background: activeFunction === fn.id ? 'var(--warm)' : 'var(--gray-100)',
-              color: activeFunction === fn.id ? 'white' : 'var(--gray-500)',
-              fontFamily: 'var(--font-serif)',
-            }}>
-              {fn.icon}
-            </span>
-            {fn.label}
-          </button>
-        ))}
 
         <div className="flex-1" />
 
-        {/* 模式指示器 */}
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full" style={{ background: 'var(--warm-bg)' }}>
-          <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#7bc47f' }} />
-          <span className="text-[10px]" style={{ color: 'var(--gray-700)' }}>客户端解析</span>
+        {/* 状态指示器 */}
+        <div
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-full"
+          style={{ background: 'var(--warm-bg, #f5f0eb)' }}
+        >
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full"
+            style={{
+              background: submitting ? '#c8a882' : '#7bc47f',
+              animation: submitting ? 'bottomai-pulse 1.4s ease-in-out infinite' : 'none',
+            }}
+          />
+          <span className="text-[10px]" style={{ color: 'var(--gray-700, #555)' }}>
+            {submitting ? '提交中' : '就绪'}
+          </span>
         </div>
       </div>
 
-      {/* 输入栏 */}
-      <div className="flex items-center gap-2 px-3 pb-3 pt-2">
-        {/* 历史按钮 */}
-        {messages.length > 0 && (
+      {/* === 已选附件预览 === */}
+      {importedFile && (
+        <div
+          className="flex items-center gap-2 mx-3 mb-1 px-3 py-1.5 text-[10px] rounded-md"
+          style={{
+            background: 'var(--warm-bg, #f5f0eb)',
+            border: '1px solid var(--warm-light, #e8d5c0)',
+            color: 'var(--gray-700, #555)',
+          }}
+        >
+          <svg className="w-3 h-3" style={{ color: 'var(--warm, #c8a882)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span style={{ color: 'var(--warm, #c8a882)', fontWeight: 500 }}>{importedFile.name}</span>
+          <span>· {importedFile.text.length} 字{importedFile.fullSize > importedFile.text.length ? ` (原 ${importedFile.fullSize} 字, 已截断)` : ''}</span>
+          <span className="flex-1" />
           <button
-            onClick={() => setShowHistory(!showHistory)}
-            className="p-2 rounded-lg transition-all duration-300"
-            style={{
-              color: showHistory ? 'var(--warm)' : 'var(--gray-500)',
-              background: showHistory ? 'var(--warm-bg)' : 'transparent',
-            }}
-            title="查看分析历史"
+            type="button"
+            onClick={clearImportedFile}
+            className="px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
+            style={{ color: 'var(--gray-500, #888)' }}
+            title="移除附件"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            ✕
           </button>
-        )}
+        </div>
+      )}
 
-        {/* 输入框 */}
+      {/* 隐藏的文件 input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".md,.txt,.markdown"
+        style={{ display: 'none' }}
+        onChange={handleFilePick}
+      />
+
+      {/* === 输入栏 === */}
+      <div className="flex items-end gap-2 px-3 pb-3 pt-2">
+        {/* 附件按钮 — 选 MD/TXT 喂 LLM */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={submitting}
+          className="px-2.5 py-2.5 rounded-lg text-xs transition-all duration-300"
+          style={{
+            border: '1px solid var(--gray-100, #e8e8e8)',
+            background: 'var(--white, #fff)',
+            color: importedFile ? 'var(--warm, #c8a882)' : 'var(--gray-500, #888)',
+            cursor: submitting ? 'not-allowed' : 'pointer',
+          }}
+          title="导入 MD / TXT 文件 → 喂给元认知作上下文"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+          </svg>
+        </button>
+
         <div className="flex-1 relative">
-          <input
-            type="text"
+          <textarea
+            ref={textareaRef}
+            rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              activeFunction === 'aletheia'
-                ? '一句话目标 (例: 在上海开一家咖啡馆) → AI 拆解为本体框架...'
-                : activeFunction === 'extract'
-                ? '输入文本，AI 将提取关键概念...'
-                : activeFunction === 'relations'
-                ? '输入上下文文本辅助关系分析（可选）...'
-                : '基于当前画布概念生成摘要...'
+              mode === 'meta'
+                ? '一句话 → 画布展开真实项目拆分 + 多 Agent 涌现 + 决策反思 (6 stage 多节点)…  例: 在上海开一家咖啡馆'
+                : mode === 'hermes'
+                ? '一句话任务描述 → 派给 Hermes worker…  例: 调研 2026 上半年 AI 编辑器市占率'
+                : '一句话 → 一次性 5 维度极简 HTML 页面 (单节点)…  例: 短视频脚本 30s'
             }
-            className="w-full px-4 py-2.5 text-xs rounded-lg transition-all duration-300 focus:outline-none"
+            disabled={submitting}
+            className="w-full px-4 py-2.5 text-xs rounded-lg transition-colors duration-300 focus:outline-none block"
             style={{
-              border: '1px solid var(--gray-100)',
-              color: 'var(--dark)',
-              fontFamily: 'var(--font-sans)',
+              border: '1px solid var(--gray-100, #e8e8e8)',
+              color: 'var(--dark, #1a1a1a)',
+              fontFamily: 'var(--font-sans), system-ui, sans-serif',
+              background: submitting ? 'var(--gray-50, #f0f0f0)' : 'var(--white, #fff)',
+              resize: 'none',
+              minHeight: 38,
+              maxHeight: 140,
+              overflowY: 'auto',
+              lineHeight: 1.55,
             }}
-            onFocus={(e) => e.target.style.borderColor = 'var(--warm)'}
-            onBlur={(e) => e.target.style.borderColor = 'var(--gray-100)'}
+            onFocus={(e) => (e.target.style.borderColor = 'var(--warm, #c8a882)')}
+            onBlur={(e) => (e.target.style.borderColor = 'var(--gray-100, #e8e8e8)')}
           />
         </div>
 
-        {/* 发送按钮 */}
         <button
-          onClick={handleAnalyze}
-          disabled={isLoading || (!input.trim() && (activeFunction === 'extract' || activeFunction === 'aletheia'))}
+          onClick={handleSubmit}
+          disabled={!canSubmit}
           className="px-4 py-2.5 rounded-lg text-xs font-medium transition-all duration-300 flex items-center gap-1.5"
           style={{
-            background: isLoading ? 'var(--gray-100)' : 'var(--warm)',
-            color: isLoading ? 'var(--gray-500)' : 'white',
-            opacity: (!input.trim() && (activeFunction === 'extract' || activeFunction === 'aletheia')) ? 0.5 : 1,
+            background: canSubmit ? 'var(--warm, #c8a882)' : 'var(--gray-100, #e8e8e8)',
+            color: canSubmit ? 'white' : 'var(--gray-500, #888)',
+            opacity: canSubmit ? 1 : 0.6,
+            cursor: canSubmit ? 'pointer' : 'not-allowed',
+            letterSpacing: '0.08em',
           }}
         >
-          {isLoading ? (
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
+          {submitting ? (
+            <>
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span>生成中</span>
+            </>
           ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span>{mode === 'hermes' ? '派 Hermes' : mode === 'oneshot' ? '生成页面' : '启动元认知'}</span>
+            </>
           )}
-          <span>{isLoading ? '分析中' : '分析'}</span>
         </button>
       </div>
+
+      {lastNodeId && (
+        <div
+          className="px-4 pb-2 text-[10px]"
+          style={{ color: 'var(--gray-500, #888)' }}
+        >
+          已落画布 → 节点 <span style={{ color: 'var(--warm, #c8a882)' }}>{lastNodeId.slice(0, 18)}</span>
+          {mode === 'hermes' ? ' (Hermes 后台执行中)' : mode === 'oneshot' ? ' (5 维度 HTML 生成中)' : ' (元认知拆解中, 看画布上的 6 阶段多节点揭示)'}
+        </div>
+      )}
+
+      <style>{`
+        @keyframes bottomai-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%      { opacity: 0.4; transform: scale(0.7); }
+        }
+      `}</style>
     </div>
   )
 }

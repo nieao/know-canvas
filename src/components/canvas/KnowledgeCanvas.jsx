@@ -34,6 +34,8 @@ import OntologyNode from './OntologyNode'
 import ChallengeNode from './ChallengeNode'
 import SynthesisNode from './SynthesisNode'
 import MetaStepNode from './MetaStepNode'
+import HtmlPageNode from './HtmlPageNode'
+import AgentRoleNode from './AgentRoleNode'
 import SelectionToolbar from './SelectionToolbar'
 import NodePropertyPanel from './NodePropertyPanel'
 import AletheiaLayer from '../aletheia/AletheiaLayer'
@@ -58,6 +60,10 @@ const nodeTypes = {
   synthesisNode: SynthesisNode,
   // 元认知 skill 5 步流的步骤节点 (运行中节点带脉冲 + 流光动画)
   metaStepNode: MetaStepNode,
+  // 一句话 → HTML 页面节点 (BottomAIBar 的输出形态, 默认元认知, 可切 hermes)
+  htmlPageNode: HtmlPageNode,
+  // ALETHEIA 项目模式 — agent 角色卡片 (项目模式下随 EMERGE 阶段涌现)
+  agentRoleNode: AgentRoleNode,
 }
 
 // 知识关系类型 (语义色: 关系类型色板, 不随主题切换)
@@ -91,8 +97,8 @@ const defaultEdgeOptions = {
 
 // 网格配置
 const snapGrid = [15, 15]
-const MIN_ZOOM = 0.25
-const MAX_ZOOM = 2.0
+const MIN_ZOOM = 0.15
+const MAX_ZOOM = 4.0
 const ZOOM_STEP = 0.1
 const deleteKeyCode = ['Backspace', 'Delete']
 
@@ -269,6 +275,7 @@ function KnowledgeCanvasInner({
   onConnect,
   onNodeClick,
   onEdgeClick,
+  onNodeDragStop,
   onDrop,
   onInit,
   showMiniMap = true,
@@ -277,6 +284,22 @@ function KnowledgeCanvasInner({
   const reactFlowInstance = useReactFlow()
   const reactFlowWrapper = useRef(null)
   const [isPanMode, setIsPanMode] = useState(false)
+
+  // 双击节点 → 居中 + 放大到 MAX_ZOOM (用户反馈: 节点小看不清字, 一键聚焦)
+  const handleNodeDoubleClick = useCallback((_e, node) => {
+    if (!node || !node.position) return
+    // 子节点 (parentNode 关系) 的 position 是相对父的, react-flow 内部有 absolutePosition
+    // 这里用 react-flow 提供的 internal position 算中心
+    const internal = reactFlowInstance.getNode?.(node.id) || node
+    const absX = internal?.positionAbsolute?.x ?? internal?.position?.x ?? 0
+    const absY = internal?.positionAbsolute?.y ?? internal?.position?.y ?? 0
+    const w = internal.width || internal.measured?.width || 220
+    const h = internal.height || internal.measured?.height || 120
+    reactFlowInstance.setCenter(absX + w / 2, absY + h / 2, {
+      zoom: MAX_ZOOM,
+      duration: 600,
+    })
+  }, [reactFlowInstance])
   const [quickAddMenu, setQuickAddMenu] = useState({ visible: false, x: 0, y: 0 })
   const { zoom } = useViewport()
 
@@ -299,6 +322,21 @@ function KnowledgeCanvasInner({
 
   const handleFitView = useCallback(() => {
     reactFlowInstance.fitView({ padding: 0.2, duration: 300 })
+  }, [reactFlowInstance])
+
+  // 双击鼠标中键 → fitView 包含所有节点（含视口外的）
+  // 浏览器没有原生中键 dblclick, 用 mousedown.button===1 + 400ms 内两次判定
+  const middleClickRef = useRef(0)
+  const handleMiddleDoubleClick = useCallback((e) => {
+    if (e.button !== 1) return
+    e.preventDefault()  // 阻止默认中键自动滚动模式
+    const now = Date.now()
+    if (now - middleClickRef.current < 400) {
+      reactFlowInstance.fitView({ padding: 0.15, duration: 600, includeHiddenNodes: true })
+      middleClickRef.current = 0
+    } else {
+      middleClickRef.current = now
+    }
   }, [reactFlowInstance])
 
   // 元认知 skill 跑完后自动 fitView, 让用户能一眼看到 5 步全貌
@@ -627,6 +665,7 @@ function KnowledgeCanvasInner({
       onDragOver={handleDragOver}
       onDrop={handleFileDrop}
       onDoubleClick={handleWrapperDoubleClick}
+      onMouseDown={handleMiddleDoubleClick}
     >
       <ReactFlow
         nodes={nodes}
@@ -635,7 +674,9 @@ function KnowledgeCanvasInner({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={handleNodeDoubleClick}
         onEdgeClick={onEdgeClick}
+        onNodeDragStop={onNodeDragStop}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}
         onInit={onInit}
@@ -663,10 +704,16 @@ function KnowledgeCanvasInner({
           color="var(--border-subtle)"
         />
 
-        {/* 控制按钮 */}
+        {/* 控制按钮 — 左下角, 避开 RightPanel; 用户可点 +/- 缩放和 fitView */}
         <Controls
           showInteractive={false}
-          style={{ display: 'none' }}
+          position="bottom-left"
+          style={{
+            background: 'var(--white, #fafafa)',
+            border: '1px solid var(--gray-100, #e8e8e8)',
+            borderRadius: 8,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+          }}
         />
 
         {/* 小地图 */}

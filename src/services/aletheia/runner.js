@@ -139,25 +139,88 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
   }
 
   // 4) 一条条加 ChallengeNode (sleep 600ms 让用户能看见生长)
+  // 反驳节点全部包进独立 challengeGroup, 放在原项目右侧空白处, 按 severity 排序避免重叠
   const ts = Date.now()
   const newChallengeIds = []
-  // 方向感知: LR 横排走右出/左入命名 handle; TB 竖排不指定 handle (react-flow 用节点 default top/bottom)
   const layoutDir = useCanvasStore.getState().layoutDirection || 'TB'
   const isLR = layoutDir === 'LR'
   const handleProps = isLR ? { sourceHandle: 'right', targetHandle: 'left' } : {}
   const positionProps = isLR
     ? { sourcePosition: 'right', targetPosition: 'left' }
     : { sourcePosition: 'bottom', targetPosition: 'top' }
-  for (let i = 0; i < challenges.length; i++) {
-    const c = challenges[i]
+
+  // 4.0) 按 severity 排序: critical/high 在上, medium 中间, low 最下
+  const sevRank = { critical: 0, high: 1, medium: 2, low: 3 }
+  const ordered = [...challenges].sort((a, b) => (sevRank[a.severity] ?? 9) - (sevRank[b.severity] ?? 9))
+
+  // 4.1) 算 proposers 的 absolute bounding box (考虑 parentNode 嵌套), 决定 challengeGroup 落点
+  const allCanvasNodes = snap().nodes
+  const getAbsolutePos = (n) => {
+    if (!n?.parentNode) return n?.position || { x: 0, y: 0 }
+    const parent = allCanvasNodes.find((p) => p.id === n.parentNode)
+    if (!parent) return n.position || { x: 0, y: 0 }
+    return {
+      x: (parent.position?.x || 0) + (n.position?.x || 0),
+      y: (parent.position?.y || 0) + (n.position?.y || 0),
+    }
+  }
+  let maxX = -Infinity, minY = Infinity
+  for (const p of proposers) {
+    const abs = getAbsolutePos(p)
+    const w = p.measured?.width || p.width || 240
+    maxX = Math.max(maxX, abs.x + w)
+    minY = Math.min(minY, abs.y)
+  }
+  // 也考虑包住 source 的 group 边界
+  const groupIds = [...new Set(proposers.map((p) => p.parentNode).filter(Boolean))]
+  for (const gid of groupIds) {
+    const g = allCanvasNodes.find((n) => n.id === gid)
+    if (g?.style?.width) {
+      maxX = Math.max(maxX, (g.position?.x || 0) + Number(g.style.width))
+    }
+  }
+  if (!isFinite(maxX)) maxX = 100
+  if (!isFinite(minY)) minY = 100
+
+  const CHALLENGE_GROUP_W = 380
+  const CHALLENGE_NODE_H = 230
+  const challengeGroupId = `cgroup-${ts}`
+  const challengeGroupNode = {
+    id: challengeGroupId,
+    type: 'group',
+    position: { x: maxX + 80, y: minY },
+    style: {
+      width: CHALLENGE_GROUP_W,
+      height: ordered.length * CHALLENGE_NODE_H + 60,
+      background: 'rgba(208,74,74,0.04)',
+      border: '1px dashed rgba(208,74,74,0.4)',
+      borderRadius: 14,
+    },
+    data: {
+      isChallengeGroup: true,
+      title: `反驳组 (${ordered.length} 条)`,
+      sourceProposerIds: proposers.map((p) => p.id),
+      created_at: ts,
+    },
+    draggable: true,
+    selectable: true,
+  }
+  // 一次性 push group 容器, 后面 challengeNode 设 parentNode = challengeGroupId
+  {
+    const cur = snap()
+    cur.setNodes(cur.nodes.concat([challengeGroupNode]))
+  }
+
+  for (let i = 0; i < ordered.length; i++) {
+    const c = ordered[i]
     const src = canvasNodes.find((n) => n.id === c.source) || proposers[0]
     const cid = `challenge-${ts}-${Math.random().toString(36).slice(2, 7)}-${i}`
     const angle = c.tag === 'compliance' ? '合规风险' : c.tag === 'business' ? '商业可行性' : '逻辑漏洞'
-    // ChallengeNode 组件读 claim, 只识别 high/medium/low (critical 退化为 high)
-    // 节点高度按 evidence/todos 条数自适应, 让用户一眼看到具体的论据和待办
     const newNode = {
       id: cid, type: 'challengeNode',
-      position: { x: (src.position?.x ?? 100) + 320, y: (src.position?.y ?? 100) + i * 220 },
+      // 相对 challengeGroup 的偏移: 单列垂直排, 每个 230px 间隔
+      position: { x: 20, y: 30 + i * CHALLENGE_NODE_H },
+      parentNode: challengeGroupId,
       ...positionProps,
       data: {
         label: c.text.slice(0, 40), text: c.text, claim: c.text, angle, tag: c.tag,
@@ -175,18 +238,34 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
       data: { relationType: '反驳' },
       style: { stroke: sevColor(c.severity), strokeWidth: 1.5, strokeDasharray: '4 4' },
     }
-    // 用 setNodes/setEdges 触发 yjsSync subscribe (push 不会触发引用变化)
     const cur = snap()
     cur.setNodes(cur.nodes.concat([newNode]))
     cur.setEdges(cur.edges.concat([newEdge]))
     newChallengeIds.push(cid)
 
-    emit({ stage: 'refute', count: i + 1, total: challenges.length, current: c.text.slice(0, 30),
-      message: `反驳 ${i + 1}/${challenges.length}: ${c.text.slice(0, 24)}...` })
+    emit({ stage: 'refute', count: i + 1, total: ordered.length, current: c.text.slice(0, 30),
+      message: `反驳 ${i + 1}/${ordered.length}: ${c.text.slice(0, 24)}...` })
     const role = personaId === 'audit' ? '审计师' : personaId === 'socratic' ? '苏格拉底' : '杠精'
     try { ales.pushDebate({ role, text: c.text, severity: c.severity }) } catch {}
-    if (i < challenges.length - 1) await sleep(600)
+    if (i < ordered.length - 1) await sleep(600)
   }
+
+  // 4.2) Telegram-style 简短反驳汇总 (按 severity 分级) — 触发自定义事件让 UI 层去 toast/推送
+  try {
+    const grouped = { critical: [], high: [], medium: [], low: [] }
+    for (const c of ordered) (grouped[c.severity] || grouped.low).push(c.text.slice(0, 60))
+    const summary = [
+      grouped.critical.length ? `🚨 严重 ${grouped.critical.length}: ${grouped.critical.join(' / ')}` : null,
+      grouped.high.length ? `⚠ 高危 ${grouped.high.length}: ${grouped.high.join(' / ')}` : null,
+      grouped.medium.length ? `· 中等 ${grouped.medium.length}: ${grouped.medium.join(' / ')}` : null,
+      grouped.low.length ? `· 一般 ${grouped.low.length}: ${grouped.low.join(' / ')}` : null,
+    ].filter(Boolean).join('\n')
+    if (typeof window !== 'undefined' && summary) {
+      window.dispatchEvent(new CustomEvent('aletheia:challenge-summary', {
+        detail: { summary, grouped, count: ordered.length, ts },
+      }))
+    }
+  } catch {}
 
   // 5) 综合
   emit({ stage: 'synthesize', message: '综合反驳与提议, 产出 Action Plan...' })
@@ -212,6 +291,7 @@ export async function runAletheiaCycle({ canvasNodes, canvasEdges, store, onProg
       actionItems: r.actionItems || [],
       risks: r.risks || [],
       healthScore: r.healthScore,
+      healthBreakdown: r.healthBreakdown || null,
       sourceProposerIds: proposers.map((p) => p.id),
       sourceRefuterIds: newChallengeIds,
       ts: r.ts,

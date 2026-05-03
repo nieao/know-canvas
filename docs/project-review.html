@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ALETHEIA · 一份给关心 AI 决策的人的诚恳回顾</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;600;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06080d;
+  --bg-2:#0a0e18;
+  --panel:#0e1320;
+  --panel-2:#121827;
+  --border:#1a2234;
+  --border-hi:#2a3552;
+  --text:#e8edf6;
+  --text-dim:#8a95ad;
+  --text-mute:#5a6680;
+  --cyan:#00e5ff;
+  --cyan-dim:#0097a7;
+  --magenta:#ff4081;
+  --violet:#b388ff;
+  --amber:#ffb74d;
+  --warm:#c8a882;
+  --warm-light:#e8d5c0;
+  --warm-bg:#1a1612;
+  --lime:#a7f432;
+  --red:#ff5263;
+  --grid:rgba(255,255,255,0.025);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:var(--bg);color:var(--text);
+  font-family:"Noto Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  font-weight:300;line-height:1.85;-webkit-font-smoothing:antialiased;
+  scroll-behavior:smooth;
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:-2;
+  background:
+    radial-gradient(ellipse 60% 40% at 15% 5%, rgba(0,229,255,0.07), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 85%, rgba(255,64,129,0.05), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 50%, rgba(200,168,130,0.04), transparent 70%),
+    linear-gradient(180deg,var(--bg) 0%,var(--bg-2) 100%);
+}
+body::after{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:64px 64px;
+  mask-image:radial-gradient(ellipse at center,black 30%,transparent 90%);
+}
+
+a{color:inherit;text-decoration:none}
+
+/* ===== Top progress + nav ===== */
+.progress-bar{position:fixed;top:0;left:0;height:2px;background:var(--warm);width:0%;z-index:100;transition:width 0.1s}
+
+.topbar{
+  position:fixed;top:0;left:0;right:0;z-index:50;
+  padding:18px 36px;
+  background:rgba(6,8,13,0.7);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:"JetBrains Mono",monospace;font-size:0.7rem;letter-spacing:0.2em;color:var(--text-mute);
+}
+.topbar .brand{color:var(--warm);font-weight:500}
+.topbar .brand::before{content:"◈ ";color:var(--cyan)}
+.topbar nav{display:flex;gap:28px}
+.topbar nav a{transition:color 0.3s;cursor:pointer}
+.topbar nav a:hover{color:var(--warm)}
+.topbar .meta{font-size:0.62rem}
+
+/* ===== Container ===== */
+.container{max-width:1280px;margin:0 auto;padding:140px 48px 120px}
+.section{padding:80px 0;position:relative}
+.section + .section{border-top:1px solid var(--border)}
+
+/* ===== Hero ===== */
+.hero{padding-top:60px;text-align:center;position:relative}
+.hero .tag{
+  font-family:"JetBrains Mono",monospace;font-size:0.7rem;letter-spacing:0.4em;
+  color:var(--warm);margin-bottom:36px;text-transform:uppercase;
+}
+.hero h1{
+  font-family:"Noto Serif SC",serif;font-weight:900;
+  font-size:clamp(2.8rem,7vw,5.6rem);
+  line-height:1.05;letter-spacing:-0.02em;
+  margin-bottom:32px;
+}
+.hero h1 .sub{
+  display:block;background:linear-gradient(135deg,var(--cyan) 0%,var(--magenta) 50%,var(--warm) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  font-size:0.8em;margin-top:12px;
+}
+.hero .lead{
+  max-width:760px;margin:0 auto;
+  font-size:1.18rem;color:var(--text-dim);line-height:1.85;
+}
+.hero .greek{
+  margin-top:48px;padding:32px;
+  border:1px solid var(--border);border-left:3px solid var(--warm);
+  background:var(--warm-bg);border-radius:2px;
+  max-width:680px;margin-left:auto;margin-right:auto;
+  text-align:left;
+}
+.hero .greek-label{
+  font-family:"JetBrains Mono",monospace;font-size:0.62rem;letter-spacing:0.4em;
+  color:var(--warm);margin-bottom:10px;
+}
+.hero .greek-zh{font-family:"Noto Serif SC",serif;font-size:1.4rem;color:var(--text);margin-bottom:8px}
+.hero .greek-en{color:var(--text-dim);font-size:0.92rem;font-style:italic}
+
+.hero .stats{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:24px;
+  margin-top:64px;
+}
+.hero .stat{
+  padding:24px;background:var(--panel);border:1px solid var(--border);
+  border-radius:2px;position:relative;overflow:hidden;
+}
+.hero .stat::after{
+  content:"";position:absolute;left:0;bottom:0;height:2px;width:30%;
+  background:var(--cyan);
+}
+.hero .stat:nth-child(2)::after{background:var(--magenta);width:50%}
+.hero .stat:nth-child(3)::after{background:var(--lime);width:80%}
+.hero .stat:nth-child(4)::after{background:var(--warm);width:100%}
+.hero .stat .l{font-family:"JetBrains Mono",monospace;font-size:0.62rem;letter-spacing:0.2em;color:var(--text-mute);text-transform:uppercase;margin-bottom:8px}
+.hero .stat .v{font-family:"Noto Serif SC",serif;font-size:1.6rem;font-weight:700;color:var(--text)}
+.hero .stat .v .u{font-size:0.7rem;color:var(--cyan);margin-left:4px;font-family:"JetBrains Mono",monospace;font-weight:400}
+
+/* ===== Section anatomy ===== */
+.section-num{
+  font-family:"JetBrains Mono",monospace;font-size:0.66rem;letter-spacing:0.4em;
+  color:var(--text-mute);margin-bottom:14px;
+}
+.section-num .n{color:var(--warm);font-weight:500}
+.section-title{
+  font-family:"Noto Serif SC",serif;font-weight:700;
+  font-size:clamp(2rem,4vw,3.2rem);line-height:1.2;
+  letter-spacing:-0.01em;margin-bottom:24px;
+}
+.section-title .accent{color:var(--warm)}
+.section-title .em{
+  background:linear-gradient(120deg,var(--cyan) 0%,var(--magenta) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.section-lead{
+  max-width:920px;font-size:1.1rem;color:var(--text-dim);line-height:1.85;
+  margin-bottom:48px;
+}
+
+/* ===== Grids ===== */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.grid-2-asym{display:grid;grid-template-columns:1fr 1.4fr;gap:32px}
+.grid-1-2{display:grid;grid-template-columns:1.4fr 1fr;gap:32px}
+@media(max-width:900px){.grid-2,.grid-3,.grid-2-asym,.grid-1-2{grid-template-columns:1fr}}
+
+/* ===== Panels ===== */
+.panel{
+  background:var(--panel);
+  border:1px solid var(--border);border-radius:3px;
+  padding:32px;
+  transition:all 0.4s cubic-bezier(0.22,1,0.36,1);
+  position:relative;
+}
+.panel:hover{border-color:var(--warm);transform:translateY(-3px)}
+.panel-cap{
+  font-family:"JetBrains Mono",monospace;font-size:0.66rem;letter-spacing:0.22em;
+  color:var(--text-mute);text-transform:uppercase;margin-bottom:20px;
+}
+.panel-cap::before{content:"▸ ";color:var(--cyan)}
+.panel h3{
+  font-family:"Noto Serif SC",serif;font-size:1.25rem;font-weight:600;
+  margin-bottom:16px;line-height:1.4;
+}
+.panel p{color:var(--text-dim);font-size:0.94rem;line-height:1.85}
+.panel p + p{margin-top:14px}
+.panel b{color:var(--text);font-weight:500;white-space:nowrap}
+.panel .em{color:var(--cyan)}
+.panel .hl{color:var(--warm)}
+.panel .mag{color:var(--magenta)}
+
+/* ===== Pain card (痛点) ===== */
+.pain-card{
+  padding:32px;background:var(--panel);
+  border:1px solid var(--border);border-left:3px solid var(--magenta);
+  border-radius:2px;position:relative;
+}
+.pain-card .num{
+  font-family:"Noto Serif SC",serif;font-size:3.5rem;font-weight:900;
+  color:var(--magenta);opacity:0.25;
+  position:absolute;top:18px;right:24px;line-height:1;
+}
+.pain-card h3{font-family:"Noto Serif SC",serif;font-size:1.35rem;margin-bottom:14px;color:var(--text)}
+.pain-card .scene{
+  font-style:italic;color:var(--warm);font-size:0.94rem;
+  margin-bottom:14px;padding-left:16px;border-left:2px solid var(--warm-light);
+}
+.pain-card p{color:var(--text-dim);font-size:0.92rem}
+
+/* ===== List ===== */
+.tlist{display:flex;flex-direction:column;gap:14px;margin-top:8px}
+.tlist li{
+  list-style:none;display:flex;gap:14px;align-items:flex-start;
+  font-size:0.94rem;color:var(--text-dim);line-height:1.7;
+}
+.tlist li::before{
+  content:"";flex-shrink:0;
+  width:7px;height:7px;border-radius:50%;
+  background:var(--cyan);margin-top:9px;box-shadow:0 0 8px rgba(0,229,255,0.4);
+}
+.tlist li.warm::before{background:var(--warm);box-shadow:0 0 8px rgba(200,168,130,0.4)}
+.tlist li.magenta::before{background:var(--magenta);box-shadow:0 0 8px rgba(255,64,129,0.4)}
+.tlist li.lime::before{background:var(--lime);box-shadow:0 0 8px rgba(167,244,50,0.4)}
+.tlist li b{color:var(--text);font-weight:500;white-space:nowrap}
+.tlist li code{background:var(--bg-2);padding:1px 6px;border-radius:2px;color:var(--amber);font-size:0.84rem;border:1px solid var(--border);white-space:nowrap}
+
+/* ===== Quote / 金句 ===== */
+.quote-block{
+  margin:48px 0;padding:48px 56px;
+  background:linear-gradient(135deg,#0d1422 0%,#161e2d 50%,#0d1422 100%);
+  border:1px solid var(--border);border-radius:3px;
+  position:relative;
+}
+.quote-block::before{
+  content:"\201C";position:absolute;top:14px;left:32px;
+  font-family:"Noto Serif SC",serif;font-size:6rem;line-height:1;
+  color:var(--warm);opacity:0.5;
+}
+.quote-block .q-text{
+  font-family:"Noto Serif SC",serif;font-size:1.55rem;
+  line-height:1.65;color:var(--text);
+  margin-left:48px;font-weight:400;
+}
+.quote-block .q-text .key{color:var(--warm)}
+.quote-block .q-attr{
+  margin-left:48px;margin-top:18px;
+  font-family:"JetBrains Mono",monospace;font-size:0.7rem;
+  letter-spacing:0.2em;color:var(--text-mute);
+}
+.quote-block .q-attr::before{content:"— "}
+
+/* ===== Pull quote (小金句) ===== */
+.pull{
+  padding:24px 32px;
+  background:var(--warm-bg);border-left:3px solid var(--warm);
+  font-family:"Noto Serif SC",serif;font-size:1.15rem;
+  font-weight:400;font-style:italic;color:var(--text);line-height:1.65;
+  margin:24px 0;border-radius:0 2px 2px 0;
+}
+.pull .src{
+  display:block;margin-top:10px;
+  font-family:"JetBrains Mono",monospace;font-size:0.65rem;
+  letter-spacing:0.2em;color:var(--warm);font-style:normal;
+}
+
+/* ===== Demo example showcase (上海旅行案例) ===== */
+.demo-showcase{
+  background:linear-gradient(135deg,var(--panel) 0%,var(--panel-2) 100%);
+  border:1px solid var(--border);border-radius:3px;
+  padding:40px;
+}
+.demo-showcase .input-line{
+  font-family:"JetBrains Mono",monospace;font-size:0.78rem;
+  background:var(--bg-2);padding:18px 24px;
+  border-left:3px solid var(--cyan);margin-bottom:32px;
+  color:var(--text);
+}
+.demo-showcase .input-line .label{color:var(--cyan);margin-right:12px;letter-spacing:0.2em;font-size:0.66rem}
+.demo-flow{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:24px}
+.demo-step{
+  padding:14px 10px;background:var(--bg-2);
+  border:1px solid var(--border);border-radius:2px;text-align:center;
+  font-size:0.82rem;
+  position:relative;
+}
+.demo-step .stage{font-family:"JetBrains Mono",monospace;font-size:0.55rem;letter-spacing:0.2em;color:var(--warm);margin-bottom:6px}
+.demo-step .name{color:var(--text);font-weight:500}
+.demo-step:not(:last-child)::after{
+  content:"→";position:absolute;right:-10px;top:50%;transform:translateY(-50%);
+  color:var(--warm);font-size:0.9rem;z-index:2;
+}
+.demo-step.score{background:var(--warm-bg);border-color:var(--warm)}
+.demo-step.score .stage{color:var(--lime)}
+.demo-roles{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+  margin-top:24px;
+}
+.demo-role{
+  padding:14px 18px;background:var(--bg-2);border:1px dashed var(--border-hi);border-radius:2px;
+  font-size:0.85rem;color:var(--text-dim);
+}
+.demo-role b{color:var(--cyan);display:block;font-size:0.78rem;margin-bottom:4px;font-family:"JetBrains Mono",monospace;letter-spacing:0.15em}
+.demo-risks{margin-top:32px;display:flex;flex-direction:column;gap:10px}
+.demo-risk{
+  padding:14px 18px;background:var(--bg-2);border-radius:2px;font-size:0.86rem;color:var(--text-dim);
+  border-left:3px solid var(--text-mute);position:relative;padding-left:24px;
+  display:flex;align-items:center;gap:14px;
+}
+.demo-risk.high{border-left-color:var(--red)}
+.demo-risk.mid{border-left-color:var(--amber)}
+.demo-risk.low{border-left-color:var(--lime)}
+.demo-risk .level{
+  font-family:"JetBrains Mono",monospace;font-size:0.62rem;letter-spacing:0.2em;
+  padding:3px 8px;border-radius:2px;flex-shrink:0;
+}
+.demo-risk.high .level{background:rgba(255,82,99,0.15);color:var(--red)}
+.demo-risk.mid .level{background:rgba(255,183,77,0.15);color:var(--amber)}
+.demo-risk.low .level{background:rgba(167,244,50,0.15);color:var(--lime)}
+
+/* ===== Three button cards ===== */
+.btn-card{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:3px;padding:36px 32px;position:relative;
+  display:flex;flex-direction:column;gap:14px;
+  transition:all 0.5s cubic-bezier(0.22,1,0.36,1);
+  overflow:hidden;
+}
+.btn-card::before{
+  content:"";position:absolute;top:0;left:0;height:3px;width:0%;
+  transition:width 0.6s cubic-bezier(0.22,1,0.36,1);
+}
+.btn-card:hover{transform:translateY(-4px)}
+.btn-card.meta:hover{border-color:var(--cyan)}
+.btn-card.meta:hover::before{width:100%;background:var(--cyan)}
+.btn-card.dec:hover{border-color:var(--warm)}
+.btn-card.dec:hover::before{width:100%;background:var(--warm)}
+.btn-card.chal:hover{border-color:var(--magenta)}
+.btn-card.chal:hover::before{width:100%;background:var(--magenta)}
+.btn-card .icon{
+  width:54px;height:54px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.4rem;
+  border:1px solid var(--border-hi);background:var(--bg-2);
+  margin-bottom:6px;
+}
+.btn-card.meta .icon{color:var(--cyan);border-color:var(--cyan)}
+.btn-card.dec .icon{color:var(--warm);border-color:var(--warm)}
+.btn-card.chal .icon{color:var(--magenta);border-color:var(--magenta)}
+.btn-card .stage{
+  font-family:"JetBrains Mono",monospace;font-size:0.66rem;
+  color:var(--text-mute);letter-spacing:0.2em;text-transform:uppercase;
+}
+.btn-card h3{font-family:"Noto Serif SC",serif;font-size:1.35rem;font-weight:600;line-height:1.3}
+.btn-card .desc{color:var(--text-dim);font-size:0.92rem;line-height:1.8;flex-grow:1}
+.btn-card code{background:var(--bg-2);padding:1px 6px;border-radius:2px;color:var(--amber);font-size:0.8rem;border:1px solid var(--border);white-space:nowrap}
+
+/* ===== Spectrum slider mockup (反驳人格) ===== */
+.persona-spectrum{
+  margin-top:24px;padding:24px;
+  background:var(--bg-2);border:1px solid var(--border);border-radius:2px;
+}
+.persona-spectrum .label{
+  font-family:"JetBrains Mono",monospace;font-size:0.62rem;letter-spacing:0.25em;
+  color:var(--magenta);text-transform:uppercase;margin-bottom:18px;
+}
+.persona-track{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:0;
+  border-radius:2px;overflow:hidden;
+  border:1px solid var(--border);
+}
+.persona-cell{
+  padding:14px;text-align:center;
+  font-size:0.85rem;color:var(--text-dim);
+  background:var(--panel);
+  cursor:pointer;transition:all 0.3s;
+  border-right:1px solid var(--border);
+}
+.persona-cell:last-child{border-right:0}
+.persona-cell .role{display:block;color:var(--text);font-weight:500;margin-bottom:4px}
+.persona-cell .vibe{font-size:0.75rem;color:var(--text-mute)}
+.persona-cell.active{background:var(--magenta);color:#0a0e18}
+.persona-cell.active .role,.persona-cell.active .vibe{color:#0a0e18}
+
+/* ===== Architecture diagram ===== */
+.arch-diagram{
+  margin-top:24px;padding:32px;
+  background:var(--bg-2);border:1px solid var(--border);border-radius:3px;
+  position:relative;
+}
+.arch-layer{
+  padding:14px 24px;border-radius:2px;
+  font-family:"JetBrains Mono",monospace;font-size:0.78rem;letter-spacing:0.15em;
+  margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;
+  border:1px solid var(--border);
+}
+.arch-layer .lname{color:var(--text);font-weight:500}
+.arch-layer .ldesc{font-size:0.7rem;color:var(--text-mute)}
+.arch-layer.l1{border-left:3px solid var(--cyan)}
+.arch-layer.l2{border-left:3px solid var(--warm)}
+.arch-layer.l3{border-left:3px solid var(--magenta)}
+.arch-arrow{
+  text-align:center;color:var(--warm);font-size:0.9rem;margin:4px 0;letter-spacing:0.5em;
+  position:relative;
+}
+
+/* ===== Collab visual ===== */
+.collab-board{
+  margin-top:32px;padding:48px;
+  background:radial-gradient(ellipse at center, var(--panel-2) 0%, var(--bg-2) 100%);
+  border:1px solid var(--border);border-radius:3px;
+  position:relative;min-height:280px;
+}
+.collab-cursor{
+  position:absolute;width:14px;height:14px;border-radius:50%;
+  border:2px solid;
+  display:flex;align-items:center;justify-content:center;
+  font-family:"JetBrains Mono",monospace;font-size:0.62rem;
+  white-space:nowrap;
+}
+.collab-cursor::before{
+  content:"";position:absolute;width:18px;height:18px;border-radius:50%;
+  border:1px solid currentColor;opacity:0.4;
+  animation:pulse-out 1.8s ease-out infinite;
+}
+.collab-cursor .label{
+  position:absolute;top:18px;left:18px;
+  background:var(--bg);padding:3px 8px;border-radius:2px;
+  border:1px solid currentColor;letter-spacing:0.1em;
+}
+.collab-cursor.a{top:30%;left:18%;border-color:#ef4444;color:#ef4444}
+.collab-cursor.b{top:60%;left:50%;border-color:#22c55e;color:#22c55e}
+.collab-cursor.c{top:35%;left:75%;border-color:#3b82f6;color:#3b82f6}
+@keyframes pulse-out{0%{transform:scale(1);opacity:0.6}100%{transform:scale(2.2);opacity:0}}
+
+.collab-canvas-mock{
+  position:absolute;inset:30%;
+  border:1px dashed var(--border-hi);border-radius:2px;
+  background:rgba(255,255,255,0.01);
+}
+.collab-caption{
+  position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
+  font-family:"JetBrains Mono",monospace;font-size:0.62rem;letter-spacing:0.2em;
+  color:var(--text-mute);
+}
+
+/* ===== Persona / team cards ===== */
+.team-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+@media(max-width:760px){.team-grid{grid-template-columns:1fr}}
+.team-card{
+  padding:28px;background:var(--panel);
+  border:1px solid var(--border);border-radius:3px;
+  text-align:center;position:relative;
+  transition:all 0.4s;
+}
+.team-card:hover{border-color:var(--warm);transform:translateY(-3px)}
+.team-card .avatar{
+  width:56px;height:56px;border-radius:50%;
+  margin:0 auto 16px;
+  background:var(--bg-2);border:1px solid var(--border-hi);
+  display:flex;align-items:center;justify-content:center;
+  font-family:"Noto Serif SC",serif;font-size:1.4rem;font-weight:600;
+}
+.team-card.a .avatar{color:#ef4444;border-color:#ef4444}
+.team-card.b .avatar{color:#22c55e;border-color:#22c55e}
+.team-card.c .avatar{color:#3b82f6;border-color:#3b82f6}
+.team-card .name{font-family:"Noto Serif SC",serif;font-size:1.2rem;font-weight:600;color:var(--text);margin-bottom:6px}
+.team-card .role{font-family:"JetBrains Mono",monospace;font-size:0.7rem;letter-spacing:0.2em;color:var(--warm);text-transform:uppercase;margin-bottom:14px}
+.team-card .desc{color:var(--text-dim);font-size:0.86rem;line-height:1.7}
+
+/* ===== Timeline ===== */
+.timeline{
+  position:relative;padding-left:32px;
+  border-left:1px solid var(--border-hi);
+  display:flex;flex-direction:column;gap:24px;
+}
+.timeline-item{position:relative}
+.timeline-item::before{
+  content:"";position:absolute;left:-37px;top:6px;
+  width:10px;height:10px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 12px rgba(0,229,255,0.6);
+}
+.timeline-item.warm::before{background:var(--warm);box-shadow:0 0 12px rgba(200,168,130,0.5)}
+.timeline-item.lime::before{background:var(--lime);box-shadow:0 0 12px rgba(167,244,50,0.5)}
+.timeline-item.mag::before{background:var(--magenta);box-shadow:0 0 12px rgba(255,64,129,0.5)}
+.timeline-item .ts{
+  font-family:"JetBrains Mono",monospace;font-size:0.7rem;
+  color:var(--cyan);letter-spacing:0.15em;display:block;margin-bottom:4px;
+}
+.timeline-item .label{font-weight:500;color:var(--text);font-size:1rem;display:block;margin-bottom:6px}
+.timeline-item .desc{color:var(--text-dim);font-size:0.88rem;line-height:1.7}
+
+/* ===== Footer ===== */
+.footer{
+  padding:80px 0 64px;text-align:center;border-top:1px solid var(--border);
+}
+.footer h2{font-family:"Noto Serif SC",serif;font-size:2rem;font-weight:700;margin-bottom:24px;color:var(--text)}
+.footer h2 .accent{color:var(--warm)}
+.footer .sig{
+  font-family:"JetBrains Mono",monospace;font-size:0.74rem;letter-spacing:0.2em;
+  color:var(--text-mute);line-height:2;
+}
+.footer .sig .names{color:var(--warm)}
+.footer .sig::before{content:"◈ ";color:var(--cyan)}
+
+/* ===== Animations ===== */
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+.reveal{opacity:0;transform:translateY(30px)}
+.reveal.in{animation:fadeUp 0.9s cubic-bezier(0.22,1,0.36,1) forwards}
+
+/* responsive */
+@media(max-width:760px){
+  .container{padding:120px 24px 80px}
+  .topbar{padding:14px 20px}
+  .topbar nav{display:none}
+  .demo-flow{grid-template-columns:1fr;gap:12px}
+  .demo-step:not(:last-child)::after{content:"↓";right:50%;top:auto;bottom:-14px;transform:translateX(50%)}
+  .quote-block{padding:36px 24px}
+  .quote-block::before{font-size:4rem;left:14px}
+  .quote-block .q-text,.quote-block .q-attr{margin-left:24px}
+  .hero .stats{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progress"></div>
+
+<header class="topbar">
+  <div class="brand">ALETHEIA · 项目回顾</div>
+  <nav>
+    <a href="#origin">起点</a>
+    <a href="#why-meta">元认知</a>
+    <a href="#why-collab">共享画布</a>
+    <a href="#what">做了什么</a>
+    <a href="#team">团队</a>
+  </nav>
+  <div class="meta">2026-05-03 · v0.2</div>
+</header>
+
+<main class="container">
+
+  <!-- ============== HERO ============== -->
+  <section class="hero reveal">
+    <div class="tag">// 项目回顾 · A SINCERE LOOKBACK</div>
+    <h1>
+      把 AI 的"思考过程"<br>
+      <span class="sub">从黑箱里拖出来,<br>放在一张可反驳的画布上.</span>
+    </h1>
+    <p class="lead">
+      这不是又一个 AI 工具的 demo. 这是三个人在 48 小时里, 试图回答一个问题:
+      <b style="color:var(--warm);font-weight:500">当 AI 帮你做决策, 你怎么知道它没在自嗨? 怎么知道它没把你也带进自嗨?</b>
+    </p>
+
+    <div class="greek">
+      <div class="greek-label">名字的来源</div>
+      <div class="greek-zh">ALETHEIA · ἀλήθεια</div>
+      <div class="greek-en">古希腊语. 意思是"无遮蔽" — 真理不是被发明的, 是被一层层遮蔽剥掉之后, 自己显现的.</div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="l">耗时</div><div class="v">48<span class="u">小时</span></div></div>
+      <div class="stat"><div class="l">Token 成本</div><div class="v">&lt; 5<span class="u">¥ / 三天</span></div></div>
+      <div class="stat"><div class="l">协作者</div><div class="v">3<span class="u">人</span></div></div>
+      <div class="stat"><div class="l">自评</div><div class="v">85<span class="u">分</span></div></div>
+    </div>
+  </section>
+
+  <!-- ============== 1. 起点 / 初衷 ============== -->
+  <section class="section reveal" id="origin">
+    <div class="section-num"><span class="n">01</span> · ORIGIN · 一切的起点</div>
+    <h2 class="section-title">我们做这个东西的初衷, <span class="accent">其实很狼狈</span>.</h2>
+    <p class="section-lead">
+      不是看到 AI 风口要做产品. 是我们自己在团队头脑风暴里反复经历的两件事 — 它们把我们逼到必须做点什么.
+    </p>
+
+    <div class="grid-2">
+      <div class="pain-card">
+        <div class="num">01</div>
+        <h3>团队总在<b style="color:var(--magenta);font-weight:500">未验证的假设</b>上推进工作</h3>
+        <p class="scene">
+          "这个用户肯定愿意付费的." "这个市场肯定有需求." "这个技术肯定能跑通."
+        </p>
+        <p>三个"肯定"凑在一起, 三周后做出来一看, 离实际偏了 80%. 项目从开始那天起, 就在一个**没人去戳的气泡**里飞.</p>
+      </div>
+
+      <div class="pain-card">
+        <div class="num">02</div>
+        <h3>团队总因为<b style="color:var(--magenta);font-weight:500">认知分歧吵架</b></h3>
+        <p class="scene">
+          "我以为咱们说好了 A." "什么时候说的? 我记得是 B."
+        </p>
+        <p>每个人脑子里跑着自己版本的项目. 开会三小时还在对齐"我们到底在做啥". <b>不是态度问题, 是没有一张图能让所有人指着同一个东西说话</b>.</p>
+      </div>
+    </div>
+
+    <div class="quote-block">
+      <p class="q-text">
+        我们想做的不是一个 <span class="key">"更快的 AI"</span>, 是一个 <span class="key">"更慢的 AI"</span> —<br>
+        一个会主动停下来问 "你这个假设真的成立吗" 的 AI.<br>
+        一个会让三个人指着同一张画布吵架的 AI.<br>
+        一个把"决策怎么形成的"留下来, 让后来人能"回放"的 AI.
+      </p>
+      <p class="q-attr">ALETHEIA · 立项三句话</p>
+    </div>
+  </section>
+
+  <!-- ============== 2. 为什么需要元认知 ============== -->
+  <section class="section reveal" id="why-meta">
+    <div class="section-num"><span class="n">02</span> · META-COGNITION · 为什么需要元认知 + 对抗逻辑结构</div>
+    <h2 class="section-title">让 AI <span class="em">学会怀疑自己</span>, 比让它给出更多答案重要得多.</h2>
+    <p class="section-lead">
+      元认知 (Meta-cognition) 字面意思是 "对思考的思考". 用人话说就是: <b style="color:var(--text);font-weight:500">在你下结论之前, 先回头看一眼"我刚才是怎么得出这个结论的"</b>. 这一步, 99% 的 AI 工具都没做.
+    </p>
+
+    <div class="grid-2-asym">
+      <div class="panel">
+        <div class="panel-cap">普通 AI 的问题</div>
+        <h3>它给你"很对的废话"</h3>
+        <p>你问 GPT "在上海开咖啡馆怎么样", 它给你一个分点回答 — 选址、定位、装修、引流. 听起来都对. 但你心里清楚: <b class="mag">它没问"你为什么要开咖啡馆"</b>.</p>
+        <p>它绕开了所有<b class="hl">真正可能让你失败的假设</b>, 给你一份漂亮的执行清单. 你拿着清单去做, 三个月后亏完房租. 你回过头来骂 AI? AI 没说错任何一句话.</p>
+        <p style="color:var(--text-mute);font-style:italic;margin-top:18px">→ 这就是"过程不可见 + 结果不可反驳"的真实代价.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-cap">ALETHEIA 的解法</div>
+        <h3>给 AI 装一个<b class="hl">"魔鬼代言人"</b></h3>
+        <p>每当 AI 给出一个方案, 我们让<b class="em">第二个 AI 站出来反驳第一个 AI</b>. 你点一下"反驳"按钮, 系统会从三个角度给你泼冷水:</p>
+        <ul class="tlist">
+          <li class="magenta"><b>市场风险</b> — 这个生态已经饱和了吗?</li>
+          <li class="magenta"><b>合规风险</b> — 这件事政策允许吗?</li>
+          <li class="magenta"><b>运营风险</b> — 谁来执行? 多少钱? 要多久?</li>
+        </ul>
+        <p>每个反驳带<b class="hl">严重度评分</b>. 然后 <b>Hermes 二次验证官</b>给反驳本身打分 — 防止 AI 编造不切实际的论点 (反驳得分超过 70 才算成立).</p>
+        <p style="margin-top:14px"><b>这是一个让 AI 互相杠的系统</b>. 在 AI 互杠的过程中, 你看清楚了所有遮蔽.</p>
+      </div>
+    </div>
+
+    <!-- 上海复古旅行案例 -->
+    <h3 style="font-family:'Noto Serif SC',serif;font-size:1.6rem;margin:64px 0 24px;font-weight:600">
+      <span style="color:var(--warm)">举个例子</span> · 三天上海复古旅行规划
+    </h3>
+    <p class="section-lead" style="margin-bottom:32px">
+      用户输入"我有三天假期想去上海, 喜欢复古建筑, 帮我做最短路线最优规划". 系统不是直接吐答案, 而是这样展开:
+    </p>
+
+    <div class="demo-showcase">
+      <div class="input-line">
+        <span class="label">USER INPUT</span>
+        三天上海旅行, 喜欢复古建筑, 最短路线最优规划.
+      </div>
+
+      <!-- 5 步状态机 -->
+      <div class="demo-flow">
+        <div class="demo-step"><div class="stage">STEP 1</div><div class="name">意图</div></div>
+        <div class="demo-step"><div class="stage">STEP 2</div><div class="name">拆解</div></div>
+        <div class="demo-step"><div class="stage">STEP 3</div><div class="name">执行</div></div>
+        <div class="demo-step"><div class="stage">STEP 4</div><div class="name">反思</div></div>
+        <div class="demo-step score"><div class="stage">SELF</div><div class="name">85 分</div></div>
+      </div>
+
+      <p style="color:var(--text-dim);margin-bottom:14px;font-size:0.9rem">系统自己<b style="color:var(--cyan)">涌现出 3 个角色</b>来分工:</p>
+      <div class="demo-roles">
+        <div class="demo-role"><b>ROLE 1</b>景点调研员 — 收集复古建筑信息</div>
+        <div class="demo-role"><b>ROLE 2</b>路线规划师 — 计算最短路径</div>
+        <div class="demo-role"><b>ROLE 3</b>地图制作师 — 输出可视化路线</div>
+      </div>
+
+      <p style="color:var(--text-dim);margin-top:32px;margin-bottom:14px;font-size:0.9rem">然后系统自己 <b style="color:var(--magenta)">站出来反驳</b> "生成路线地图"这一步:</p>
+      <div class="demo-risks">
+        <div class="demo-risk high"><span class="level">严重</span>制作高质量地图需要专业设计可能<b style="color:var(--text)">超预算</b></div>
+        <div class="demo-risk mid"><span class="level">中等</span>景点信息变更频繁, <b style="color:var(--text)">需要长期维护</b></div>
+        <div class="demo-risk high"><span class="level">严重</span>景点定位不准会导致 <b style="color:var(--text)">导航失败</b></div>
+      </div>
+
+      <p style="color:var(--text-dim);margin-top:24px;font-size:0.9rem">系统也反驳了"全面收集复古景点":</p>
+      <div class="demo-risks">
+        <div class="demo-risk high"><span class="level">严重</span>全面收集会消耗<b style="color:var(--text)">大量时间人力</b></div>
+        <div class="demo-risk mid"><span class="level">外部</span>部分古建筑可能<b style="color:var(--text)">修缮或临时关闭</b></div>
+        <div class="demo-risk low"><span class="level">轻微</span>无法明确用户偏好<b style="color:var(--text)">中式还是西式</b>复古</div>
+      </div>
+    </div>
+
+    <div class="pull">
+      你以为你在规划旅行. 实际上你在 <b style="color:var(--warm)">和自己脑子里那个一厢情愿的版本</b> 对话. ALETHEIA 不替你做决定 — 它把你脑子里那个声音具象化了, 让你能反驳它.
+      <span class="src">— 关于上海旅行案例</span>
+    </div>
+
+    <!-- 三层架构 -->
+    <h3 style="font-family:'Noto Serif SC',serif;font-size:1.4rem;margin:48px 0 24px;font-weight:600">
+      底层架构: <span style="color:var(--warm)">三层双循环</span>
+    </h3>
+    <div class="arch-diagram">
+      <div class="arch-layer l1">
+        <span class="lname">逻辑层 · LOGIC</span>
+        <span class="ldesc">用户意图 → 任务拆解 → 执行步骤. 这是 AI 的"想"</span>
+      </div>
+      <div class="arch-arrow">↕</div>
+      <div class="arch-layer l2">
+        <span class="lname">共识层 · CONSENSUS</span>
+        <span class="ldesc">三人画布同步 + 历史可回放. 这是"我们"的对齐</span>
+      </div>
+      <div class="arch-arrow">↕</div>
+      <div class="arch-layer l3">
+        <span class="lname">对抗引擎 · ADVERSARIAL</span>
+        <span class="ldesc">魔鬼代言人 + Hermes 验证. 这是 AI 的"自我反驳"</span>
+      </div>
+      <p style="color:var(--text-mute);text-align:center;margin-top:18px;font-size:0.78rem;letter-spacing:0.15em;font-family:'JetBrains Mono',monospace">三层之间持续双向循环 · 直到方案经得起推敲</p>
+    </div>
+
+    <!-- 反驳人格 spectrum -->
+    <h3 style="font-family:'Noto Serif SC',serif;font-size:1.4rem;margin:48px 0 16px;font-weight:600">
+      不只是反驳, 你能选 <span style="color:var(--magenta)">怎么反驳</span>
+    </h3>
+    <p style="color:var(--text-dim);margin-bottom:8px">高级设置里有一个滑块, 让你选 AI 的"反驳人格":</p>
+    <div class="persona-spectrum">
+      <div class="label">▸ DEVIL'S ADVOCATE PERSONA</div>
+      <div class="persona-track">
+        <div class="persona-cell"><span class="role">温和建议</span><span class="vibe">像一个善意的同事</span></div>
+        <div class="persona-cell active"><span class="role">风险审计师</span><span class="vibe">条理 · 客观 · 数据驱动</span></div>
+        <div class="persona-cell"><span class="role">杠精模式</span><span class="vibe">什么都怀疑 · 步步紧逼</span></div>
+      </div>
+      <p style="color:var(--text-mute);margin-top:14px;font-size:0.82rem;line-height:1.7">
+        还有一个隐藏选项: <b style="color:var(--cyan);font-weight:500">苏格拉底式提问</b> — 它不直接反驳, 而是问你一连串问题, 让你自己看到漏洞.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============== 3. 为什么需要共享画布 ============== -->
+  <section class="section reveal" id="why-collab">
+    <div class="section-num"><span class="n">03</span> · SHARED CANVAS · 为什么需要共享画布</div>
+    <h2 class="section-title">三个人在三个 ChatGPT 窗口里聊天 — <span class="em">永远对不齐</span>.</h2>
+    <p class="section-lead">
+      这是我们做这个项目时特别真实的一个观察. 团队里 A 在自己电脑上跑 Claude, B 在自己电脑上跑 GPT, C 在飞书群里发指令. <b style="color:var(--text)">三人各自独白, 没人在同一个上下文里</b>. 开会时还要花 20 分钟把"我刚跑了什么"互相同步给对方.
+    </p>
+
+    <div class="grid-1-2">
+      <div>
+        <div class="panel" style="height:100%">
+          <div class="panel-cap">普通工具的限制</div>
+          <h3>对话窗口 = 信息墓地</h3>
+          <p>ChatGPT 的窗口是<b class="mag">单人独白</b>. 每个人脑子里都有"我跟 AI 聊过的东西", 但没人能<b class="hl">直接看到队友跟 AI 聊过的东西</b>.</p>
+          <p>到了下周复盘会, 你想知道"上次那个决定是怎么做的", 你只能在三个人的聊天记录里来回翻 — 而那些记录可能已经被 ChatGPT 自动滚走了.</p>
+          <p style="color:var(--text-mute);font-style:italic;margin-top:14px">→ 决策过程<b style="color:var(--mag)">没有"上帝视角"</b>.</p>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel">
+          <div class="panel-cap">ALETHEIA 的解法</div>
+          <h3>像 Figma, 但 for AI 决策</h3>
+          <p>三人打开同一个 URL, 进入同一个画布. 你能看到队友的<b class="em">实时光标位置</b>, 看到他在哪个节点上停留, 看到他点了"反驳"按钮.</p>
+          <ul class="tlist">
+            <li><b>Yjs CRDT</b> · 零延迟同步, 离线后回来自动合并, 无中心冲突</li>
+            <li class="warm"><b>Awareness 实时光标</b> · 拖动节点时其他屏出现暖色脉冲气泡</li>
+            <li class="lime"><b>Project owner 字段</b> · 卡片上显示 owner 圆点, 一眼看到谁画的</li>
+            <li class="magenta"><b>UndoManager 按 origin</b> · 你撤销自己的, 不会动到别人的</li>
+          </ul>
+        </div>
+
+        <div class="collab-board">
+          <div class="collab-canvas-mock"></div>
+          <div class="collab-cursor a"><span class="label">USER A · 你想猫</span></div>
+          <div class="collab-cursor b"><span class="label">USER B · lichang</span></div>
+          <div class="collab-cursor c"><span class="label">USER C · 小叶子</span></div>
+          <div class="collab-caption">三人光标 · 实时同步</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pull">
+      共享画布最大的价值不是"三个人一起画图". 是 <b style="color:var(--warm)">"领导随时打开就能看到当前进展, 不用再开进度会"</b>. 任何一个人, 不管什么时候来, 看一眼画布, 就知道这个决定是怎么做出来的.
+      <span class="src">— 团队 5/2 晚 22:14 录音</span>
+    </div>
+
+    <!-- 决策回放 -->
+    <h3 style="font-family:'Noto Serif SC',serif;font-size:1.6rem;margin:64px 0 16px;font-weight:600">
+      最关键的能力: <span style="color:var(--warm)">决策回放</span>
+    </h3>
+    <p style="color:var(--text-dim);margin-bottom:32px;line-height:1.85">
+      每完成一步, 系统自动给项目库追加一帧快照 (Commit). 后来人打开画布, 拖动 scrubber 时间轴, 就能看见这个项目<b style="color:var(--text)">从"一个想法"到"最终决定"</b>的全过程. 你可以按项目回放看完整链路, 也可以按用户筛选 — 看"小叶子今天在画布上做了什么".
+    </p>
+
+    <div class="grid-3">
+      <div class="panel">
+        <div class="panel-cap">按项目回放</div>
+        <p>顺序播完整 commits[]. <b>看一个决策从生到熟的过程</b> — 哪一帧加了节点, 哪一帧反驳了, 哪一帧综合定论.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-cap">按用户筛选</div>
+        <p>filter 出某个 owner 的活动帧. <b>看 "小叶子今天在画布上做了什么"</b>, 不用再开会问.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-cap">视觉锁</div>
+        <p>回放时画布外圈暖色脉冲发光 + 顶部 PLAYBACK 标签. <b>编辑全部 noop, 只能看不能改</b>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 4. 我们做了什么 ============== -->
+  <section class="section reveal" id="what">
+    <div class="section-num"><span class="n">04</span> · WHAT WE BUILT · 实际做了什么</div>
+    <h2 class="section-title">没有复杂菜单. <span class="accent">就三个按钮</span>.</h2>
+    <p class="section-lead">
+      ALETHEIA 没有侧边栏, 没有 dashboard, 没有 30 个 tab. 一个本体节点上, 用户能做的就三件事: <b style="color:var(--text)">向上元认知 · 向下拆解 · 横向反驳</b>. 每件事触发一条独立的 AI 链路, 把结果以子节点 / 容器形式连回画布.
+    </p>
+
+    <div class="grid-3">
+      <div class="btn-card meta">
+        <div class="icon">⚡</div>
+        <div class="stage">META · 元认知</div>
+        <h3>从一句话到 6 阶段</h3>
+        <p class="desc">输入一个目标, 自动展开 <code>意图 → 拆解 → 角色涌现 → 拓扑 → 执行 → 反思</code>. 每完成一步在项目库自动 commit 一帧, 后续可时间轴回放.</p>
+      </div>
+      <div class="btn-card dec">
+        <div class="icon">⬇</div>
+        <div class="stage">DECOMPOSE · 拆解</div>
+        <h3>本体节点的"再追问"</h3>
+        <p class="desc">点 ENTITY 节点上的拆解, 把它再细分为子本体节点 (像剥洋葱). 限制 3 层防失控. 帮你<b style="color:var(--warm)">查漏补缺, 把虚无飘渺变成可落地清单</b>.</p>
+      </div>
+      <div class="btn-card chal">
+        <div class="icon">⚖</div>
+        <div class="stage">CHALLENGE · 反驳</div>
+        <h3>魔鬼代言人压力测试</h3>
+        <p class="desc">点反驳, 自动生成 3-5 张挑战卡 (角度 · 论点 · 严重度 · 修复 todo). 每张卡都能调 <b style="color:var(--magenta)">Hermes 二次验证</b> 给反驳本身打可信度分 (>70 才成立).</p>
+      </div>
+    </div>
+
+    <!-- 场景模板 -->
+    <h3 style="font-family:'Noto Serif SC',serif;font-size:1.4rem;margin:48px 0 16px;font-weight:600">
+      <span style="color:var(--warm)">三种场景模板</span> · 一套引擎, 三种侧重
+    </h3>
+    <div class="grid-3">
+      <div class="panel">
+        <div class="panel-cap" style="color:var(--cyan)">to B · 企业决策</div>
+        <p>侧重<b class="em">合规 + 风险审计 + ROI 测算</b>. 反驳人格默认"风险审计师", 调高合规权重.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-cap" style="color:var(--lime)">to C · 个人方案</div>
+        <p>侧重<b style="color:var(--lime)">情绪共鸣 + 体验路径 + 性价比</b>. 反驳人格默认"温和建议", 调高商业敏锐度.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-cap" style="color:var(--magenta)">to G · 政府公共</div>
+        <p>侧重<b class="mag">合规 + 公平性 + 社会影响</b>. 反驳人格默认"杠精模式", 调高一致性权重.</p>
+      </div>
+    </div>
+
+    <!-- 3 元钱 -->
+    <div class="quote-block" style="margin-top:48px">
+      <p class="q-text">
+        三天开发, 总 token 成本 <span class="key">不到 5 块钱</span>.<br>
+        演示一天的调用花费 <span class="key">2 元多</span>.<br>
+        <span style="font-size:0.92rem;color:var(--text-dim);font-style:italic">— 用 AI 帮你做更聪明的决策, 比一杯咖啡还便宜.</span>
+      </p>
+      <p class="q-attr">ALETHEIA · 实测成本</p>
+    </div>
+  </section>
+
+  <!-- ============== 5. 团队 ============== -->
+  <section class="section reveal" id="team">
+    <div class="section-num"><span class="n">05</span> · TEAM · 三个人 · 48 小时</div>
+    <h2 class="section-title">不是大厂团队. <span class="accent">就是三个不同地方的人</span>, 在飞书群里凑起来.</h2>
+
+    <div class="team-grid">
+      <div class="team-card a">
+        <div class="avatar">L</div>
+        <div class="name">lichang</div>
+        <div class="role">HERMES 框架策划</div>
+        <div class="desc">把 Hermes 决策中台与画布对接. 负责整个调度层的设计, 让任务路由到 DeepSeek / 本地 Agent / Hermes 各得其所.</div>
+      </div>
+      <div class="team-card b">
+        <div class="avatar">叶</div>
+        <div class="name">小叶子</div>
+        <div class="role">产品策划</div>
+        <div class="desc">从用户的真实痛点出发, 定义"三个核心按钮"的产品语义. 决定不做"大而全的 dashboard", 只做"三件事说清楚".</div>
+      </div>
+      <div class="team-card c">
+        <div class="avatar">猫</div>
+        <div class="name">你想猫</div>
+        <div class="role">架构策划</div>
+        <div class="desc">React Flow + Yjs 协作画布的架构师. 把"元认知 5 步状态机"落到节点 / 边 / 容器三层数据模型上, 还兜底了 4 轮 hidden 模式 bug.</div>
+      </div>
+    </div>
+
+    <h3 style="font-family:'Noto Serif SC',serif;font-size:1.4rem;margin:64px 0 24px;font-weight:600">
+      48 小时是怎么过的
+    </h3>
+    <div class="timeline">
+      <div class="timeline-item warm">
+        <span class="ts">5/2 上午 11:20</span>
+        <span class="label">三人组队会 · 黑客松</span>
+        <span class="desc">否定了"做 4 个独立 AI 工具"的拼盘思路. 选择"画布 + 元认知 + 反驳"装进同一张图.</span>
+      </div>
+      <div class="timeline-item">
+        <span class="ts">5/2 下午</span>
+        <span class="label">框架与交互逻辑确定</span>
+        <span class="desc">三层双循环架构定稿. 飞秒秒搭出 V1-V7 七版原型, 选定 V1+V2 (V7 太抽象).</span>
+      </div>
+      <div class="timeline-item lime">
+        <span class="ts">5/2 晚 20:09 - 22:14</span>
+        <span class="label">技术架构会 + Hermes 拉通</span>
+        <span class="desc">DeepSeek API 对接成功. 反驳校验只在完整方案后触发, 不每步做 (省 token). 25 个未提交文件合并锁定 V1 原型.</span>
+      </div>
+      <div class="timeline-item">
+        <span class="ts">5/3 上午</span>
+        <span class="label">软件开发与 bug 修复</span>
+        <span class="desc">React Flow 主干模式 hidden 崩溃 — 4 轮迭代到 cascade hidden + filter 才彻底.</span>
+      </div>
+      <div class="timeline-item warm">
+        <span class="ts">5/3 下午</span>
+        <span class="label">测试 + 节点组团调优</span>
+        <span class="desc">collision 用真实尺寸, 偏移上限 1600px. 三人头像 + 用户筛选 + 时间轴回放全跑通.</span>
+      </div>
+      <div class="timeline-item mag">
+        <span class="ts">5/3 晚 20:11 路演</span>
+        <span class="label">向所有人展示这个东西</span>
+        <span class="desc">用"三天上海复古旅行规划"演示元认知 + 拆解 + 反驳全链路. 系统给自己打了 85 分.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 6. 金句 ============== -->
+  <section class="section reveal" id="quotes">
+    <div class="section-num"><span class="n">06</span> · QUOTES · 我们想留下的几句话</div>
+    <h2 class="section-title"><span class="em">画布是过程</span>, 不是结果.</h2>
+
+    <div class="quote-block">
+      <p class="q-text">
+        虽然它可以帮你做决策, 也可以帮你反驳, 但是<span class="key">最后的核心点还是在人的判断上面</span>. <span class="key">最后的决定权还是在你手上</span>.
+      </p>
+      <p class="q-attr">5/3 晚 路演现场 · 答评委</p>
+    </div>
+
+    <div class="quote-block">
+      <p class="q-text">
+        在人机交互的时代, 这是最好的结果 — 我们通过更好地利用 AI, <span class="key">帮助我们最大化做出最好的决策</span>. 这就是 AI 时代能带给我们最好的福利了.
+      </p>
+      <p class="q-attr">5/3 晚 路演现场 · 收尾</p>
+    </div>
+
+    <div class="quote-block">
+      <p class="q-text">
+        不要把 AI 当成 <span class="key">"替你思考的工具"</span>.<br>
+        把它当成 <span class="key">"陪你思考的人"</span> —<br>
+        <span style="font-size:0.94rem;color:var(--text-dim);font-style:italic">而且最好是那种, 你说啥它都先反着想一遍的那种朋友.</span>
+      </p>
+      <p class="q-attr">ALETHEIA · 设计哲学</p>
+    </div>
+
+    <div class="grid-2" style="margin-top:48px">
+      <div class="pull" style="margin:0">
+        AI 已经解放了开发生产力. 我们应该把更多侧重点放在 <b style="color:var(--warm)">审美和市场上面</b>, 激活市场人员, 发现真需求.
+        <span class="src">— 同期黑客松金句</span>
+      </div>
+      <div class="pull" style="margin:0">
+        AI 不是人类的竞争对手, 而是 <b style="color:var(--warm)">帮助我们打破原有经验限制、拓展思维的合作伙伴</b>.
+        <span class="src">— 同期黑客松金句</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== 7. 还想做什么 ============== -->
+  <section class="section reveal" id="next">
+    <div class="section-num"><span class="n">07</span> · WHAT'S NEXT · 还想做什么</div>
+    <h2 class="section-title">这只是 v0.2. 我们想把它做成 <span class="accent">每个团队的"决策记忆"</span>.</h2>
+
+    <div class="grid-3">
+      <div class="panel">
+        <div class="panel-cap">短期 · v0.3</div>
+        <p>修复多人协作的 BUG (用户反馈的几个边界条件). 接入更多 LLM 兜底 (Qwen / GLM / Gemini). 让 Hermes 决策中台真正异步派单.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-cap">中期 · v1.0</div>
+        <p>把"决策记忆"做成<b class="hl">向量索引</b>. 每次新的决策开始时, 自动检索过去的相关画布, 提示"上次在这个场景你们踩过这个坑".</p>
+      </div>
+      <div class="panel">
+        <div class="panel-cap">长期 · 愿景</div>
+        <p>未来的 AI 协作不应该是<b class="mag">简单的提问与回答</b>, 而是在一张<b class="em">透明、对抗、可回溯</b>的画布上, 实现<b class="hl">人与 AI 认知的深度共振</b>.</p>
+      </div>
+    </div>
+
+    <div class="quote-block" style="margin-top:48px">
+      <p class="q-text">
+        我们相信, 真理 (Aletheia) 不是被发明的, 是被一层层遮蔽剥掉之后, <span class="key">自己显现的</span>. 我们做的事, 不过是给这件事提供了一个 <span class="key">可视化的工作台</span>.
+      </p>
+      <p class="q-attr">ALETHEIA · 项目终极哲学</p>
+    </div>
+  </section>
+
+  <!-- ============== Footer ============== -->
+  <footer class="footer">
+    <h2><span class="accent">谢谢看完.</span></h2>
+    <p style="color:var(--text-dim);max-width:580px;margin:0 auto 32px;line-height:1.85">
+      如果你也在被"团队基于未验证假设推进工作"和"因为认知分歧吵架"困扰 —<br>
+      欢迎来这张画布上, 跟我们一起验证一个想法.
+    </p>
+    <p class="sig">
+      <span class="names">lichang (hermes 框架策划) · 小叶子 (产品策划) · 你想猫 (架构策划)</span><br>
+      ALETHEIA · hackathon-v0.2 · 2026-05-03 · 三天 · 五块钱 token · 一份诚恳
+    </p>
+    <p style="margin-top:32px;font-family:'JetBrains Mono',monospace;font-size:0.62rem;letter-spacing:0.3em;color:var(--text-mute)">
+      ◈ ALETHEIA · ἀλήθεια · 真理 · 无遮蔽 ◈
+    </p>
+  </footer>
+
+</main>
+
+<script>
+// Progress bar
+const progress = document.getElementById('progress');
+window.addEventListener('scroll', () => {
+  const h = document.documentElement;
+  const scrolled = (h.scrollTop / (h.scrollHeight - h.clientHeight)) * 100;
+  progress.style.width = scrolled + '%';
+}, { passive: true });
+
+// Reveal on scroll
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) e.target.classList.add('in');
+  });
+}, { threshold: 0.08, rootMargin: '0px 0px -80px 0px' });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+// Smooth nav
+document.querySelectorAll('.topbar nav a').forEach(a => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    const t = document.querySelector(a.getAttribute('href'));
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+</script>
+
+</body>
+</html>

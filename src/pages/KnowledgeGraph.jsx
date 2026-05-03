@@ -3,7 +3,7 @@
  * 单页面布局：左侧知识源面板 + 中央 KnowledgeCanvas 画布 + 右侧详情面板 + 底部 AI 分析栏
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { LeftPanel, RightPanel, BottomAIBar, SaveExportToolbar } from './panels'
 import { KnowledgeCanvas } from '../components/canvas'
 import WelcomeOverlay from '../components/canvas/WelcomeOverlay'
@@ -19,8 +19,10 @@ import AiSettingsPanel from '../components/AiSettingsPanel'
 import CliMonitor from '../components/CliMonitor'
 import CostMeterChip from '../components/cost/CostMeterChip'
 import TimelineDock from '../components/timeline/TimelineDock'
+import PlaybackScrubber from '../components/timeline/PlaybackScrubber'
 import ProjectLibraryButton from '../components/project-library/ProjectLibraryButton'
 import ProjectLibraryPanel from '../components/project-library/ProjectLibraryPanel'
+import useProjectLibraryStore from '../stores/useProjectLibraryStore'
 import { loadProjectToCanvas } from '../services/projectLibraryActions'
 import { pushLog } from '../utils/logBus'
 
@@ -70,6 +72,22 @@ export default function KnowledgeGraph() {
   // 协作会话（启动 Yjs sync + 提供 room/username/exitSession）
   const { room, username, exitSession } = useCollabSession()
   useRemoteSelections() // 订阅远端选中变化触发重渲染
+
+  // ── 回放模式: 用 commits[i].snapshot 替代 store nodes/edges ──
+  const playbackProjectId = useProjectLibraryStore((s) => s.playbackProjectId)
+  const playbackCommitIndex = useProjectLibraryStore((s) => s.playbackCommitIndex)
+  const playbackMode = useProjectLibraryStore((s) => s.playbackMode)
+  const playbackUserFilter = useProjectLibraryStore((s) => s.playbackUserFilter)
+  const isPlayback = !!playbackProjectId
+
+  const playbackSnapshot = useMemo(() => {
+    if (!isPlayback) return null
+    return useProjectLibraryStore.getState().getCurrentPlaybackSnapshot?.() || null
+  }, [isPlayback, playbackProjectId, playbackCommitIndex, playbackMode, playbackUserFilter])
+
+  const displayNodes = playbackSnapshot?.nodes || nodes
+  const displayEdges = playbackSnapshot?.edges || edges
+  const noopHandler = useCallback(() => {}, [])
 
   // 选中节点
   const handleNodeClick = useCallback((_event, node) => {
@@ -751,14 +769,14 @@ export default function KnowledgeGraph() {
         </div>
 
         <KnowledgeCanvas
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
+          nodes={displayNodes}
+          edges={displayEdges}
+          onNodesChange={isPlayback ? noopHandler : onNodesChange}
+          onEdgesChange={isPlayback ? noopHandler : onEdgesChange}
+          onConnect={isPlayback ? noopHandler : onConnect}
           onNodeClick={handleNodeClick}
           onEdgeClick={handleEdgeClick}
-          onNodeDragStop={handleNodeDragStop}
+          onNodeDragStop={isPlayback ? noopHandler : handleNodeDragStop}
           showMiniMap={true}
         >
           <CursorAwarenessLayer wrapperRef={wrapperRef} nodes={nodes} />
@@ -777,6 +795,7 @@ export default function KnowledgeGraph() {
 
         <CostMeterChip />
         <TimelineDock />
+        <PlaybackScrubber />
       </div>
 
       {showRightPanel && (

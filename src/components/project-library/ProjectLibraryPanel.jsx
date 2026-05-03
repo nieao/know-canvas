@@ -47,6 +47,7 @@ export default function ProjectLibraryPanel({ open, onClose, onLoadProject }) {
   const removeProject = useProjectLibraryStore((s) => s.removeProject)
   const renameProject = useProjectLibraryStore((s) => s.renameProject)
   const yjsBound = useProjectLibraryStore((s) => s.yjsBound)
+  const enterPlayback = useProjectLibraryStore((s) => s.enterPlayback)
 
   const [entered, setEntered] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -122,6 +123,11 @@ export default function ProjectLibraryPanel({ open, onClose, onLoadProject }) {
     removeProject(id)
     setConfirmDeleteId(null)
   }, [removeProject])
+
+  const handlePlayback = useCallback((project) => {
+    enterPlayback?.(project.id, { mode: 'project' })
+    if (typeof onClose === 'function') onClose()
+  }, [enterPlayback, onClose])
 
   if (!open) return null
 
@@ -313,6 +319,7 @@ export default function ProjectLibraryPanel({ open, onClose, onLoadProject }) {
                   onCommitEdit={commitEdit}
                   onCancelEdit={() => setEditingId(null)}
                   onLoad={() => handleLoad(project)}
+                  onPlayback={() => handlePlayback(project)}
                   onAskDelete={() => setConfirmDeleteId(project.id)}
                   onCancelDelete={() => setConfirmDeleteId(null)}
                   onConfirmDelete={() => handleDelete(project.id)}
@@ -424,6 +431,7 @@ function ProjectCard({
   onCommitEdit,
   onCancelEdit,
   onLoad,
+  onPlayback,
   onAskDelete,
   onCancelDelete,
   onConfirmDelete,
@@ -601,6 +609,9 @@ function ProjectCard({
         {typeof stats.totalCostCny === 'number' && stats.totalCostCny > 0 && (
           <MetaTag>¥ {stats.totalCostCny.toFixed(stats.totalCostCny < 1 ? 4 : 2)}</MetaTag>
         )}
+        {Array.isArray(project.commits) && project.commits.length > 1 && (
+          <MetaTag accent>{project.commits.length} 帧</MetaTag>
+        )}
       </div>
 
       {/* 底部按钮 */}
@@ -647,6 +658,17 @@ function ProjectCard({
             >
               载入
             </button>
+            {Array.isArray(project.commits) && project.commits.length > 1 && (
+              <button
+                onClick={onPlayback}
+                style={btnStyleSecondary}
+                title={`回放 ${project.commits.length} 帧时间线`}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
+              >
+                ▶ 回放
+              </button>
+            )}
             <button
               onClick={onAskDelete}
               style={btnStyleSecondary}

@@ -31,6 +31,7 @@ import { getProjectsMap } from '../collab/yjsClient'
 import { getUsername, getUserColor } from '../collab/session'
 
 const MAX_PROJECTS = 50
+const MAX_COMMITS_PER_PROJECT = 30  // 每个项目最多保留 30 帧, 防止 yjs 膨胀
 
 const genId = () =>
   `prj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -52,6 +53,13 @@ const useProjectLibraryStore = create(
       // yjs 是否已绑定 — UI 可据此显示"协作模式"标记
       yjsBound: false,
 
+      // ── 回放状态 (不持久化) ─────────────────────────────
+      playbackProjectId: null,      // 当前回放的项目 id, null = 非回放模式
+      playbackCommitIndex: 0,       // 当前帧索引 (0 = 第一帧)
+      playbackMode: 'project',      // 'project' (按项目) | 'user' (按某用户活动)
+      playbackUserFilter: null,     // 'user' 模式下要看哪个用户名的活动
+      playbackPlaying: false,       // 是否正在自动播放
+
       /**
        * 保存一个新项目 — 双写到 zustand + yjs
        * 入参 projectData = { id?, title, summary, createdAt?, owner?, snapshot, stats, thumbnail?, tags?, source? }
@@ -59,18 +67,36 @@ const useProjectLibraryStore = create(
        */
       saveProject: (projectData) => {
         const id = projectData?.id || genId()
+        const existing = get().projects.find((p) => p.id === id)
+
+        // 如果是 update 已有 id, 把旧 snapshot 推入 commits[] 形成历史
+        // 新建则 commits 初始有 1 条 (创建快照)
+        const baseCommits = existing?.commits || []
+        const nextCommits = [
+          ...baseCommits,
+          {
+            ts: projectData?.createdAt || Date.now(),
+            label: existing ? '保存' : '创建',
+            owner: projectData?.owner || getCurrentOwner(),
+            snapshot: projectData?.snapshot || { nodes: [], edges: [] },
+          },
+        ].slice(-MAX_COMMITS_PER_PROJECT)
+
         const entry = {
           id,
-          title: projectData?.title || '未命名项目',
-          summary: projectData?.summary || '',
-          createdAt: projectData?.createdAt || Date.now(),
-          owner: projectData?.owner || getCurrentOwner(),
+          title: projectData?.title || existing?.title || '未命名项目',
+          summary: projectData?.summary || existing?.summary || '',
+          createdAt: existing?.createdAt || projectData?.createdAt || Date.now(),
+          owner: existing?.owner || projectData?.owner || getCurrentOwner(),
           snapshot: projectData?.snapshot || { nodes: [], edges: [] },
-          stats: projectData?.stats || { nodeCount: 0, edgeCount: 0 },
-          thumbnail: projectData?.thumbnail || null,
-          tags: Array.isArray(projectData?.tags) ? projectData.tags : [],
-          source: projectData?.source || 'manual',
-          commits: Array.isArray(projectData?.commits) ? projectData.commits : [],
+          stats: projectData?.stats || existing?.stats || { nodeCount: 0, edgeCount: 0 },
+          thumbnail: projectData?.thumbnail || existing?.thumbnail || null,
+          tags: Array.isArray(projectData?.tags)
+            ? projectData.tags
+            : (existing?.tags || []),
+          source: projectData?.source || existing?.source || 'manual',
+          commits: Array.isArray(projectData?.commits) ? projectData.commits : nextCommits,
+          updatedAt: Date.now(),
         }
         set((state) => {
           const idx = state.projects.findIndex((p) => p.id === id)
@@ -85,6 +111,108 @@ const useProjectLibraryStore = create(
           try { _yjsMap.set(id, entry) } catch (e) { console.warn('[ProjectLibrary] yjs set 失败:', e?.message) }
         }
         return id
+      },
+
+      /**
+       * 给项目追加一帧 commit — 关键节点埋点用 (拆解完成 / 反驳完成 / 综合完成)
+       * 不替换 entry.snapshot, 只 append 到 commits[]
+       */
+      addProjectCommit: (projectId, commitData) => {
+        if (!projectId) return
+        const existing = get().projects.find((p) => p.id === projectId)
+        if (!existing) return
+        const commit = {
+          ts: commitData?.ts || Date.now(),
+          label: commitData?.label || '快照',
+          owner: commitData?.owner || getCurrentOwner(),
+          snapshot: commitData?.snapshot || { nodes: [], edges: [] },
+        }
+        const nextCommits = [...(existing.commits || []), commit].slice(-MAX_COMMITS_PER_PROJECT)
+        const updated = { ...existing, commits: nextCommits, updatedAt: Date.now() }
+        set((state) => {
+          const idx = state.projects.findIndex((p) => p.id === projectId)
+          if (idx >= 0) state.projects[idx] = updated
+        })
+        if (_yjsMap) {
+          try { _yjsMap.set(projectId, updated) } catch (_e) {}
+        }
+      },
+
+      /** 读 commits 列表 (按时间顺序, 早 → 晚) */
+      getProjectCommits: (projectId) => {
+        const p = get().projects.find((x) => x.id === projectId)
+        return Array.isArray(p?.commits) ? p.commits.slice() : []
+      },
+
+      // ── 回放控制 ───────────────────────────────────────
+      /** 进入回放模式 — 默认定位到第一帧 */
+      enterPlayback: (projectId, opts = {}) => {
+        const p = get().projects.find((x) => x.id === projectId)
+        if (!p) return
+        set((state) => {
+          state.playbackProjectId = projectId
+          state.playbackCommitIndex = opts.index ?? 0
+          state.playbackMode = opts.mode || 'project'
+          state.playbackUserFilter = opts.userFilter || null
+          state.playbackPlaying = false
+        })
+      },
+
+      exitPlayback: () => {
+        set((state) => {
+          state.playbackProjectId = null
+          state.playbackCommitIndex = 0
+          state.playbackPlaying = false
+          state.playbackUserFilter = null
+        })
+      },
+
+      setPlaybackIndex: (index) => {
+        set((state) => { state.playbackCommitIndex = Math.max(0, index) })
+      },
+
+      setPlaybackMode: (mode) => {
+        set((state) => { state.playbackMode = mode })
+      },
+
+      setPlaybackUserFilter: (name) => {
+        set((state) => { state.playbackUserFilter = name })
+      },
+
+      togglePlaybackPlaying: () => {
+        set((state) => { state.playbackPlaying = !state.playbackPlaying })
+      },
+
+      /** 取当前回放帧的 snapshot — 给 KnowledgeCanvas 用 */
+      getCurrentPlaybackSnapshot: () => {
+        const s = get()
+        if (!s.playbackProjectId) return null
+        const p = s.projects.find((x) => x.id === s.playbackProjectId)
+        if (!p) return null
+        let commits = p.commits || []
+        // user 模式下过滤 owner
+        if (s.playbackMode === 'user' && s.playbackUserFilter) {
+          commits = commits.filter((c) => (c.owner?.name || '') === s.playbackUserFilter)
+        }
+        if (commits.length === 0) {
+          // 回退用项目当前 snapshot
+          return p.snapshot || null
+        }
+        const idx = Math.min(s.playbackCommitIndex, commits.length - 1)
+        return commits[idx]?.snapshot || p.snapshot || null
+      },
+
+      /** 取回放可用的 commit 列表 (按当前 mode + 过滤) */
+      getPlaybackCommits: () => {
+        const s = get()
+        if (!s.playbackProjectId) return []
+        const p = s.projects.find((x) => x.id === s.playbackProjectId)
+        if (!p) return []
+        let commits = p.commits || []
+        if (s.playbackMode === 'user' && s.playbackUserFilter) {
+          commits = commits.filter((c) => (c.owner?.name || '') === s.playbackUserFilter)
+        }
+        return commits
       },
 
       /** 删除指定项目 — 双写 */

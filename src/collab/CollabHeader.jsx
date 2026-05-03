@@ -17,8 +17,16 @@ const TASK_MODES = [
   { value: 'hermes', label: 'Hermes' },
 ]
 
-// 主题切换：默认（建筑极简 · 白底）↔ 黑金极简02（深底金线）
-// 仅 toggle body 上的 .theme-blackgold class，让 CSS variables 自动反色
+// 主题切换：4 选 1 循环（点击切下一个）
+// default(建筑极简 · 白底) → blackgold(黑金 02) → cyberpunk(赛博朋克) → macaron(马卡龙Q版) → 回到 default
+// 仅 toggle body 上的 .theme-xxx class, 让 CSS variables 自动反色
+const THEMES = [
+  { id: 'default',   label: '极简白',  icon: '○', bg: 'rgba(250,250,250,0.95)', border: '#e8e8e8', color: '#888' },
+  { id: 'blackgold', label: '黑金 02', icon: '◆', bg: '#0a0a0a',                border: '#d4af37', color: '#d4af37' },
+  { id: 'cyberpunk', label: '赛博朋克', icon: '⬢', bg: '#0d0221',                border: '#ff2a6d', color: '#ff2a6d' },
+  { id: 'macaron',   label: '马卡龙 Q', icon: '♥', bg: '#fff5f9',                border: '#ffc9d9', color: '#ff8fb1' },
+]
+
 function ThemeToggle() {
   const [theme, setTheme] = useState(() =>
     typeof window !== 'undefined'
@@ -27,30 +35,33 @@ function ThemeToggle() {
   )
 
   useEffect(() => {
-    document.body.classList.remove('theme-blackgold')
-    if (theme === 'blackgold') document.body.classList.add('theme-blackgold')
+    // 清掉所有主题 class, 再加当前主题
+    document.body.classList.remove('theme-blackgold', 'theme-cyberpunk', 'theme-macaron')
+    if (theme && theme !== 'default') document.body.classList.add(`theme-${theme}`)
     localStorage.setItem('know_canvas_theme', theme)
   }, [theme])
 
-  const isGold = theme === 'blackgold'
-  const next = isGold ? 'default' : 'blackgold'
+  const idx = Math.max(0, THEMES.findIndex((t) => t.id === theme))
+  const cur = THEMES[idx] || THEMES[0]
+  const nextIdx = (idx + 1) % THEMES.length
+  const nxt = THEMES[nextIdx]
 
   return (
     <button
-      onClick={() => setTheme(next)}
-      title={`切换到 ${isGold ? '极简白' : '黑金 02'}`}
+      onClick={() => setTheme(nxt.id)}
+      title={`当前: ${cur.label}, 点击切到: ${nxt.label}`}
       className="px-2.5 py-1.5 rounded-lg shadow-sm transition-colors"
       style={{
-        backgroundColor: isGold ? '#0a0a0a' : 'rgba(250,250,250,0.95)',
-        border: `1px solid ${isGold ? '#d4af37' : '#e8e8e8'}`,
-        color: isGold ? '#d4af37' : '#888',
+        backgroundColor: cur.bg,
+        border: `1px solid ${cur.border}`,
+        color: cur.color,
         backdropFilter: 'blur(8px)',
         fontSize: '13px',
         lineHeight: 1,
         minWidth: '32px',
       }}
     >
-      {isGold ? '◆' : '○'}
+      {cur.icon}
     </button>
   )
 }

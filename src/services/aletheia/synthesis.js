@@ -12,11 +12,11 @@ import { calcHealth } from './healthScore'
  */
 function compactGraph(nodes, edges) {
   const proposers = nodes
-    .filter((n) => n.type === 'ontologyNode' || n.type === 'proposerNode')
+    .filter((n) => ['ontologyNode', 'proposerNode', 'conceptNode', 'taskNode'].includes(n.type))
     .map((n) => ({
       id: n.id,
-      label: n.data?.label || n.data?.title || '提议',
-      summary: (n.data?.summary || n.data?.content || '').slice(0, 200),
+      label: n.data?.label || n.data?.title || n.data?.name || '提议',
+      summary: (n.data?.summary || n.data?.content || n.data?.description || n.data?.claim || '').slice(0, 200),
     }))
 
   const refuters = nodes
@@ -25,7 +25,10 @@ function compactGraph(nodes, edges) {
       id: n.id,
       label: n.data?.label || '反驳',
       severity: n.data?.severity || 'medium',
-      text: (n.data?.text || n.data?.content || '').slice(0, 200),
+      text: (n.data?.text || n.data?.content || n.data?.claim || '').slice(0, 200),
+      // 把分项的 evidence/todos 也喂给综合官, 让 actionPlan 更精准
+      evidence: Array.isArray(n.data?.evidence) ? n.data.evidence.slice(0, 5) : [],
+      todos: Array.isArray(n.data?.todos) ? n.data.todos.slice(0, 5) : [],
     }))
 
   const links = (edges || []).map((e) => ({
@@ -110,17 +113,31 @@ export async function synthesize(nodes = [], edges = [], weights = { logic: 1, c
     '【输出 JSON schema】',
     JSON.stringify(
       {
-        actionPlan: 'string，3-5 条带优先级的具体行动，每条不超过 80 字',
         summary: 'string，本轮共识的一句话核心结论，不超过 60 字',
+        actionItems: [
+          {
+            priority: 'P0|P1|P2',
+            action: 'string，动词开头，限 50 字',
+            owner: 'string，谁负责，限 20 字',
+            deadline: 'string，何时完成，限 20 字',
+            validation: 'string，用什么判据验证，限 40 字',
+          },
+        ],
+        risks: ['string，风险条目, 限 50 字'],
         healthScoreHint: 'number，0-100，综合官对本轮整体方案健康度的主观评分（仅参考）',
       },
       null,
       2
     ),
+    '',
+    '硬要求: actionItems 必须 3-5 条, 必须含 priority/action/owner/deadline/validation 五个字段, 不能为空.',
+    'risks 必须 2-4 条, 直接对应反驳节点中最严重的反驳点.',
   ].join('\n')
 
-  let actionPlan = '（LLM 调用失败，未能产出行动方案）'
-  let summary = '综合失败'
+  let actionItems = []
+  let risks = []
+  let summary = ''
+  let actionPlanText = ''
   let healthHint = null
 
   try {
@@ -132,19 +149,38 @@ export async function synthesize(nodes = [], edges = [], weights = { logic: 1, c
     })
     const parsed = parseLLMJson(raw)
     if (parsed) {
-      actionPlan = parsed.actionPlan || actionPlan
       summary = parsed.summary || summary
-      if (typeof parsed.healthScoreHint === 'number') {
-        healthHint = parsed.healthScoreHint
-      }
+      if (Array.isArray(parsed.actionItems)) actionItems = parsed.actionItems
+      if (Array.isArray(parsed.risks)) risks = parsed.risks
+      // 兼容老 prompt 直接产出 actionPlan 字符串的情况
+      if (!actionItems.length && typeof parsed.actionPlan === 'string') actionPlanText = parsed.actionPlan
+      if (typeof parsed.healthScoreHint === 'number') healthHint = parsed.healthScoreHint
     } else if (raw) {
-      // LLM 没遵守 JSON 格式但有内容，至少把原文塞进 actionPlan
-      actionPlan = raw.slice(0, 2000)
-      summary = '原始文本（未结构化）'
+      actionPlanText = raw.slice(0, 2000)
+      summary = '原始文本 (未结构化)'
     }
   } catch (err) {
-    summary = `综合调用异常：${err.message || err}`
+    summary = `综合调用异常: ${err.message || err}`
   }
+
+  // mock / LLM 失败兜底: 基于 proposer + refuter 直接拼一份结构化方案, 不让节点空着
+  if (actionItems.length === 0 && !actionPlanText) {
+    const built = buildFallbackPlan(proposers, refuters)
+    actionItems = built.actionItems
+    risks = built.risks
+    if (!summary || summary === '原始文本 (未结构化)' || summary.startsWith('综合调用异常')) {
+      summary = built.summary
+    }
+  }
+  if (risks.length === 0) {
+    risks = refuters.slice(0, 3).map((r) => `[${r.severity}] ${r.text || r.label}`.slice(0, 80))
+  }
+  // actionPlan 字符串保持兼容 (老的 ActionPlanModal 渲染会用)
+  const actionPlan = actionItems.length
+    ? actionItems
+        .map((it, i) => `[${it.priority || 'P1'}] ${it.action} (负责人: ${it.owner || '-'} · ${it.deadline || '-'} · 验收: ${it.validation || '-'})`)
+        .join('\n')
+    : actionPlanText || '（暂无行动方案）'
 
   // 健康分：以本地启发式为准，LLM hint 只做轻量混合（30/70）
   const localHealth = calcHealth(nodes, edges, weights)
@@ -154,9 +190,51 @@ export async function synthesize(nodes = [], edges = [], weights = { logic: 1, c
       : localHealth
 
   return {
-    actionPlan,
+    actionPlan,        // string 兼容字段
+    actionItems,       // 结构化 [{priority, action, owner, deadline, validation}]
+    risks,             // [string]
     healthScore,
     summary,
     ts,
   }
+}
+
+/**
+ * 兜底拼装: LLM 不可用时, 基于 proposer + refuter 直接拼一份有结构的方案
+ * 让 SynthesisNode 不会显示"综合失败", 同时对最严重的反驳点逐一给出对应行动
+ */
+function buildFallbackPlan(proposers, refuters) {
+  const sevRank = { critical: 4, high: 3, medium: 2, low: 1 }
+  const sorted = [...refuters].sort((a, b) => (sevRank[b.severity] || 0) - (sevRank[a.severity] || 0))
+  const top = sorted.slice(0, 4)
+
+  const actionItems = top.map((r, i) => {
+    const todo = (r.todos && r.todos[0]) || r.text || '回应该反驳点'
+    const ev = (r.evidence && r.evidence[0]) || '反驳依据'
+    return {
+      priority: i === 0 ? 'P0' : i <= 1 ? 'P1' : 'P2',
+      action: todo.slice(0, 50),
+      owner: '主推 owner 待定',
+      deadline: i === 0 ? '本周内' : i <= 1 ? '2 周内' : '1 个月内',
+      validation: ev.slice(0, 40),
+    }
+  })
+  // 如果反驳数不够, 给 proposer 也派一条"验证假设"行动, 确保至少 3 条
+  while (actionItems.length < 3 && proposers.length > 0) {
+    const p = proposers[actionItems.length % proposers.length]
+    actionItems.push({
+      priority: 'P2',
+      action: `验证"${(p.label || '提议').slice(0, 20)}"的核心假设是否成立`,
+      owner: '主推 owner 待定',
+      deadline: '2 周内',
+      validation: '能给出 3 个量化判据 + 至少 1 个反例验证',
+    })
+  }
+
+  const risks = top.map((r) => `[${r.severity}] ${(r.text || r.label || '').slice(0, 60)}`)
+  const summary = top.length > 0
+    ? `本轮收到 ${refuters.length} 条反驳, 最严重的是${top[0].severity === 'critical' ? '合规风险' : '逻辑/商业漏洞'}, 优先回应.`
+    : `本轮 ${proposers.length} 个提议未引发反驳, 可推进.`
+
+  return { actionItems, risks, summary }
 }

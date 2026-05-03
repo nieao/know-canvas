@@ -1,0 +1,134 @@
+/* 深色赛博朋克 — 适用于 .theme-cyberpunk body 子树
+ * 紫黑底 + 霓虹品红/青双主色 + glow 边线
+ * 通过覆盖 :root 的 CSS variables 让所有 var(--xxx) 节点自动跟随
+ */
+
+.theme-cyberpunk {
+  /* 文字反转：浅色 */
+  --black: #f5f5ff;
+  --dark: #e8e8ff;
+  --gray-900: #c0c0e0;
+  --gray-700: #9090b8;
+  --gray-500: #707090;
+  --gray-300: #4a4a6a;
+  --gray-100: #2a1a4a;     /* 边框紫灰 */
+  --white: #0d0221;        /* 背景紫黑 */
+
+  /* 暖色 → 霓虹品红 */
+  --warm: #ff2a6d;
+  --warm-light: #05d9e8;   /* 副色霓虹青 */
+  --warm-bg: rgba(255, 42, 109, 0.10);
+
+  background: #0d0221;
+  color: #e8e8ff;
+}
+
+/* react-flow 画布背景 — 紫黑深空 */
+.theme-cyberpunk .react-flow {
+  background: #0d0221;
+}
+.theme-cyberpunk .react-flow__renderer {
+  background: #0d0221;
+}
+.theme-cyberpunk .react-flow__background {
+  background: radial-gradient(ellipse at center, #1a0a3a 0%, #0d0221 70%) !important;
+}
+.theme-cyberpunk .react-flow__background .react-flow__background-pattern {
+  color: #2a1a4a;
+}
+
+/* 连线 — 霓虹粉 + 微 glow */
+.theme-cyberpunk .react-flow__edge-path {
+  stroke: #ff2a6d !important;
+  stroke-width: 1.4;
+  filter: drop-shadow(0 0 3px rgba(255, 42, 109, 0.6));
+}
+.theme-cyberpunk .react-flow__edge.selected .react-flow__edge-path,
+.theme-cyberpunk .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #05d9e8 !important;
+  stroke-width: 1.8;
+  filter: drop-shadow(0 0 5px rgba(5, 217, 232, 0.8));
+}
+.theme-cyberpunk .react-flow__edge-text {
+  fill: #05d9e8;
+  font-family: "Noto Sans SC", "Microsoft YaHei", monospace;
+}
+.theme-cyberpunk .react-flow__edge-textbg {
+  fill: #1a0a3a;
+}
+
+/* 锚点 — 霓虹粉发光小点 */
+.theme-cyberpunk .react-flow__handle {
+  background: #ff2a6d;
+  border: 1px solid #0d0221;
+  box-shadow: 0 0 6px #ff2a6d;
+}
+
+/* 小地图 */
+.theme-cyberpunk .react-flow__minimap {
+  background: rgba(13, 2, 33, 0.95) !important;
+  border: 1px solid #ff2a6d !important;
+  box-shadow: 0 0 12px rgba(255, 42, 109, 0.4);
+}
+.theme-cyberpunk .react-flow__minimap-mask {
+  fill: rgba(255, 42, 109, 0.15);
+}
+
+/* 控制按钮 — 霓虹边 + 内黑 */
+.theme-cyberpunk .react-flow__controls {
+  border: 1px solid #2a1a4a;
+  box-shadow: 0 0 8px rgba(255, 42, 109, 0.2);
+}
+.theme-cyberpunk .react-flow__controls button {
+  background: #1a0a3a;
+  color: #ff2a6d;
+  border-color: #2a1a4a;
+  fill: #ff2a6d;
+}
+.theme-cyberpunk .react-flow__controls button:hover {
+  background: #2a1a4a;
+  box-shadow: inset 0 0 8px rgba(5, 217, 232, 0.3);
+}
+
+/* 节点 — 紫黑卡片 + 霓虹粉边 */
+.theme-cyberpunk .react-flow__node {
+  background: #1a0a3a !important;
+  border: 1px solid rgba(255, 42, 109, 0.4) !important;
+  color: #e8e8ff;
+  box-shadow: 0 4px 16px rgba(13, 2, 33, 0.8), 0 0 8px rgba(255, 42, 109, 0.15);
+}
+.theme-cyberpunk .react-flow__node.selected,
+.theme-cyberpunk .react-flow__node:hover {
+  border-color: #05d9e8 !important;
+  box-shadow: 0 4px 24px rgba(5, 217, 232, 0.4), 0 0 16px rgba(5, 217, 232, 0.25);
+}
+
+/* 节点内部文字 */
+.theme-cyberpunk .react-flow__node h1,
+.theme-cyberpunk .react-flow__node h2,
+.theme-cyberpunk .react-flow__node h3,
+.theme-cyberpunk .react-flow__node h4 {
+  color: #ff2a6d;
+  text-shadow: 0 0 8px rgba(255, 42, 109, 0.5);
+}
+.theme-cyberpunk .react-flow__node p,
+.theme-cyberpunk .react-flow__node span {
+  color: #c0c0e0;
+}
+
+/* 滚动条 — 霓虹粉 */
+.theme-cyberpunk ::-webkit-scrollbar {
+  width: 6px;
+}
+.theme-cyberpunk ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.theme-cyberpunk ::-webkit-scrollbar-thumb {
+  background: #ff2a6d;
+  border-radius: 3px;
+  box-shadow: 0 0 4px #ff2a6d;
+}
+.theme-cyberpunk ::-webkit-scrollbar-thumb:hover {
+  background: #05d9e8;
+  box-shadow: 0 0 6px #05d9e8;
+}

@@ -1,0 +1,143 @@
+/* 马卡龙 Q 版 — 适用于 .theme-macaron body 子树
+ * 柔粉底 + 马卡龙粉/薄荷主色 + 大圆角软阴影（Q版甜美风）
+ * 通过覆盖 :root 的 CSS variables 让所有 var(--xxx) 节点自动跟随
+ */
+
+.theme-macaron {
+  /* 文字保持深色但柔化 */
+  --black: #5a4a55;        /* 灰紫主文字 */
+  --dark: #6e5e6a;
+  --gray-900: #8a7a85;
+  --gray-700: #a89aa3;
+  --gray-500: #c0b3bb;
+  --gray-300: #d8ccd3;
+  --gray-100: #f4e8ee;     /* 边框柔粉 */
+  --white: #fff5f9;        /* 背景奶粉 */
+
+  /* 暖色 → 马卡龙粉 */
+  --warm: #ff8fb1;
+  --warm-light: #b3e5d1;   /* 副色薄荷绿 */
+  --warm-bg: rgba(255, 143, 177, 0.12);
+
+  background: #fff5f9;
+  color: #5a4a55;
+}
+
+/* react-flow 画布背景 — 奶油渐变 */
+.theme-macaron .react-flow {
+  background: #fff5f9;
+}
+.theme-macaron .react-flow__renderer {
+  background: linear-gradient(135deg, #fff5f9 0%, #fef1f7 50%, #f0fef9 100%);
+}
+.theme-macaron .react-flow__background {
+  background: transparent !important;
+}
+.theme-macaron .react-flow__background .react-flow__background-pattern {
+  color: #f4e8ee;
+}
+
+/* 连线 — 马卡龙粉 + 圆润 */
+.theme-macaron .react-flow__edge-path {
+  stroke: #ff8fb1 !important;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.theme-macaron .react-flow__edge.selected .react-flow__edge-path,
+.theme-macaron .react-flow__edge:hover .react-flow__edge-path {
+  stroke: #b3e5d1 !important;
+  stroke-width: 2.4;
+}
+.theme-macaron .react-flow__edge-text {
+  fill: #ff8fb1;
+  font-weight: 500;
+}
+.theme-macaron .react-flow__edge-textbg {
+  fill: #fff;
+  rx: 6;
+}
+
+/* 锚点 — 马卡龙粉小圆点 */
+.theme-macaron .react-flow__handle {
+  background: #ff8fb1;
+  border: 2px solid #fff;
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 2px 4px rgba(255, 143, 177, 0.4);
+}
+
+/* 小地图 — 软粉边 */
+.theme-macaron .react-flow__minimap {
+  background: rgba(255, 245, 249, 0.95) !important;
+  border: 2px solid #ffc9d9 !important;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(255, 143, 177, 0.2);
+}
+.theme-macaron .react-flow__minimap-mask {
+  fill: rgba(255, 143, 177, 0.18);
+}
+
+/* 控制按钮 — 圆润粉 */
+.theme-macaron .react-flow__controls {
+  border: none;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(255, 143, 177, 0.18);
+}
+.theme-macaron .react-flow__controls button {
+  background: #fff;
+  color: #ff8fb1;
+  border-color: #f4e8ee;
+  fill: #ff8fb1;
+}
+.theme-macaron .react-flow__controls button:hover {
+  background: #ffeef4;
+}
+
+/* 节点 — 大圆角 + 软阴影（Q版） */
+.theme-macaron .react-flow__node {
+  background: #fff !important;
+  border: 2px solid #ffc9d9 !important;
+  color: #5a4a55;
+  border-radius: 16px !important;
+  box-shadow: 0 6px 20px rgba(255, 143, 177, 0.18), 0 2px 4px rgba(255, 143, 177, 0.08);
+}
+.theme-macaron .react-flow__node.selected,
+.theme-macaron .react-flow__node:hover {
+  border-color: #ff8fb1 !important;
+  box-shadow: 0 8px 28px rgba(255, 143, 177, 0.32), 0 0 0 4px rgba(255, 143, 177, 0.10);
+  transform: translateY(-1px);
+}
+
+/* 节点内部文字 */
+.theme-macaron .react-flow__node h1,
+.theme-macaron .react-flow__node h2,
+.theme-macaron .react-flow__node h3,
+.theme-macaron .react-flow__node h4 {
+  color: #ff5f93;
+  font-weight: 600;
+}
+.theme-macaron .react-flow__node p,
+.theme-macaron .react-flow__node span {
+  color: #8a7a85;
+}
+
+/* 让节点子卡片也圆润起来 */
+.theme-macaron .react-flow__node > div {
+  border-radius: 14px !important;
+}
+
+/* 滚动条 — 马卡龙粉 */
+.theme-macaron ::-webkit-scrollbar {
+  width: 8px;
+}
+.theme-macaron ::-webkit-scrollbar-track {
+  background: #fff5f9;
+}
+.theme-macaron ::-webkit-scrollbar-thumb {
+  background: #ffc9d9;
+  border-radius: 4px;
+}
+.theme-macaron ::-webkit-scrollbar-thumb:hover {
+  background: #ff8fb1;
+}

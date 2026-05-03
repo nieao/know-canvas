@@ -25,12 +25,14 @@ function ChallengeNodeImpl({ data, selected }) {
   const severity = data.severity || 'medium'
   const sourceTitle = data.source_title || ''
   const meta = SEVERITY_META[severity] || SEVERITY_META.medium
+  const evidence = Array.isArray(data.evidence) ? data.evidence : []
+  const todos = Array.isArray(data.todos) ? data.todos : []
 
   return (
     <div
       className="relative shadow-sm transition-all duration-300"
       style={{
-        width: 240,
+        width: 280,
         background: '#fafafa',
         border: `${selected ? '2px' : '1px'} solid ${meta.color}`,
         borderRadius: 4,
@@ -65,15 +67,62 @@ function ChallengeNodeImpl({ data, selected }) {
 
         {/* 反驳论点 */}
         <div
-          className="text-[11px] leading-relaxed italic"
+          className="text-[11px] leading-relaxed italic mb-2"
           style={{ color: '#3a3a3a', borderLeft: `2px solid ${meta.color}`, paddingLeft: 8 }}
         >
           “{claim}”
         </div>
 
+        {/* 论据列表 (evidence) - 分项展开 */}
+        {evidence.length > 0 && (
+          <div className="mt-2 mb-1">
+            <div
+              className="text-[9px] mb-1"
+              style={{ color: meta.color, letterSpacing: '0.18em', fontWeight: 600 }}
+            >
+              论据 · EVIDENCE
+            </div>
+            <ul className="space-y-1">
+              {evidence.map((e, i) => (
+                <li
+                  key={i}
+                  className="text-[10px] leading-snug pl-2"
+                  style={{ color: '#3a3a3a', borderLeft: '2px solid #e8e8e8' }}
+                >
+                  {e}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* 待办事项 (todos) - 分项 checkbox 风格 */}
+        {todos.length > 0 && (
+          <div className="mt-2.5 pt-2" style={{ borderTop: `1px dashed ${meta.color}40` }}>
+            <div
+              className="text-[9px] mb-1.5"
+              style={{ color: meta.color, letterSpacing: '0.18em', fontWeight: 600 }}
+            >
+              待办 · TODO
+            </div>
+            <ul className="space-y-1">
+              {todos.map((t, i) => (
+                <li
+                  key={i}
+                  className="text-[10px] leading-snug flex items-start gap-1.5"
+                  style={{ color: '#1a1a1a' }}
+                >
+                  <span style={{ color: meta.color, fontWeight: 700, flexShrink: 0 }}>›</span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* 攻击对象 (源节点) */}
         {sourceTitle && (
-          <div className="text-[9px] mt-2 pt-1.5" style={{ color: '#888', borderTop: '1px dashed #e8e8e8' }}>
+          <div className="text-[9px] mt-2.5 pt-1.5" style={{ color: '#888', borderTop: '1px dashed #e8e8e8' }}>
             针对: <span className="font-medium" style={{ color: '#555' }}>{sourceTitle}</span>
           </div>
         )}

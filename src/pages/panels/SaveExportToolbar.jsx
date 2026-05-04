@@ -545,6 +545,25 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
               </svg>
               {confirmClear ? '再点确认清空' : '清空画布'}
             </button>
+
+            <div style={{ height: 1, background: 'var(--gray-100)', margin: '4px 0' }} />
+
+            {/* AI 模型设置 — 合并自原 CollabHeader 独立齿轮按钮 (避免双齿轮重叠) */}
+            <button
+              onClick={() => {
+                setShowSettingsMenu(false)
+                window.dispatchEvent(new CustomEvent('open-ai-settings'))
+              }}
+              className="w-full px-4 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+              style={{ color: 'var(--dark)' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--warm-bg)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <svg className="w-3.5 h-3.5" style={{ color: 'var(--warm)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              AI 模型设置
+            </button>
           </div>
         )}
       </div>

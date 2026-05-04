@@ -74,6 +74,13 @@ export default function KnowledgeGraph() {
   const [showAiSettings, setShowAiSettings] = useState(false)
   const [showProjectLibrary, setShowProjectLibrary] = useState(false)
 
+  // 监听 SaveExportToolbar 设置下拉里 "AI 模型设置" 入口的事件
+  useEffect(() => {
+    const handler = () => setShowAiSettings(true)
+    window.addEventListener('open-ai-settings', handler)
+    return () => window.removeEventListener('open-ai-settings', handler)
+  }, [])
+
   // 协作会话（启动 Yjs sync + 提供 room/username/exitSession）
   const { room, username, exitSession } = useCollabSession()
   useRemoteSelections() // 订阅远端选中变化触发重渲染

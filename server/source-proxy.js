@@ -41,6 +41,27 @@ const GETNOTE_BIN = process.env.GETNOTE_BIN ||
     ? 'E:/claude code/同频教学/edu-intel-vault/tools/getnote-cli/getnote.exe'
     : '/root/.local/bin/getnote')
 
+// 插件目录 — 默认 <项目根>/plugins, 可 PLUGINS_DIR 覆盖
+const path = require('path')
+const PLUGINS_DIR = process.env.PLUGINS_DIR || path.resolve(__dirname, '..', 'plugins')
+
+// 插件 registry — 启动时异步加载, 加载完才接受 /canvas/api/source/<id>/* 请求
+let pluginRegistry = {}
+let pluginLoaderReady = false
+let pluginListPlugins = () => []
+let pluginDispatch = async () => ({ status: 503, body: { ok: false, error: 'plugin loader 未就绪', code: 'PLUGIN_ERROR' } })
+;(async () => {
+  try {
+    const mod = await import('./plugin-loader.mjs')
+    pluginRegistry = await mod.loadPlugins(PLUGINS_DIR)
+    pluginListPlugins = () => mod.listPlugins(pluginRegistry)
+    pluginDispatch = (id, cap, input) => mod.dispatchPlugin(pluginRegistry, id, cap, input)
+    pluginLoaderReady = true
+  } catch (e) {
+    console.error('[source-proxy] 插件加载器初始化失败:', e?.message || e)
+  }
+})()
+
 function log(...args) {
   console.log('[source-proxy]', new Date().toISOString().slice(11, 19), ...args)
 }
@@ -684,6 +705,29 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         sendJson(res, 200, { ok: false, error: `notion fetch-meta 失败: ${e?.message || e}` })
       }
+      return
+    }
+
+    // ── /plugins ── 列出已加载插件 (给前端 UI 渲染卡片用)
+    if (method === 'GET' && url.pathname === '/plugins') {
+      sendJson(res, 200, { ok: true, ready: pluginLoaderReady, plugins: pluginListPlugins() })
+      return
+    }
+
+    // ── /<pluginId>/<capability> ── 通用插件路由 (search/fetch/push)
+    //   匹配除已知 hardcode 路由 (feishu/notion/getnote) 外的 POST /<id>/<cap>
+    const pluginMatch = url.pathname.match(/^\/([a-z0-9_-]+)\/(search|fetch|push)$/i)
+    if (method === 'POST' && pluginMatch) {
+      const [, pluginId, capability] = pluginMatch
+      // hardcode 的内置源走老路径, 不要被插件路由拦截
+      if (['feishu', 'notion', 'getnote'].includes(pluginId)) {
+        sendJson(res, 404, { ok: false, error: `unknown route: ${method} ${url.pathname}` })
+        return
+      }
+      const body = await readJsonBody(req).catch(() => ({}))
+      log(`plugin ${pluginId}.${capability}`)
+      const r = await pluginDispatch(pluginId, capability, body)
+      sendJson(res, r.status, r.body)
       return
     }
 

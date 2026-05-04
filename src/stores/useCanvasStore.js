@@ -3856,6 +3856,58 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
         return { results: json.results || [], total: json.total || 0 }
       },
 
+      // ─── 通用插件 actions (按 docs/source-plugin-spec.md §5) ──
+      // 现有飞书/Notion/得到 后续可迁过来, MVP 先并存
+      listPlugins: async () => {
+        const r = await fetch('/canvas/api/source/plugins')
+        if (!r.ok) throw new Error(`plugins list ${r.status}`)
+        const j = await r.json()
+        return j.plugins || []
+      },
+      searchPlugin: async (pluginId, query, pageSize = 10) => {
+        const r = await fetch(`/canvas/api/source/${pluginId}/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ query, pageSize }),
+        })
+        if (!r.ok) throw new Error(`plugin ${pluginId} search ${r.status}`)
+        const j = await r.json()
+        if (!j.ok) throw new Error(j.error || 'plugin search 失败')
+        return { results: j.results || [], total: j.total || 0 }
+      },
+      importFromPlugin: async (pluginId, { url, id }, position = null) => {
+        const r = await fetch(`/canvas/api/source/${pluginId}/fetch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ url, id }),
+        })
+        if (!r.ok) throw new Error(`plugin ${pluginId} fetch ${r.status}`)
+        const j = await r.json()
+        if (!j.ok) throw new Error(j.error || 'plugin fetch 失败')
+        const data = j.data || {}
+        const title = data.title || `[${pluginId}] ${url || id || ''}`
+        const content = String(data.content || '').replace(/\s+/g, ' ').trim()
+        const summary = content.slice(0, 240) + (content.length > 240 ? '...' : '')
+        const finalUrl = data.url || url || ''
+        const { addBookmarkNode } = get()
+        const nodeId = addBookmarkNode(finalUrl, title, summary, '', '', position, false)
+        set((state) => {
+          const n = state.nodes.find((x) => x.id === nodeId)
+          if (n) {
+            n.data = n.data || {}
+            n.data.sourceMeta = {
+              platform: pluginId, // 用 pluginId 当 platform, watch sync 暂不支持插件 (v0.2)
+              originalUrl: finalUrl,
+              externalId: data.meta?.itemId || id || '',
+              importedAt: Date.now(),
+              fullContent: content,
+              ...(data.meta || {}),
+            }
+          }
+        })
+        return { nodeId, title, contentLength: content.length }
+      },
+
       // 得到笔记 — list 最近 N 条 / 搜索关键词 / fetch 单条全文
       listGetnote: async (limit = 20) => {
         const resp = await fetch('/canvas/api/source/getnote/list', {

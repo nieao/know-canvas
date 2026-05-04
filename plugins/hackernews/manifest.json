@@ -1,0 +1,17 @@
+{
+  "$schema": "https://know-canvas.dev/schema/source-plugin/v1.json",
+  "id": "hackernews",
+  "name": "Hacker News",
+  "version": "0.1.0",
+  "author": "know-canvas builtin",
+  "sourceType": "web",
+  "capabilities": ["search", "fetch"],
+  "ui": {
+    "label": "Hacker News",
+    "description": "Algolia HN Search + Firebase API · 零 token",
+    "modes": ["search", "url"],
+    "searchPlaceholder": "搜 HN 标题 / 评论关键词...",
+    "urlPlaceholder": "news.ycombinator.com/item?id=..."
+  },
+  "configSchema": {}
+}

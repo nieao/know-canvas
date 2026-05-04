@@ -311,6 +311,48 @@ function LeftPanel({
     }
   }
 
+  // 通用插件 (HN, future RSS/Reddit/...) — 启动时拉 /plugins, 每个插件渲染一个 mini-card
+  const [plugins, setPlugins] = useState([])
+  const [pluginQueries, setPluginQueries] = useState({}) // { [pluginId]: query }
+  const [pluginResults, setPluginResults] = useState({}) // { [pluginId]: SearchResult[] }
+  const [pluginLoading, setPluginLoading] = useState({}) // { [pluginId]: bool }
+  const [pluginImportingUrl, setPluginImportingUrl] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    useCanvasStore.getState().listPlugins?.()
+      .then((arr) => { if (alive) setPlugins(arr || []) })
+      .catch((e) => console.error('[leftpanel] listPlugins:', e))
+    return () => { alive = false }
+  }, [])
+
+  const handlePluginSearch = async (pluginId) => {
+    const q = (pluginQueries[pluginId] || '').trim()
+    if (!q) return
+    setPluginLoading((s) => ({ ...s, [pluginId]: true }))
+    setPluginResults((s) => ({ ...s, [pluginId]: [] }))
+    try {
+      const r = await useCanvasStore.getState().searchPlugin(pluginId, q, 10)
+      setPluginResults((s) => ({ ...s, [pluginId]: r.results || [] }))
+    } catch (err) {
+      alert(`${pluginId} 搜索失败:\n${err?.message || err}`)
+    } finally {
+      setPluginLoading((s) => ({ ...s, [pluginId]: false }))
+    }
+  }
+
+  const handlePluginImport = async (pluginId, urlOrId) => {
+    setPluginImportingUrl(urlOrId)
+    try {
+      const r = await useCanvasStore.getState().importFromPlugin(pluginId, { url: urlOrId, id: urlOrId })
+      logAction('leftpanel.importPlugin', { pluginId, url: urlOrId, title: r.title })
+    } catch (err) {
+      alert(`${pluginId} 导入失败:\n${err?.message || err}`)
+    } finally {
+      setPluginImportingUrl('')
+    }
+  }
+
   const handleTextImport = () => {
     if (!textInput.trim()) return
     const textName = textTitle.trim() || `文本片段 ${new Date().toLocaleTimeString()}`
@@ -1445,6 +1487,167 @@ function LeftPanel({
               </p>
             </div>
 
+            {/* === 通用插件 (HN, future RSS/Reddit/...) — 从 /plugins 动态加载 === */}
+            {plugins.length > 0 && plugins.map((p, idx) => {
+              const sectionNo = String(7 + idx).padStart(2, '0')
+              const query = pluginQueries[p.id] || ''
+              const results = pluginResults[p.id] || []
+              const loading = pluginLoading[p.id] || false
+              return (
+                <div key={p.id}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 10,
+                        letterSpacing: '0.35em',
+                        color: 'var(--accent, var(--warm))',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {sectionNo} / {p.ui?.label || p.name} <span style={{ opacity: 0.5, letterSpacing: '0.05em' }}>· 插件</span>
+                    </div>
+                  </div>
+                  {p.capabilities.includes('search') && (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={query}
+                        onChange={(e) => setPluginQueries((s) => ({ ...s, [p.id]: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && !loading && handlePluginSearch(p.id)}
+                        placeholder={p.ui?.searchPlaceholder || `搜 ${p.name}...`}
+                        disabled={loading}
+                        className="flex-1 px-3 py-2"
+                        style={{
+                          fontSize: 12,
+                          border: '1px solid var(--border-subtle, var(--gray-100))',
+                          color: 'var(--text-primary, var(--dark))',
+                          background: 'var(--surface, var(--white))',
+                          fontFamily: FONT_SANS,
+                          borderRadius: 4,
+                          outline: 'none',
+                          opacity: loading ? 0.5 : 1,
+                        }}
+                        onFocus={(e) => (e.target.style.borderColor = 'var(--accent, var(--warm))')}
+                        onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle, var(--gray-100))')}
+                      />
+                      <button
+                        onClick={() => handlePluginSearch(p.id)}
+                        disabled={!query.trim() || loading}
+                        style={{
+                          padding: '8px 14px',
+                          fontSize: 11,
+                          letterSpacing: '0.15em',
+                          background: query.trim() && !loading
+                            ? 'var(--accent, var(--warm))'
+                            : 'var(--border-subtle, var(--gray-100))',
+                          color: query.trim() && !loading ? 'var(--surface, white)' : 'var(--text-muted, var(--gray-500))',
+                          border: 'none',
+                          borderRadius: 4,
+                          cursor: query.trim() && !loading ? 'pointer' : 'not-allowed',
+                          fontFamily: FONT_SANS,
+                          minWidth: 50,
+                        }}
+                      >
+                        {loading ? '...' : '搜'}
+                      </button>
+                    </div>
+                  )}
+                  {results.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        maxHeight: 360,
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-subtle, var(--gray-100))',
+                        borderRadius: 4,
+                      }}
+                    >
+                      {results.map((r, i) => {
+                        const isImporting = pluginImportingUrl === r.url
+                        return (
+                          <div
+                            key={r.id || r.url || i}
+                            onClick={() => !isImporting && handlePluginImport(p.id, r.url || r.id)}
+                            style={{
+                              padding: '8px 10px',
+                              borderBottom:
+                                i < results.length - 1
+                                  ? '1px solid var(--border-subtle, var(--gray-100))'
+                                  : 'none',
+                              cursor: isImporting ? 'wait' : 'pointer',
+                              opacity: isImporting ? 0.5 : 1,
+                              transition: 'background 0.2s',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--gray-50, #f9f9f9)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            title={`点击导入: ${r.title}`}
+                          >
+                            <div
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: 'var(--text-primary, var(--dark))',
+                                lineHeight: 1.3,
+                                marginBottom: 4,
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              {isImporting && '⟳ '}
+                              {r.title}
+                            </div>
+                            {r.summary && (
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: 'var(--text-muted, var(--gray-500))',
+                                  lineHeight: 1.4,
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
+                                  marginBottom: 4,
+                                }}
+                              >
+                                {r.summary}
+                              </div>
+                            )}
+                            {r.meta && (
+                              <div
+                                style={{
+                                  fontSize: 9,
+                                  color: 'var(--gray-500, #888)',
+                                  letterSpacing: '0.05em',
+                                }}
+                              >
+                                {r.meta.author && `${r.meta.author}`}
+                                {r.meta.points != null && ` · ${r.meta.points} pts`}
+                                {r.meta.comments != null && ` · ${r.meta.comments} 评论`}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {p.ui?.description && (
+                    <p className="text-[10px] mt-1.5" style={{ color: 'var(--gray-500, #888)' }}>
+                      {p.ui.description}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+
             {/* === 文本片段导入 === */}
             <div>
               <div
@@ -1456,7 +1659,7 @@ function LeftPanel({
                   textTransform: 'uppercase',
                 }}
               >
-                07 / 文本片段
+                {String(7 + plugins.length).padStart(2, '0')} / 文本片段
               </div>
               <input
                 type="text"

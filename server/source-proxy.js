@@ -1,21 +1,25 @@
 /**
  * Source Proxy — 外部源中转服务 (飞书 / 得到 / Notion)
  *
- * 浏览器调用 /canvas/api/source/* (vite dev proxy / nginx 反代到 17090),
- * 这里 spawn 用户已装的本地 CLI 拿数据 (零 API key 配置, 复用 lark-cli auth).
+ * 浏览器调用 /canvas/api/source/* (vite dev proxy / Caddy 反代到 17090),
+ * 这里 spawn 用户已装的本地 CLI 拿数据 (零 API key 配置, 复用 lark-cli auth)
+ * 或直接用 HTTP API (Notion 用 NOTION_TOKEN env var).
  *
  * 端点:
  *   GET  /health
  *   POST /feishu/search  { query, pageSize? }       → { ok, results: [{title, summary, url, token, owner, updateTime}] }
  *   POST /feishu/fetch   { docUrl }                  → { ok, data: { title, content, ... } }
+ *   POST /notion/search  { query, pageSize? }        → { ok, results: [{title, url, id, lastEditedTime}] }
+ *   POST /notion/fetch   { pageUrl | pageId }        → { ok, data: { title, content, blocks } }
  *
- * (得到 / Notion 待 #9 #10 加)
+ * (得到 待 #9 后续加 — 需 getnote-cli)
  *
  * 启动: npm run sourceproxy   (port 17090)
  *       PORT=17090 node server/source-proxy.js
  *
- * 依赖: Node 18+ (内置 fetch/Express 替代用 http 模块自己写, 不引外部依赖)
- *       lark-cli 已 auth (用户已经 lark-cli auth login --as user)
+ * 依赖: Node 18+ (内置 fetch / 不引外部依赖)
+ *       lark-cli 已 auth (lark-cli auth login --as user)
+ *       NOTION_TOKEN env var (从 ~/.claude/notion_config.json 拿)
  */
 
 const http = require('http')
@@ -25,6 +29,8 @@ const PORT = parseInt(process.env.SOURCE_PROXY_PORT || '17090', 10)
 const HOST = process.env.SOURCE_PROXY_HOST || '127.0.0.1'
 const TIMEOUT_MS = parseInt(process.env.SOURCE_PROXY_TIMEOUT_MS || '20000', 10)
 const LARK_BIN = process.env.LARK_CLI || (process.platform === 'win32' ? 'lark-cli.cmd' : 'lark-cli')
+const NOTION_TOKEN = process.env.NOTION_TOKEN || ''
+const NOTION_VERSION = '2022-06-28'
 
 function log(...args) {
   console.log('[source-proxy]', new Date().toISOString().slice(11, 19), ...args)
@@ -131,6 +137,91 @@ function compactFeishuFetch(raw) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Notion adapter — 直接 HTTP (无需 CLI), 用 NOTION_TOKEN 做 Bearer 认证
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 从 URL 抽 32 char id (notion 页面 url: https://notion.so/{slug}-{32hex} 或 /{32hex})
+function extractNotionId(input) {
+  const s = String(input || '').trim()
+  if (!s) return ''
+  // 已经是 UUID 形式
+  const uuidMatch = s.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+  if (uuidMatch) return uuidMatch[0].toLowerCase()
+  // 32 hex 紧凑形式
+  const hexMatch = s.match(/([0-9a-f]{32})(?:[?#&]|$)/i)
+  if (hexMatch) {
+    const h = hexMatch[1].toLowerCase()
+    return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`
+  }
+  return ''
+}
+
+async function notionFetch(path, init = {}) {
+  if (!NOTION_TOKEN) throw new Error('NOTION_TOKEN 未配置 — 设环境变量 NOTION_TOKEN=ntn_...')
+  const resp = await fetch(`https://api.notion.com/v1${path}`, {
+    ...init,
+    headers: {
+      'Authorization': `Bearer ${NOTION_TOKEN}`,
+      'Notion-Version': NOTION_VERSION,
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
+  })
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => '')
+    throw new Error(`notion ${resp.status}: ${txt.slice(0, 300)}`)
+  }
+  return resp.json()
+}
+
+// 取 page 的 plain title (从各种可能的 property)
+function extractNotionTitle(page) {
+  if (!page) return ''
+  // database 页面: properties 里找 type='title' 的
+  const props = page.properties || {}
+  for (const k of Object.keys(props)) {
+    const p = props[k]
+    if (p?.type === 'title' && Array.isArray(p.title)) {
+      return p.title.map((t) => t.plain_text || '').join('').trim()
+    }
+  }
+  // 普通页面也可能有 title 在 properties.title
+  return ''
+}
+
+// rich_text[] → 纯文本
+function richToText(rt) {
+  if (!Array.isArray(rt)) return ''
+  return rt.map((t) => t.plain_text || '').join('')
+}
+
+// blocks → markdown-like 文本 (支持 paragraph / heading / list / quote / code / divider)
+function blocksToMarkdown(blocks) {
+  if (!Array.isArray(blocks)) return ''
+  const lines = []
+  for (const b of blocks) {
+    const t = b.type
+    const d = b[t] || {}
+    const txt = richToText(d.rich_text || d.text || [])
+    switch (t) {
+      case 'paragraph': lines.push(txt); break
+      case 'heading_1': lines.push(`# ${txt}`); break
+      case 'heading_2': lines.push(`## ${txt}`); break
+      case 'heading_3': lines.push(`### ${txt}`); break
+      case 'bulleted_list_item': lines.push(`- ${txt}`); break
+      case 'numbered_list_item': lines.push(`1. ${txt}`); break
+      case 'quote': lines.push(`> ${txt}`); break
+      case 'code': lines.push('```' + (d.language || '') + '\n' + txt + '\n```'); break
+      case 'divider': lines.push('---'); break
+      case 'to_do': lines.push(`- [${d.checked ? 'x' : ' '}] ${txt}`); break
+      case 'callout': lines.push(`> 💡 ${txt}`); break
+      default: if (txt) lines.push(txt)
+    }
+  }
+  return lines.join('\n\n')
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`)
   const method = req.method
@@ -174,6 +265,61 @@ const server = http.createServer(async (req, res) => {
       const raw = await runLark(['docs', '+fetch', '--doc', docUrl, '--format', 'json'])
       const data = compactFeishuFetch(raw)
       sendJson(res, 200, { ok: true, data })
+      return
+    }
+
+    // ── /notion/search ──
+    if (method === 'POST' && url.pathname === '/notion/search') {
+      const body = await readJsonBody(req)
+      const query = String(body.query || '').trim()
+      if (!query) { sendJson(res, 400, { ok: false, error: 'query 不能为空' }); return }
+      const pageSize = Math.min(Math.max(parseInt(body.pageSize, 10) || 10, 1), 20)
+      log(`notion/search query="${query}" pageSize=${pageSize}`)
+      const raw = await notionFetch('/search', {
+        method: 'POST',
+        body: JSON.stringify({
+          query,
+          page_size: pageSize,
+          filter: { property: 'object', value: 'page' },
+          sort: { direction: 'descending', timestamp: 'last_edited_time' },
+        }),
+      })
+      const results = (raw.results || []).map((p) => ({
+        id: p.id,
+        title: extractNotionTitle(p) || '(无标题)',
+        url: p.url || `https://www.notion.so/${(p.id || '').replace(/-/g, '')}`,
+        lastEditedTime: p.last_edited_time || '',
+        createdTime: p.created_time || '',
+        objectType: p.object || 'page',
+      })).filter((r) => r.id)
+      sendJson(res, 200, { ok: true, results, total: results.length })
+      return
+    }
+
+    // ── /notion/fetch ──
+    if (method === 'POST' && url.pathname === '/notion/fetch') {
+      const body = await readJsonBody(req)
+      const input = String(body.pageUrl || body.pageId || '').trim()
+      if (!input) { sendJson(res, 400, { ok: false, error: 'pageUrl/pageId 不能为空' }); return }
+      const pageId = extractNotionId(input)
+      if (!pageId) { sendJson(res, 400, { ok: false, error: '无法从 URL 解析 page id (32 hex 或 UUID 格式)' }); return }
+      log(`notion/fetch pageId="${pageId}"`)
+      const [page, blocks] = await Promise.all([
+        notionFetch(`/pages/${pageId}`),
+        notionFetch(`/blocks/${pageId}/children?page_size=100`),
+      ])
+      const title = extractNotionTitle(page) || '(无标题)'
+      const content = blocksToMarkdown(blocks.results || [])
+      sendJson(res, 200, {
+        ok: true,
+        data: {
+          title,
+          content,
+          pageId,
+          url: page.url || '',
+          lastEditedTime: page.last_edited_time || '',
+        },
+      })
       return
     }
 

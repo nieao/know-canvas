@@ -3695,6 +3695,28 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
       },
 
       // ──────────────────────────────────────────────────────────────────
+      // 外部源搜索 — 飞书 docs/wiki 全文搜
+      //   返回 [{title, summary, url, owner, updateTime, docType, ...}]
+      //   不改 store, 纯转发, 由 LeftPanel 自己渲染列表
+      // ──────────────────────────────────────────────────────────────────
+      searchFeishu: async (query, pageSize = 10) => {
+        const q = String(query || '').trim()
+        if (!q) throw new Error('searchFeishu: query 为空')
+        const resp = await fetch('/canvas/api/source/feishu/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ query: q, pageSize }),
+        })
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => '')
+          throw new Error(`source-proxy ${resp.status}: ${txt.slice(0, 200)}`)
+        }
+        const json = await resp.json()
+        if (!json.ok) throw new Error(json.error || 'source-proxy 返回失败')
+        return { results: json.results || [], total: json.total || 0 }
+      },
+
+      // ──────────────────────────────────────────────────────────────────
       // 外部源导入 — 飞书 doc URL → BookmarkNode (含 title + 摘要 + sourceMeta)
       //   走 server/source-proxy.js (vite dev: /canvas/api/source 反代 17090)
       //   后续 #9 加得到 / Notion 时复制此模式
@@ -3742,6 +3764,64 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
           }
         })
 
+        return { nodeId, title, contentLength: content.length }
+      },
+
+      // ──────────────────────────────────────────────────────────────────
+      // Notion — 搜索 + URL 导入 (复用飞书同款模式, 走 /canvas/api/source/notion/*)
+      // ──────────────────────────────────────────────────────────────────
+      searchNotion: async (query, pageSize = 10) => {
+        const q = String(query || '').trim()
+        if (!q) throw new Error('searchNotion: query 为空')
+        const resp = await fetch('/canvas/api/source/notion/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ query: q, pageSize }),
+        })
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => '')
+          throw new Error(`source-proxy ${resp.status}: ${txt.slice(0, 200)}`)
+        }
+        const json = await resp.json()
+        if (!json.ok) throw new Error(json.error || 'source-proxy 返回失败')
+        return { results: json.results || [], total: json.total || 0 }
+      },
+
+      importFromNotionUrl: async (pageUrl, position = null) => {
+        const url = String(pageUrl || '').trim()
+        if (!url) throw new Error('importFromNotionUrl: pageUrl 为空')
+        const resp = await fetch('/canvas/api/source/notion/fetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ pageUrl: url }),
+        })
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => '')
+          throw new Error(`source-proxy ${resp.status}: ${txt.slice(0, 200)}`)
+        }
+        const json = await resp.json()
+        if (!json.ok) throw new Error(json.error || 'source-proxy 返回失败')
+        const data = json.data || {}
+        const title = data.title || url
+        const content = String(data.content || '').replace(/\s+/g, ' ').trim()
+        const summary = content.slice(0, 240) + (content.length > 240 ? '...' : '')
+
+        const { addBookmarkNode } = get()
+        const nodeId = addBookmarkNode(data.url || url, title, summary, '', '', position, false)
+
+        set((state) => {
+          const n = state.nodes.find((x) => x.id === nodeId)
+          if (n) {
+            n.data = n.data || {}
+            n.data.sourceMeta = {
+              platform: 'notion',
+              originalUrl: data.url || url,
+              pageId: data.pageId || '',
+              importedAt: Date.now(),
+              fullContent: content,
+            }
+          }
+        })
         return { nodeId, title, contentLength: content.length }
       },
 

@@ -166,23 +166,93 @@ function LeftPanel({
     setUrlInput('')
   }
 
-  // 飞书 doc URL → 直接画布节点 (调 source-proxy 拿 title + 摘要)
+  // 飞书 — 两种模式: 'url' 直接粘 URL / 'search' 搜索后点击导入
+  const [feishuMode, setFeishuMode] = useState('search') // 'search' | 'url'
   const [feishuUrl, setFeishuUrl] = useState('')
+  const [feishuQuery, setFeishuQuery] = useState('')
+  const [feishuResults, setFeishuResults] = useState([]) // [{title,summary,url,owner,...}]
   const [feishuLoading, setFeishuLoading] = useState(false)
-  const handleFeishuImport = async () => {
-    const url = feishuUrl.trim()
-    if (!url) return
+  const [feishuImportingUrl, setFeishuImportingUrl] = useState('') // 标记正在导入哪一条
+
+  const handleFeishuSearch = async () => {
+    const q = feishuQuery.trim()
+    if (!q) return
     setFeishuLoading(true)
+    setFeishuResults([])
+    try {
+      const store = useCanvasStore.getState()
+      const r = await store.searchFeishu(q, 10)
+      setFeishuResults(r.results || [])
+      logAction('leftpanel.searchFeishu', { query: q, count: r.results?.length || 0 })
+    } catch (err) {
+      console.error('[leftpanel] feishu search failed:', err)
+      alert(`飞书搜索失败:\n${err?.message || err}`)
+    } finally {
+      setFeishuLoading(false)
+    }
+  }
+
+  const handleFeishuImport = async (urlOverride) => {
+    const url = (urlOverride || feishuUrl).trim()
+    if (!url) return
+    setFeishuImportingUrl(url)
+    if (!urlOverride) setFeishuLoading(true)
     try {
       const store = useCanvasStore.getState()
       const r = await store.importFromFeishuUrl(url)
       logAction('leftpanel.importFeishu', { url, title: r.title, contentLength: r.contentLength })
-      setFeishuUrl('')
+      if (!urlOverride) setFeishuUrl('')
     } catch (err) {
       console.error('[leftpanel] feishu import failed:', err)
       alert(`飞书文档导入失败:\n${err?.message || err}\n\n常见原因:\n1. source-proxy daemon 未启动 (npm run sourceproxy 起 17090)\n2. lark-cli 未登录 (lark-cli auth login --as user)\n3. 文档没权限访问`)
     } finally {
-      setFeishuLoading(false)
+      setFeishuImportingUrl('')
+      if (!urlOverride) setFeishuLoading(false)
+    }
+  }
+
+  // Notion — 同款搜索 + URL 双模式
+  const [notionMode, setNotionMode] = useState('search')
+  const [notionUrl, setNotionUrl] = useState('')
+  const [notionQuery, setNotionQuery] = useState('')
+  const [notionResults, setNotionResults] = useState([])
+  const [notionLoading, setNotionLoading] = useState(false)
+  const [notionImportingUrl, setNotionImportingUrl] = useState('')
+
+  const handleNotionSearch = async () => {
+    const q = notionQuery.trim()
+    if (!q) return
+    setNotionLoading(true)
+    setNotionResults([])
+    try {
+      const store = useCanvasStore.getState()
+      const r = await store.searchNotion(q, 10)
+      setNotionResults(r.results || [])
+      logAction('leftpanel.searchNotion', { query: q, count: r.results?.length || 0 })
+    } catch (err) {
+      console.error('[leftpanel] notion search failed:', err)
+      alert(`Notion 搜索失败:\n${err?.message || err}`)
+    } finally {
+      setNotionLoading(false)
+    }
+  }
+
+  const handleNotionImport = async (urlOverride) => {
+    const url = (urlOverride || notionUrl).trim()
+    if (!url) return
+    setNotionImportingUrl(url)
+    if (!urlOverride) setNotionLoading(true)
+    try {
+      const store = useCanvasStore.getState()
+      const r = await store.importFromNotionUrl(url)
+      logAction('leftpanel.importNotion', { url, title: r.title, contentLength: r.contentLength })
+      if (!urlOverride) setNotionUrl('')
+    } catch (err) {
+      console.error('[leftpanel] notion import failed:', err)
+      alert(`Notion 导入失败:\n${err?.message || err}\n\n常见原因:\n1. NOTION_TOKEN 未配置 (VPS systemd / 本地 .env)\n2. integration 未邀到目标页面 (Notion 页面右上 share → invite integration)`)
+    } finally {
+      setNotionImportingUrl('')
+      if (!urlOverride) setNotionLoading(false)
     }
   }
 
@@ -635,68 +705,445 @@ function LeftPanel({
               </div>
             </div>
 
-            {/* === 飞书 doc 快速导入 === */}
+            {/* === 飞书 doc 搜索 + 导入 === */}
             <div>
               <div
                 style={{
-                  fontSize: 10,
-                  letterSpacing: '0.35em',
-                  color: 'var(--accent, var(--warm))',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                   marginBottom: 8,
-                  textTransform: 'uppercase',
                 }}
               >
-                04 / 飞书文档
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={feishuUrl}
-                  onChange={(e) => setFeishuUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !feishuLoading && handleFeishuImport()}
-                  placeholder="my.feishu.cn/docx/... 或 wiki/..."
-                  disabled={feishuLoading}
-                  className="flex-1 px-3 py-2"
+                <div
                   style={{
-                    fontSize: 12,
-                    border: '1px solid var(--border-subtle, var(--gray-100))',
-                    color: 'var(--text-primary, var(--dark))',
-                    background: 'var(--surface, var(--white))',
-                    fontFamily: FONT_SANS,
-                    borderRadius: 4,
-                    outline: 'none',
-                    transition: 'border-color 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
-                    opacity: feishuLoading ? 0.5 : 1,
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = 'var(--accent, var(--warm))')}
-                  onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle, var(--gray-100))')}
-                />
-                <button
-                  onClick={handleFeishuImport}
-                  disabled={!feishuUrl.trim() || feishuLoading}
-                  style={{
-                    padding: '8px 16px',
-                    fontSize: 11,
-                    letterSpacing: '0.15em',
-                    background: feishuUrl.trim() && !feishuLoading
-                      ? 'var(--accent, var(--warm))'
-                      : 'var(--border-subtle, var(--gray-100))',
-                    color: feishuUrl.trim() && !feishuLoading
-                      ? 'var(--surface, white)'
-                      : 'var(--text-muted, var(--gray-500))',
-                    border: 'none',
-                    borderRadius: 4,
-                    cursor: feishuUrl.trim() && !feishuLoading ? 'pointer' : 'not-allowed',
-                    transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
-                    fontFamily: FONT_SANS,
-                    minWidth: 56,
+                    fontSize: 10,
+                    letterSpacing: '0.35em',
+                    color: 'var(--accent, var(--warm))',
+                    textTransform: 'uppercase',
                   }}
                 >
-                  {feishuLoading ? '...' : '导入'}
-                </button>
+                  04 / 飞书文档
+                </div>
+                {/* mode 切换 */}
+                <div style={{ display: 'flex', gap: 0, fontSize: 10 }}>
+                  {[
+                    { id: 'search', label: '搜索' },
+                    { id: 'url', label: 'URL' },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setFeishuMode(m.id)}
+                      style={{
+                        padding: '2px 10px',
+                        letterSpacing: '0.1em',
+                        background: feishuMode === m.id ? 'var(--accent, var(--warm))' : 'transparent',
+                        color: feishuMode === m.id ? 'var(--surface, white)' : 'var(--text-muted, var(--gray-500))',
+                        border: '1px solid var(--border-subtle, var(--gray-100))',
+                        borderRadius: 0,
+                        cursor: 'pointer',
+                        fontFamily: FONT_SANS,
+                        transition: 'all 0.3s',
+                      }}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {feishuMode === 'search' ? (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={feishuQuery}
+                      onChange={(e) => setFeishuQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && !feishuLoading && handleFeishuSearch()}
+                      placeholder="搜飞书 docs / wiki..."
+                      disabled={feishuLoading}
+                      className="flex-1 px-3 py-2"
+                      style={{
+                        fontSize: 12,
+                        border: '1px solid var(--border-subtle, var(--gray-100))',
+                        color: 'var(--text-primary, var(--dark))',
+                        background: 'var(--surface, var(--white))',
+                        fontFamily: FONT_SANS,
+                        borderRadius: 4,
+                        outline: 'none',
+                        transition: 'border-color 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+                        opacity: feishuLoading ? 0.5 : 1,
+                      }}
+                      onFocus={(e) => (e.target.style.borderColor = 'var(--accent, var(--warm))')}
+                      onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle, var(--gray-100))')}
+                    />
+                    <button
+                      onClick={handleFeishuSearch}
+                      disabled={!feishuQuery.trim() || feishuLoading}
+                      style={{
+                        padding: '8px 14px',
+                        fontSize: 11,
+                        letterSpacing: '0.15em',
+                        background: feishuQuery.trim() && !feishuLoading
+                          ? 'var(--accent, var(--warm))'
+                          : 'var(--border-subtle, var(--gray-100))',
+                        color: feishuQuery.trim() && !feishuLoading
+                          ? 'var(--surface, white)'
+                          : 'var(--text-muted, var(--gray-500))',
+                        border: 'none',
+                        borderRadius: 4,
+                        cursor: feishuQuery.trim() && !feishuLoading ? 'pointer' : 'not-allowed',
+                        transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+                        fontFamily: FONT_SANS,
+                        minWidth: 50,
+                      }}
+                    >
+                      {feishuLoading ? '...' : '搜'}
+                    </button>
+                  </div>
+
+                  {/* 搜索结果列表 */}
+                  {feishuResults.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        maxHeight: 360,
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-subtle, var(--gray-100))',
+                        borderRadius: 4,
+                      }}
+                    >
+                      {feishuResults.map((r, i) => {
+                        const isImporting = feishuImportingUrl === r.url
+                        return (
+                          <div
+                            key={r.url + i}
+                            onClick={() => !isImporting && handleFeishuImport(r.url)}
+                            style={{
+                              padding: '8px 10px',
+                              borderBottom:
+                                i < feishuResults.length - 1
+                                  ? '1px solid var(--border-subtle, var(--gray-100))'
+                                  : 'none',
+                              cursor: isImporting ? 'wait' : 'pointer',
+                              opacity: isImporting ? 0.5 : 1,
+                              transition: 'background 0.2s',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--gray-50, #f9f9f9)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            title={`点击导入: ${r.title}`}
+                          >
+                            <div
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: 'var(--text-primary, var(--dark))',
+                                lineHeight: 1.3,
+                                marginBottom: 4,
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              {isImporting && '⟳ '}
+                              {r.title}
+                            </div>
+                            {r.summary && (
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: 'var(--text-muted, var(--gray-500))',
+                                  lineHeight: 1.4,
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
+                                  marginBottom: 4,
+                                }}
+                              >
+                                {r.summary}
+                              </div>
+                            )}
+                            <div
+                              style={{
+                                fontSize: 9,
+                                color: 'var(--gray-500, #888)',
+                                display: 'flex',
+                                gap: 8,
+                                letterSpacing: '0.05em',
+                              }}
+                            >
+                              <span>{r.docType || r.entityType}</span>
+                              {r.owner && <span>· {r.owner}</span>}
+                              {r.updateTime && <span>· {r.updateTime.slice(0, 10)}</span>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={feishuUrl}
+                    onChange={(e) => setFeishuUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !feishuLoading && handleFeishuImport()}
+                    placeholder="my.feishu.cn/docx/... 或 wiki/..."
+                    disabled={feishuLoading}
+                    className="flex-1 px-3 py-2"
+                    style={{
+                      fontSize: 12,
+                      border: '1px solid var(--border-subtle, var(--gray-100))',
+                      color: 'var(--text-primary, var(--dark))',
+                      background: 'var(--surface, var(--white))',
+                      fontFamily: FONT_SANS,
+                      borderRadius: 4,
+                      outline: 'none',
+                      transition: 'border-color 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+                      opacity: feishuLoading ? 0.5 : 1,
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = 'var(--accent, var(--warm))')}
+                    onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle, var(--gray-100))')}
+                  />
+                  <button
+                    onClick={() => handleFeishuImport()}
+                    disabled={!feishuUrl.trim() || feishuLoading}
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: 11,
+                      letterSpacing: '0.15em',
+                      background: feishuUrl.trim() && !feishuLoading
+                        ? 'var(--accent, var(--warm))'
+                        : 'var(--border-subtle, var(--gray-100))',
+                      color: feishuUrl.trim() && !feishuLoading
+                        ? 'var(--surface, white)'
+                        : 'var(--text-muted, var(--gray-500))',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: feishuUrl.trim() && !feishuLoading ? 'pointer' : 'not-allowed',
+                      transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+                      fontFamily: FONT_SANS,
+                      minWidth: 56,
+                    }}
+                  >
+                    {feishuLoading ? '...' : '导入'}
+                  </button>
+                </div>
+              )}
+
               <p className="text-[10px] mt-1.5" style={{ color: 'var(--gray-500, #888)' }}>
-                需 source-proxy daemon 启动 (npm run sourceproxy) + lark-cli 已登录
+                {feishuMode === 'search' ? '搜你飞书 docs/wiki, 点击列表项即导入' : '粘贴 URL 直接导入'}
+              </p>
+            </div>
+
+            {/* === Notion 搜索 + 导入 === */}
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 8,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.35em',
+                    color: 'var(--accent, var(--warm))',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  05 / Notion
+                </div>
+                <div style={{ display: 'flex', gap: 0, fontSize: 10 }}>
+                  {[
+                    { id: 'search', label: '搜索' },
+                    { id: 'url', label: 'URL' },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setNotionMode(m.id)}
+                      style={{
+                        padding: '2px 10px',
+                        letterSpacing: '0.1em',
+                        background: notionMode === m.id ? 'var(--accent, var(--warm))' : 'transparent',
+                        color: notionMode === m.id ? 'var(--surface, white)' : 'var(--text-muted, var(--gray-500))',
+                        border: '1px solid var(--border-subtle, var(--gray-100))',
+                        borderRadius: 0,
+                        cursor: 'pointer',
+                        fontFamily: FONT_SANS,
+                        transition: 'all 0.3s',
+                      }}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {notionMode === 'search' ? (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={notionQuery}
+                      onChange={(e) => setNotionQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && !notionLoading && handleNotionSearch()}
+                      placeholder="搜 Notion pages..."
+                      disabled={notionLoading}
+                      className="flex-1 px-3 py-2"
+                      style={{
+                        fontSize: 12,
+                        border: '1px solid var(--border-subtle, var(--gray-100))',
+                        color: 'var(--text-primary, var(--dark))',
+                        background: 'var(--surface, var(--white))',
+                        fontFamily: FONT_SANS,
+                        borderRadius: 4,
+                        outline: 'none',
+                        opacity: notionLoading ? 0.5 : 1,
+                      }}
+                      onFocus={(e) => (e.target.style.borderColor = 'var(--accent, var(--warm))')}
+                      onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle, var(--gray-100))')}
+                    />
+                    <button
+                      onClick={handleNotionSearch}
+                      disabled={!notionQuery.trim() || notionLoading}
+                      style={{
+                        padding: '8px 14px',
+                        fontSize: 11,
+                        letterSpacing: '0.15em',
+                        background: notionQuery.trim() && !notionLoading
+                          ? 'var(--accent, var(--warm))'
+                          : 'var(--border-subtle, var(--gray-100))',
+                        color: notionQuery.trim() && !notionLoading
+                          ? 'var(--surface, white)'
+                          : 'var(--text-muted, var(--gray-500))',
+                        border: 'none',
+                        borderRadius: 4,
+                        cursor: notionQuery.trim() && !notionLoading ? 'pointer' : 'not-allowed',
+                        fontFamily: FONT_SANS,
+                        minWidth: 50,
+                      }}
+                    >
+                      {notionLoading ? '...' : '搜'}
+                    </button>
+                  </div>
+
+                  {notionResults.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        maxHeight: 360,
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-subtle, var(--gray-100))',
+                        borderRadius: 4,
+                      }}
+                    >
+                      {notionResults.map((r, i) => {
+                        const isImporting = notionImportingUrl === r.url
+                        return (
+                          <div
+                            key={r.id + i}
+                            onClick={() => !isImporting && handleNotionImport(r.url)}
+                            style={{
+                              padding: '8px 10px',
+                              borderBottom:
+                                i < notionResults.length - 1
+                                  ? '1px solid var(--border-subtle, var(--gray-100))'
+                                  : 'none',
+                              cursor: isImporting ? 'wait' : 'pointer',
+                              opacity: isImporting ? 0.5 : 1,
+                              transition: 'background 0.2s',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--gray-50, #f9f9f9)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            title={`点击导入: ${r.title}`}
+                          >
+                            <div
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: 'var(--text-primary, var(--dark))',
+                                lineHeight: 1.3,
+                                marginBottom: 4,
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              {isImporting && '⟳ '}
+                              {r.title}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 9,
+                                color: 'var(--gray-500, #888)',
+                                letterSpacing: '0.05em',
+                              }}
+                            >
+                              {r.lastEditedTime ? r.lastEditedTime.slice(0, 10) : ''}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={notionUrl}
+                    onChange={(e) => setNotionUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !notionLoading && handleNotionImport()}
+                    placeholder="notion.so/... 或 32 hex id"
+                    disabled={notionLoading}
+                    className="flex-1 px-3 py-2"
+                    style={{
+                      fontSize: 12,
+                      border: '1px solid var(--border-subtle, var(--gray-100))',
+                      color: 'var(--text-primary, var(--dark))',
+                      background: 'var(--surface, var(--white))',
+                      fontFamily: FONT_SANS,
+                      borderRadius: 4,
+                      outline: 'none',
+                      opacity: notionLoading ? 0.5 : 1,
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = 'var(--accent, var(--warm))')}
+                    onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle, var(--gray-100))')}
+                  />
+                  <button
+                    onClick={() => handleNotionImport()}
+                    disabled={!notionUrl.trim() || notionLoading}
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: 11,
+                      letterSpacing: '0.15em',
+                      background: notionUrl.trim() && !notionLoading
+                        ? 'var(--accent, var(--warm))'
+                        : 'var(--border-subtle, var(--gray-100))',
+                      color: notionUrl.trim() && !notionLoading
+                        ? 'var(--surface, white)'
+                        : 'var(--text-muted, var(--gray-500))',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: notionUrl.trim() && !notionLoading ? 'pointer' : 'not-allowed',
+                      fontFamily: FONT_SANS,
+                      minWidth: 56,
+                    }}
+                  >
+                    {notionLoading ? '...' : '导入'}
+                  </button>
+                </div>
+              )}
+
+              <p className="text-[10px] mt-1.5" style={{ color: 'var(--gray-500, #888)' }}>
+                {notionMode === 'search' ? '搜 Notion pages, 点击列表项即导入' : '粘贴 Notion 页面 URL 直接导入'}
               </p>
             </div>
 

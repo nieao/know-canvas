@@ -19,6 +19,14 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         secure: true,
       },
+      // 外部源中转 (飞书 / 得到 / Notion) — 本地 dev 时反代到 source-proxy daemon (port 17090)
+      // 浏览器调 /canvas/api/source/feishu/search → vite proxy → http://127.0.0.1:17090/feishu/search
+      // 线上 Caddy 同样把 /canvas/api/source/* 反代到 17090, 行为一致
+      '/canvas/api/source': {
+        target: 'http://127.0.0.1:17090',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/canvas\/api\/source/, ''),
+      },
     },
   },
   build: {

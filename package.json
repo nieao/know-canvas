@@ -13,6 +13,7 @@
     "yws": "node server/y-ws-server.js",
     "bridge": "node server/claude-bridge.js",
     "hermes": "node server/hermes-proxy.js",
+    "sourceproxy": "node server/source-proxy.js",
     "llm-proxy": "node server/vps-llm-proxy.mjs",
     "cli-bridge": "node server/canvas-cli-bridge.mjs",
     "test:e2e": "playwright test",

@@ -166,6 +166,26 @@ function LeftPanel({
     setUrlInput('')
   }
 
+  // 飞书 doc URL → 直接画布节点 (调 source-proxy 拿 title + 摘要)
+  const [feishuUrl, setFeishuUrl] = useState('')
+  const [feishuLoading, setFeishuLoading] = useState(false)
+  const handleFeishuImport = async () => {
+    const url = feishuUrl.trim()
+    if (!url) return
+    setFeishuLoading(true)
+    try {
+      const store = useCanvasStore.getState()
+      const r = await store.importFromFeishuUrl(url)
+      logAction('leftpanel.importFeishu', { url, title: r.title, contentLength: r.contentLength })
+      setFeishuUrl('')
+    } catch (err) {
+      console.error('[leftpanel] feishu import failed:', err)
+      alert(`飞书文档导入失败:\n${err?.message || err}\n\n常见原因:\n1. source-proxy daemon 未启动 (npm run sourceproxy 起 17090)\n2. lark-cli 未登录 (lark-cli auth login --as user)\n3. 文档没权限访问`)
+    } finally {
+      setFeishuLoading(false)
+    }
+  }
+
   const handleTextImport = () => {
     if (!textInput.trim()) return
     const textName = textTitle.trim() || `文本片段 ${new Date().toLocaleTimeString()}`
@@ -615,6 +635,71 @@ function LeftPanel({
               </div>
             </div>
 
+            {/* === 飞书 doc 快速导入 === */}
+            <div>
+              <div
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '0.35em',
+                  color: 'var(--accent, var(--warm))',
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                }}
+              >
+                04 / 飞书文档
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={feishuUrl}
+                  onChange={(e) => setFeishuUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !feishuLoading && handleFeishuImport()}
+                  placeholder="my.feishu.cn/docx/... 或 wiki/..."
+                  disabled={feishuLoading}
+                  className="flex-1 px-3 py-2"
+                  style={{
+                    fontSize: 12,
+                    border: '1px solid var(--border-subtle, var(--gray-100))',
+                    color: 'var(--text-primary, var(--dark))',
+                    background: 'var(--surface, var(--white))',
+                    fontFamily: FONT_SANS,
+                    borderRadius: 4,
+                    outline: 'none',
+                    transition: 'border-color 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+                    opacity: feishuLoading ? 0.5 : 1,
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = 'var(--accent, var(--warm))')}
+                  onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle, var(--gray-100))')}
+                />
+                <button
+                  onClick={handleFeishuImport}
+                  disabled={!feishuUrl.trim() || feishuLoading}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: 11,
+                    letterSpacing: '0.15em',
+                    background: feishuUrl.trim() && !feishuLoading
+                      ? 'var(--accent, var(--warm))'
+                      : 'var(--border-subtle, var(--gray-100))',
+                    color: feishuUrl.trim() && !feishuLoading
+                      ? 'var(--surface, white)'
+                      : 'var(--text-muted, var(--gray-500))',
+                    border: 'none',
+                    borderRadius: 4,
+                    cursor: feishuUrl.trim() && !feishuLoading ? 'pointer' : 'not-allowed',
+                    transition: 'all 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+                    fontFamily: FONT_SANS,
+                    minWidth: 56,
+                  }}
+                >
+                  {feishuLoading ? '...' : '导入'}
+                </button>
+              </div>
+              <p className="text-[10px] mt-1.5" style={{ color: 'var(--gray-500, #888)' }}>
+                需 source-proxy daemon 启动 (npm run sourceproxy) + lark-cli 已登录
+              </p>
+            </div>
+
             {/* === 文本片段导入 === */}
             <div>
               <div
@@ -626,7 +711,7 @@ function LeftPanel({
                   textTransform: 'uppercase',
                 }}
               >
-                04 / 文本片段
+                05 / 文本片段
               </div>
               <input
                 type="text"

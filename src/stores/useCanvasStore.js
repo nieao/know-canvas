@@ -3695,6 +3695,57 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
       },
 
       // ──────────────────────────────────────────────────────────────────
+      // 外部源导入 — 飞书 doc URL → BookmarkNode (含 title + 摘要 + sourceMeta)
+      //   走 server/source-proxy.js (vite dev: /canvas/api/source 反代 17090)
+      //   后续 #9 加得到 / Notion 时复制此模式
+      // ──────────────────────────────────────────────────────────────────
+      importFromFeishuUrl: async (docUrl, position = null) => {
+        const url = String(docUrl || '').trim()
+        if (!url) throw new Error('importFromFeishuUrl: docUrl 为空')
+        if (!/feishu\.cn|larksuite\.com/i.test(url)) {
+          throw new Error('importFromFeishuUrl: 不是飞书/Lark URL')
+        }
+
+        const resp = await fetch('/canvas/api/source/feishu/fetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ docUrl: url }),
+        })
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => '')
+          throw new Error(`source-proxy ${resp.status}: ${txt.slice(0, 200)}`)
+        }
+        const json = await resp.json()
+        if (!json.ok) throw new Error(json.error || 'source-proxy 返回失败')
+
+        const data = json.data || {}
+        const title = data.title || url
+        // 取 markdown 内容前 240 字作摘要
+        const content = String(data.content || '').replace(/\s+/g, ' ').trim()
+        const summary = content.slice(0, 240) + (content.length > 240 ? '...' : '')
+
+        const { addBookmarkNode } = get()
+        // autoFetch=false — 已经从 source-proxy 拿到 title + summary, 不再走 microlink
+        const nodeId = addBookmarkNode(url, title, summary, '', '', position, false)
+
+        // 标记 sourceMeta 让节点知道是从飞书来 + 后续推回时能找到原 URL
+        set((state) => {
+          const n = state.nodes.find((x) => x.id === nodeId)
+          if (n) {
+            n.data = n.data || {}
+            n.data.sourceMeta = {
+              platform: 'feishu',
+              originalUrl: url,
+              importedAt: Date.now(),
+              fullContent: content, // 全文留着, 后续节点详情面板可展开
+            }
+          }
+        })
+
+        return { nodeId, title, contentLength: content.length }
+      },
+
+      // ──────────────────────────────────────────────────────────────────
       // 频道投送 — 私人草稿 → 公共频道发布
       //   - 收集所选节点 + 完整子树 (group 嵌套靠 parentNode 链)
       //   - 重新生成 id 防与目标房间冲突

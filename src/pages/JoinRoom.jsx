@@ -13,6 +13,7 @@ import {
   USER_PALETTE,
   navigateToRoom,
   getRoomFromUrl,
+  getPrivateRoomFor,
 } from '../collab/session'
 
 // 简易 nanoid（房间号生成）
@@ -23,8 +24,7 @@ const genRoomId = () => {
   return id
 }
 
-// 当前 hackathon 主房间 — orchestra conductor 默认 BOOT_ROOMS 接管的房间
-// 三人协作时点"快速进入主房间"即可，确保都进同一个 room
+// 主公共频道 — 三人协作 / 黑客松 demo 共用
 const PRIMARY_ROOM = 'demo-final'
 
 // 三人组快捷名字 — 点击即填入用户名
@@ -75,6 +75,18 @@ export default function JoinRoom() {
     setUsername(name.trim())
     setUserColor(color)
     navigateToRoom(PRIMARY_ROOM)
+  }
+
+  // 默认入口: 进自己的私人草稿空间 — 不被其他用户看到, 想协作时再用顶部 ChannelSwitcher 切公共
+  const handleJoinPrivate = () => {
+    setError('')
+    if (!canCreate) {
+      setError('请先填写用户名')
+      return
+    }
+    setUsername(name.trim())
+    setUserColor(color)
+    navigateToRoom(getPrivateRoomFor(name.trim()))
   }
 
   return (
@@ -224,20 +236,39 @@ export default function JoinRoom() {
           <p className="text-xs mb-3" style={{ color: '#ef4444' }}>{error}</p>
         )}
 
-        {/* 快速进入主房间 — Hackathon demo 三人共用 */}
+        {/* 默认入口: 私人草稿 — 个人空间, 别人看不到 */}
         <button
           type="button"
-          onClick={handleJoinPrimary}
+          onClick={handleJoinPrivate}
           disabled={!canCreate}
-          className="w-full py-3 text-sm font-medium rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed mb-2 group relative"
+          className="w-full py-3 text-sm font-medium rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed mb-2"
           style={{
             backgroundColor: '#1a1a1a',
             color: '#fafafa',
             letterSpacing: '0.05em',
           }}
+          title="进入只属于你的草稿画布, 想协作时随时切到公共频道"
+        >
+          <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle" style={{ backgroundColor: '#9e7cb2' }} />
+          进入私人草稿{name.trim() ? ` · ${name.trim()}` : ''}
+        </button>
+
+        {/* 进主公共房间 */}
+        <button
+          type="button"
+          onClick={handleJoinPrimary}
+          disabled={!canCreate}
+          className="w-full py-2.5 text-sm rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed mb-2"
+          style={{
+            background: '#fafafa',
+            color: '#2d2d2d',
+            border: '1px solid #e8e8e8',
+            letterSpacing: '0.05em',
+          }}
+          title="进入主公共房间, 跟其他在线用户一起协作"
         >
           <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle" style={{ backgroundColor: '#c8a882' }} />
-          快速进入主房间 · {PRIMARY_ROOM}
+          进公共主房间 · {PRIMARY_ROOM}
         </button>
 
         <div className="flex items-center gap-3 my-3">
@@ -276,7 +307,7 @@ export default function JoinRoom() {
         </div>
 
         <p className="text-[11px] mt-6 text-center" style={{ color: '#bbb' }}>
-          所有数据通过 Yjs 实时同步 · 服务器仅做中转 · 浏览器本地缓存
+          私人草稿仅你可见 · 想协作时点画布顶部"频道切换" · 数据走 Yjs 实时同步
         </p>
       </div>
     </div>

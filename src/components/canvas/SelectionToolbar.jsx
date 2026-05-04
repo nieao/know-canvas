@@ -98,6 +98,18 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
     dispatch('batchAdvance', { mode })
   }
 
+  // 投送到公共频道 — 把选中节点 + 子树拷贝到目标 room
+  // 默认 pub-default; 用户可填自定义 (pub-xxx / 任意 id)
+  const handleCastToChannel = () => {
+    closeAllMenus()
+    const targetRoom = prompt(
+      '投送到哪个频道？\n\n输入目标房间 id (例: pub-default / pub-team-a / demo-final):\n\n仅本节点 + 完整子树会被拷贝, 本地原节点保留',
+      'pub-default'
+    )
+    if (!targetRoom || !targetRoom.trim()) return
+    dispatch('castToChannel', { targetRoom: targetRoom.trim() })
+  }
+
   // 按钮通用样式
   const btnClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300"
 
@@ -131,6 +143,17 @@ function SelectionToolbar({ selectedCount, position, onAction }) {
         >
           <span>🧠</span>
           <span>组合分析</span>
+        </button>
+
+        {/* 投送到公共频道 — 把选中节点 + 子树拷贝到目标 room (本地原节点保留) */}
+        <button
+          onClick={handleCastToChannel}
+          className={btnClass}
+          style={{ backgroundColor: 'rgba(158,124,178,0.10)', color: '#9e7cb2', fontWeight: 500 }}
+          title="把选中节点 + 完整子树投送到指定频道 (默认 pub-default). 本地原节点保留, 远端会得到一份拷贝"
+        >
+          <span>📡</span>
+          <span>投送频道</span>
         </button>
 
         {/* 自动排列 — 横排 / 竖排 / 九宫格 */}

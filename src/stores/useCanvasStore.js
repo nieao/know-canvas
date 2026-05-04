@@ -3693,6 +3693,87 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
           })
         })
       },
+
+      // ──────────────────────────────────────────────────────────────────
+      // 频道投送 — 私人草稿 → 公共频道发布
+      //   - 收集所选节点 + 完整子树 (group 嵌套靠 parentNode 链)
+      //   - 重新生成 id 防与目标房间冲突
+      //   - 调 yjsClient.castToRoom 临时连目标 room 写入
+      //   - 本地原节点保留 (拷贝不是移动), 仅打 publishedTo 标记
+      // ──────────────────────────────────────────────────────────────────
+      castNodesToChannel: async (nodeIds, targetRoom) => {
+        if (!Array.isArray(nodeIds) || !nodeIds.length) {
+          throw new Error('castNodesToChannel: nodeIds 为空')
+        }
+        if (!targetRoom) throw new Error('castNodesToChannel: 目标房间为空')
+
+        const { nodes, edges } = get()
+        // 1) 收集子树 (含所有 parentNode → 选中的节点的子孙)
+        //    最多 4 级嵌套 (projectGroup → challengeGroup → 卡片), 跑 4 pass 兜底
+        const memberSet = new Set(nodeIds)
+        for (let pass = 0; pass < 4; pass++) {
+          let grew = false
+          for (const n of nodes) {
+            if (n.parentNode && memberSet.has(n.parentNode) && !memberSet.has(n.id)) {
+              memberSet.add(n.id)
+              grew = true
+            }
+          }
+          if (!grew) break
+        }
+        const memberArr = nodes.filter((n) => memberSet.has(n.id))
+        if (!memberArr.length) return { castedCount: 0 }
+
+        // 2) id 改写防冲突 — 目标房间可能已存在同 id
+        const ts = Date.now()
+        const idMap = {}
+        for (const n of memberArr) idMap[n.id] = `${n.id}-cast-${ts.toString(36)}`
+
+        const renamedNodes = memberArr.map((n) => {
+          const next = {
+            ...n,
+            id: idMap[n.id],
+            // parentNode 跟着改 — 仅当父节点也在投送集合内, 否则当顶层 (清掉 parentNode)
+            parentNode: n.parentNode && idMap[n.parentNode] ? idMap[n.parentNode] : undefined,
+            extent: (n.parentNode && idMap[n.parentNode]) ? n.extent : undefined,
+            selected: false,
+            data: { ...(n.data || {}), castFrom: { room: get().__currentRoom || '', origId: n.id, ts } },
+          }
+          return next
+        })
+
+        // 3) 涉及的边 — 两端都在投送集合内才带过去, 否则丢弃 (避免悬空 edge)
+        const renamedEdges = edges
+          .filter((e) => idMap[e.source] && idMap[e.target])
+          .map((e) => ({
+            ...e,
+            id: `${e.id}-cast-${ts.toString(36)}`,
+            source: idMap[e.source],
+            target: idMap[e.target],
+          }))
+
+        // 4) 调 yjsClient.castToRoom (临时 connect → 写入 → disconnect)
+        const { castToRoom } = await import('../collab/yjsClient')
+        await castToRoom({ nodes: renamedNodes, edges: renamedEdges }, targetRoom)
+
+        // 5) 本地原节点打 publishedTo 标记 (历史记录 + 防重复投送 UI 提示)
+        set((state) => {
+          for (const n of state.nodes) {
+            if (memberSet.has(n.id)) {
+              n.data = n.data || {}
+              const arr = Array.isArray(n.data.publishedTo) ? n.data.publishedTo : []
+              arr.push({ room: targetRoom, ts, externalId: idMap[n.id] })
+              n.data.publishedTo = arr.slice(-10) // 限 10 条防膨胀
+            }
+          }
+        })
+
+        return {
+          castedCount: renamedNodes.length,
+          edgeCount: renamedEdges.length,
+          targetRoom,
+        }
+      },
     })),
     {
       name: 'know-canvas-store',

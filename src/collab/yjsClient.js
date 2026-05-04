@@ -100,6 +100,61 @@ export function stopSync() {
   }
 }
 
+/**
+ * 投送一批节点到另一个房间 (不切换当前 doc, 临时 connect 目标 room → 写入 → disconnect)
+ * 用途: 私人草稿空间 → 公共频道发布; 跨频道复制
+ *
+ * @param {{nodes: Array, edges: Array}} payload — 要投送的 nodes/edges (调用方需自己处理 id 改写防冲突)
+ * @param {string} targetRoom — 目标房间 id
+ * @param {object} [opts]
+ * @param {string} [opts.wsUrl] — 默认走 DEFAULT_WS_URL
+ * @param {number} [opts.timeoutMs] — 连接超时 (默认 5000)
+ * @returns {Promise<void>}
+ */
+export async function castToRoom(payload, targetRoom, opts = {}) {
+  if (!targetRoom) throw new Error('castToRoom: 目标 room 为空')
+  const { nodes = [], edges = [] } = payload || {}
+  if (!nodes.length && !edges.length) return
+
+  const wsUrl = opts.wsUrl || DEFAULT_WS_URL
+  const timeoutMs = opts.timeoutMs || 5000
+  const tempDoc = new Y.Doc()
+  const tempProvider = new WebsocketProvider(wsUrl, targetRoom, tempDoc, { connect: true })
+
+  try {
+    // 等远端 sync (拿到目标 room 已有的内容, 防止覆盖)
+    await new Promise((resolve, reject) => {
+      let done = false
+      const timer = setTimeout(() => {
+        if (done) return
+        done = true
+        reject(new Error(`castToRoom: 连接 ${targetRoom} 超时 (${timeoutMs}ms)`))
+      }, timeoutMs)
+      tempProvider.once('synced', () => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        resolve()
+      })
+    })
+
+    // 一次 transact 写入所有 nodes/edges
+    const yNodes = tempDoc.getMap('nodes')
+    const yEdges = tempDoc.getMap('edges')
+    tempDoc.transact(() => {
+      for (const n of nodes) yNodes.set(n.id, n)
+      for (const e of edges) yEdges.set(e.id, e)
+    }, 'cast-to-room')
+
+    // 给 ws 一点时间把更新冒到对端 (没确认机制, 兜底 sleep)
+    await new Promise((r) => setTimeout(r, 500))
+  } finally {
+    try { tempProvider.disconnect() } catch {}
+    try { tempProvider.destroy() } catch {}
+    try { tempDoc.destroy() } catch {}
+  }
+}
+
 export function getAwareness() {
   return _provider ? _provider.awareness : null
 }

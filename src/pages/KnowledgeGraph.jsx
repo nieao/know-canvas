@@ -28,6 +28,8 @@ import { pushLog } from '../utils/logBus'
 // toB/toC/toG 场景切换 — 之前埋在 AletheiaLayer 里, 而 AletheiaLayer 没挂载 → 用户找不到切换入口
 // 单独提到顶部 ALETHEIA 品牌右侧, 默认收起成胶囊, 不挡画布
 import ScenarioSwitcher from '../components/aletheia/ScenarioSwitcher'
+// 私人/公共频道切换 — 草稿在私室, 协作时切公共频道. 切换走 navigateToRoom (reload + 重连 yjs)
+import ChannelSwitcher from '../components/collab/ChannelSwitcher'
 
 // 文件类型扩展名分组
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp']
@@ -413,6 +415,21 @@ export default function KnowledgeGraph() {
             .catch((err) => console.error('[selection] batchAdvance failed:', err))
           break
         }
+        case 'castToChannel': {
+          // 投送到目标频道 — 拷贝选中节点 + 子树到目标 room (本地原节点保留)
+          const selectedIds = store.nodes.filter((n) => n.selected).map((n) => n.id)
+          const targetRoom = e.detail?.targetRoom
+          if (!selectedIds.length || !targetRoom) return
+          store.castNodesToChannel(selectedIds, targetRoom)
+            .then((r) => {
+              alert(`已投送 ${r.castedCount} 个节点 + ${r.edgeCount} 条边到 ${r.targetRoom}\n\n本地原节点已保留 + 打 publishedTo 标记`)
+            })
+            .catch((err) => {
+              console.error('[selection] castToChannel failed:', err)
+              alert(`投送失败:\n${err?.message || err}\n\n常见原因: yws-server 没起 / 目标 room 连接超时`)
+            })
+          break
+        }
         case 'linkSelected':
           store.linkSelectedNodes(relationType || 'related')
           break
@@ -748,6 +765,8 @@ export default function KnowledgeGraph() {
               ALETHEIA
             </span>
           </div>
+          {/* 频道切换 — 默认收起胶囊, 私人/公共/最近/自定义 */}
+          <ChannelSwitcher />
           {/* toB/toC/toG 场景切换 — 默认收起胶囊, 点击展开 */}
           <ScenarioSwitcher />
         </div>

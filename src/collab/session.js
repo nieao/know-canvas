@@ -66,4 +66,55 @@ export function navigateToRoom(roomId) {
   window.location.href = url.toString()
 }
 
+// ────────────────────────────────────────────────────────────────────
+// 频道命名约定 (channel = yjs room)
+//   private-{username}  → 个人草稿空间, 别人看不到
+//   pub-{communityId}   → 公共社区频道
+//   pub-default         → 全站公共
+//   demo-final / demo-railway / 自定义 id → 视为遗留命名, 兼容显示
+// ────────────────────────────────────────────────────────────────────
+
+/** 判断是否私人频道 */
+export function isPrivateRoom(roomId) {
+  return typeof roomId === 'string' && roomId.startsWith('private-')
+}
+
+/** 判断是否公共频道 (pub- 前缀 / 主 demo room) */
+export function isPublicRoom(roomId) {
+  if (typeof roomId !== 'string') return false
+  if (roomId.startsWith('pub-')) return true
+  return roomId === 'demo-final' || roomId === 'demo-railway'
+}
+
+/** 给用户名生成私人频道 id (英数化用户名, 防中文 url-encode 问题) */
+export function getPrivateRoomFor(username) {
+  if (!username) return ''
+  // url-safe slug: 中文用户名走 base64url 摘要前 8 位防冲突 + 可读后缀
+  let slug = String(username).trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+  if (!slug || slug.length < 2) {
+    // 中文/纯符号用户名: hash 后 8 位
+    let h = 0
+    for (let i = 0; i < username.length; i++) h = (h * 31 + username.charCodeAt(i)) | 0
+    slug = 'u' + Math.abs(h).toString(36).slice(0, 8)
+  }
+  return `private-${slug}`
+}
+
+/** 频道显示名 (UI 标签) */
+export function getRoomDisplayName(roomId) {
+  if (!roomId) return '未命名频道'
+  if (isPrivateRoom(roomId)) return '私人草稿'
+  if (roomId === 'pub-default') return '公共频道'
+  if (roomId.startsWith('pub-')) return `公共 · ${roomId.slice(4)}`
+  if (roomId === 'demo-final' || roomId === 'demo-railway') return `主房间 · ${roomId}`
+  return roomId
+}
+
+/** 频道类型 (用于 UI 配色) */
+export function getRoomType(roomId) {
+  if (isPrivateRoom(roomId)) return 'private'
+  if (isPublicRoom(roomId)) return 'public'
+  return 'custom'
+}
+
 export { USER_PALETTE }

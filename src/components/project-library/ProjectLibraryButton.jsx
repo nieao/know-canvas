@@ -40,7 +40,6 @@ export default function ProjectLibraryButton({ onOpen }) {
       }}
     >
       <span style={{ fontSize: '14px', lineHeight: 1 }} aria-hidden>📚</span>
-      <span>项目库</span>
       <span
         style={{
           minWidth: '20px',

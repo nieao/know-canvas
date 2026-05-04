@@ -58,6 +58,9 @@ export function RemoteUserList({ className = '', style = {} }) {
     return off
   }, [])
 
+  // 1 人 (只有自己) 时不显示 — 协作没启动, 没必要占顶栏空间
+  if (users.length === 0) return null
+
   return (
     <div
       className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg shadow-sm ${className}`}
@@ -68,10 +71,8 @@ export function RemoteUserList({ className = '', style = {} }) {
         ...style,
       }}
       data-testid="online-users"
+      title={`在线 ${users.length + 1} 人`}
     >
-      <span className="text-[10px] mr-1" style={{ color: '#bbb', letterSpacing: '0.15em' }}>
-        在线 {users.length + 1}
-      </span>
       {users.map((u) => (
         <div
           key={u.clientId}

@@ -230,8 +230,8 @@ export default function CollabHeader({ room, username, onOpenAiSettings, onExit 
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </button>
-      {/* 主题 / 任务模式 — 占位较大, 1536px 以下隐藏 (用户可在设置面板找到) */}
-      <div className="hidden 2xl:flex items-center gap-2">
+      {/* 主题 / 任务模式 — 永久隐藏 (占 ~200px 极挤). 用户可在 BottomAIBar/AI 设置里切换 */}
+      <div className="hidden">
         <ThemeToggle />
         <TaskModeSwitch />
       </div>

@@ -236,30 +236,24 @@ export default function CollabHeader({ room, username, onOpenAiSettings, onExit 
         <TaskModeSwitch />
       </div>
       <RemoteUserList />
-      <div
-        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg shadow-sm"
+      {/* 退出按钮 — 房间名/用户名信息已在 ChannelSwitcher / RemoteUserList 显示, 这里只保留退出 */}
+      <button
+        onClick={onExit}
+        className="p-2 rounded-lg shadow-sm transition-colors"
         style={{
           backgroundColor: 'var(--surface)',
           border: '1px solid var(--border-subtle)',
+          color: 'var(--text-muted)',
           backdropFilter: 'blur(8px)',
-          fontFamily: '"Noto Sans SC", system-ui, sans-serif',
         }}
+        title={`退出协作 (${username} @ ${room})`}
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)' }}
       >
-        <span className="text-[10px]" style={{ color: 'var(--text-faint)', letterSpacing: '0.15em' }}>房间</span>
-        <span className="text-xs font-medium" style={{ color: 'var(--accent)' }}>{room}</span>
-        <span className="mx-1 text-[10px]" style={{ color: 'var(--border-subtle)' }}>·</span>
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{username}</span>
-        <button
-          onClick={onExit}
-          className="ml-1 text-[10px] px-1.5 py-0.5 rounded transition-colors"
-          style={{ color: 'var(--text-faint)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent-bg)'; e.currentTarget.style.color = 'var(--accent)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-faint)' }}
-          title="退出"
-        >
-          ×
-        </button>
-      </div>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+      </button>
     </div>
   )
 }

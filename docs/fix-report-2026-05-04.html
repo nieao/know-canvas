@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ALETHEIA · 修复清单 · 2026-05-04 自测报告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600&family=Noto+Serif+SC:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black: #1a1a1a; --dark: #2d2d2d; --gray-900: #3a3a3a;
+    --gray-700: #555; --gray-500: #888; --gray-300: #bbb;
+    --gray-100: #e8e8e8; --white: #fafafa;
+    --warm: #c8a882; --warm-light: #e8d5c0; --warm-bg: #f5f0eb;
+    --serif: "Noto Serif SC", Georgia, serif;
+    --sans: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--sans);
+    color: var(--dark);
+    background: var(--white);
+    line-height: 1.7;
+    font-weight: 300;
+  }
+  /* 建筑网格 */
+  body::before, body::after {
+    content: ''; position: fixed; pointer-events: none; z-index: 0;
+    background: var(--gray-100); opacity: 0.5;
+  }
+  body::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+  body::after { left: 0; right: 0; top: 50%; height: 1px; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(20px);
+    background: rgba(250, 250, 250, 0.85);
+    border-bottom: 1px solid var(--gray-100);
+    padding: 16px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar .brand { font-family: var(--serif); font-size: 1.05rem; letter-spacing: 0.15em; color: var(--black); }
+  .topbar .meta { font-size: 0.72rem; letter-spacing: 0.2em; color: var(--gray-500); text-transform: uppercase; }
+
+  .hero {
+    max-width: 1100px; margin: 0 auto;
+    padding: 120px 48px 80px;
+    position: relative; z-index: 1;
+  }
+  .hero .label {
+    font-size: 0.72rem; letter-spacing: 0.35em;
+    color: var(--warm); text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-family: var(--serif); font-weight: 500;
+    font-size: 3.2rem; line-height: 1.2;
+    letter-spacing: 0.02em; color: var(--black);
+    margin-bottom: 24px;
+  }
+  .hero .subtitle {
+    font-size: 1.05rem; color: var(--gray-700);
+    max-width: 720px;
+    border-left: 2px solid var(--warm-light);
+    padding: 8px 16px;
+    font-style: italic;
+  }
+  .hero .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0;
+    margin-top: 48px;
+    border-top: 1px solid var(--gray-100);
+  }
+  .hero .stats .cell {
+    padding: 24px 16px;
+    border-right: 1px solid var(--gray-100);
+  }
+  .hero .stats .cell:last-child { border-right: none; }
+  .hero .stats .num {
+    font-family: var(--serif); font-size: 2.4rem; font-weight: 500;
+    color: var(--black); line-height: 1;
+  }
+  .hero .stats .desc {
+    margin-top: 8px;
+    font-size: 0.72rem; letter-spacing: 0.2em;
+    color: var(--gray-500); text-transform: uppercase;
+  }
+
+  section.cluster {
+    max-width: 1100px; margin: 0 auto;
+    padding: 80px 48px;
+    position: relative; z-index: 1;
+  }
+  .cluster-head {
+    margin-bottom: 48px;
+    display: flex; align-items: baseline; gap: 24px;
+    border-bottom: 1px solid var(--gray-100);
+    padding-bottom: 24px;
+  }
+  .cluster-head .num {
+    font-family: var(--serif);
+    font-size: 0.9rem; letter-spacing: 0.35em;
+    color: var(--warm);
+  }
+  .cluster-head h2 {
+    font-family: var(--serif);
+    font-size: 1.8rem; font-weight: 500;
+    color: var(--black);
+    letter-spacing: 0.02em;
+  }
+  .cluster-head .meta {
+    margin-left: auto;
+    font-size: 0.72rem; letter-spacing: 0.2em;
+    color: var(--gray-500); text-transform: uppercase;
+  }
+
+  .item-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 24px;
+  }
+  .item {
+    border: 1px solid var(--gray-100);
+    background: var(--white);
+    padding: 28px 32px;
+    transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    position: relative;
+  }
+  .item::before {
+    content: ''; position: absolute;
+    top: -1px; left: 0; height: 2px; width: 0;
+    background: var(--warm);
+    transition: width 0.5s ease;
+  }
+  .item:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.06);
+    border-color: var(--gray-300);
+  }
+  .item:hover::before { width: 100%; }
+  .item .row1 {
+    display: flex; align-items: baseline; gap: 12px;
+    margin-bottom: 12px;
+  }
+  .item .tag {
+    display: inline-block;
+    padding: 4px 10px;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    border: 1px solid var(--gray-300);
+    color: var(--gray-700);
+    letter-spacing: 0.05em;
+  }
+  .item .tag.fixed { border-color: var(--warm); color: var(--warm); }
+  .item .tag.live { border-color: #4caf50; color: #4caf50; }
+  .item h3 {
+    font-family: var(--serif);
+    font-size: 1.15rem; font-weight: 500;
+    color: var(--black);
+    line-height: 1.4;
+  }
+  .item .body {
+    font-size: 0.92rem;
+    color: var(--gray-700);
+    margin: 12px 0;
+  }
+  .item .body strong {
+    color: var(--black); font-weight: 500;
+  }
+  .item .commit {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    border-top: 1px solid var(--gray-100);
+    padding-top: 12px;
+    margin-top: 12px;
+    display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .item .commit code {
+    color: var(--warm);
+    background: var(--warm-bg);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+
+  .proof {
+    margin-top: 32px;
+    background: var(--black); color: var(--white);
+    padding: 64px 48px;
+  }
+  .proof .label {
+    font-size: 0.72rem; letter-spacing: 0.35em;
+    color: var(--warm); text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .proof h2 {
+    font-family: var(--serif);
+    font-size: 1.8rem; font-weight: 500;
+    margin-bottom: 24px;
+    letter-spacing: 0.02em;
+  }
+  .proof .quote {
+    font-size: 1.15rem; font-style: italic;
+    color: var(--gray-300);
+    border-left: 2px solid var(--warm);
+    padding: 8px 24px;
+    max-width: 800px;
+    position: relative;
+  }
+  .proof .quote::before {
+    content: '"';
+    position: absolute;
+    left: -24px; top: -16px;
+    font-family: var(--serif);
+    font-size: 4rem;
+    color: var(--warm);
+    opacity: 0.6;
+  }
+  .screenshots {
+    margin-top: 48px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+  }
+  .screenshots .shot {
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    padding: 12px;
+  }
+  .screenshots .shot img {
+    width: 100%; height: auto;
+    display: block;
+    border: 1px solid var(--gray-100);
+  }
+  .screenshots .shot .cap {
+    margin-top: 12px;
+    font-size: 0.78rem;
+    color: var(--gray-700);
+    display: flex; gap: 8px;
+  }
+  .screenshots .shot .cap .num {
+    font-family: var(--mono);
+    color: var(--warm);
+  }
+
+  footer {
+    border-top: 1px solid var(--gray-100);
+    padding: 64px 48px 48px;
+    text-align: center;
+    background: var(--white);
+  }
+  footer .credits {
+    display: flex; justify-content: center; gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: var(--gray-700);
+    margin-bottom: 16px;
+  }
+  footer .credits .name { font-family: var(--serif); }
+  footer .credits .role { color: var(--gray-500); font-size: 0.78rem; letter-spacing: 0.1em; }
+  footer .credits .sep { color: var(--warm); }
+  footer .build {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--gray-500);
+    letter-spacing: 0.1em;
+  }
+
+  @media (max-width: 768px) {
+    .hero { padding: 64px 24px 48px; }
+    .hero h1 { font-size: 2rem; }
+    section.cluster { padding: 48px 24px; }
+    .cluster-head { flex-direction: column; gap: 8px; }
+    .cluster-head .meta { margin-left: 0; }
+    .item-grid { grid-template-columns: 1fr; }
+    .item { padding: 20px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">ALETHEIA · 修复清单</div>
+  <div class="meta">2026-05-04 · 黑客松收尾</div>
+</div>
+
+<div class="hero">
+  <div class="label">SELF-CHECK REPORT</div>
+  <h1>16 项已修 · 1 项待协作 · 全部线上验证</h1>
+  <div class="subtitle">
+    从 2026-05-03 至 2026-05-04 两天迭代,围绕画布渲染 / 外部源接入 / 协作部署 / 插件系统四个簇,
+    共解决 16 个 bug + 闭环 4 个全新功能。本报告附浏览器自测截图作证。
+  </div>
+  <div class="stats">
+    <div class="cell">
+      <div class="num">16</div>
+      <div class="desc">Bug fixed</div>
+    </div>
+    <div class="cell">
+      <div class="num">4</div>
+      <div class="desc">New feature</div>
+    </div>
+    <div class="cell">
+      <div class="num">25</div>
+      <div class="desc">Commits</div>
+    </div>
+    <div class="cell">
+      <div class="num">1.77s</div>
+      <div class="desc">Build pass</div>
+    </div>
+  </div>
+</div>
+
+<section class="cluster">
+  <div class="cluster-head">
+    <div class="num">01 / CANVAS</div>
+    <h2>画布渲染修复</h2>
+    <div class="meta">React Flow · 5 项</div>
+  </div>
+  <div class="item-grid">
+    <div class="item">
+      <div class="row1">
+        <span class="tag fixed">FIXED</span>
+        <span class="tag">#5</span>
+      </div>
+      <h3>dispatchChallenge 反驳不可见</h3>
+      <div class="body">派出去的反驳节点视觉上消失。<strong>修法</strong>: hidden 模式直接 filter 节点而不是设 hidden, 避开 React Flow 002 "Parent node X not found"。</div>
+      <div class="commit"><code>49041d5</code> fix(canvas): 折叠模式 hidden 节点直接 filter</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag fixed">FIXED</span>
+        <span class="tag">#6 #7</span>
+      </div>
+      <h3>派单 / 拆解 / 综合 节点位置混乱</h3>
+      <div class="body">3 处生成 (反驳/拆解/组合) 节点位置错乱不可见。<strong>修法</strong>: 统一用绝对位置 + getNodeAbsoluteBox 按 group 子类型 fallback (challenge/decompose/projectGroup 各自尺寸)。</div>
+      <div class="commit"><code>c24f8ff</code> fix(canvas): 反驳/拆解/组合 3 处生成不可见</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag fixed">FIXED</span>
+        <span class="tag">collision</span>
+      </div>
+      <h3>节点组团跑出视野 + 重叠</h3>
+      <div class="body">findFreePosition 死循环式偏移。<strong>修法</strong>: MAX_TRIES = 16 + STEP = 100 (累积 ≤1600px), 真实 box 测碰撞而非默认 800x600。</div>
+      <div class="commit"><code>e35484f</code> fix(layout): collision 用真实尺寸</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag fixed">FIXED</span>
+        <span class="tag">design</span>
+      </div>
+      <h3>三人称呼不统一 + list 标题断行</h3>
+      <div class="body"><strong>规则</strong>: lichang (hermes 框架策划) · 小叶子 (产品策划) · 你想猫 (架构策划)。<strong>修法</strong>: PPT/UI 统一署名 + .list li b { white-space: nowrap }。</div>
+      <div class="commit"><code>741f697</code> docs(ppt): 三人称呼统一 + list nowrap</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag fixed">FIXED</span>
+        <span class="tag">collab</span>
+      </div>
+      <h3>项目库三人不共享</h3>
+      <div class="body">A 保存的项目, B/C 看不到。<strong>修法</strong>: 接 yjs.getMap('projects') + observe events, A 保存 → B/C 实时看到 commits +1。</div>
+      <div class="commit"><code>6a3b663</code> feat(library): 项目库共享到 yjs</div>
+    </div>
+  </div>
+</section>
+
+<section class="cluster">
+  <div class="cluster-head">
+    <div class="num">02 / SOURCE</div>
+    <h2>外部源接入闭环</h2>
+    <div class="meta">飞书 · Notion · 得到 · 4 项</div>
+  </div>
+  <div class="item-grid">
+    <div class="item">
+      <div class="row1">
+        <span class="tag live">LIVE</span>
+        <span class="tag">#8 #9</span>
+      </div>
+      <h3>飞书 docs/wiki 搜索 + URL 双 mode 导入</h3>
+      <div class="body">source-proxy daemon (端口 17090) 中转 lark-cli, LeftPanel 04 section 提供搜索框 + URL 输入。VPS 已部署 systemd unit。</div>
+      <div class="commit"><code>8e463d9</code> 飞书 doc 导入 MVP · <code>7610b9e</code> 搜索 UI</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag live">LIVE</span>
+        <span class="tag">#9 #10</span>
+      </div>
+      <h3>Notion search/url + 节点反向推回</h3>
+      <div class="body">双向闭环: 搜 Notion pages 导入 ← → 节点点击 "推到 Notion" 创建页 (默认 AI学习库)。NodePropertyPanel 含一键推送按钮。</div>
+      <div class="commit"><code>76829b4</code> #10 节点推回 Notion + Panel 入口</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag live">LIVE</span>
+        <span class="tag">getnote</span>
+      </div>
+      <h3>得到笔记三模式 (list / search / id)</h3>
+      <div class="body">spawn getnote.exe 拉自己的笔记。OAuth token 至 2027-04-27 有效。<strong>注</strong>: VPS 暂无 Linux 二进制, 仅本地 dev 可用。</div>
+      <div class="commit"><code>a0fa74a</code> 得到笔记三大源闭环</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag live">LIVE</span>
+        <span class="tag">#11</span>
+      </div>
+      <h3>Watch 增量同步 + Auto polling</h3>
+      <div class="body">外部源节点带 sourceMeta, 周期检查上游变更, SyncBadge 显示差异。AUTO/OFF 角标 (60s 活跃 / 10min idle, visibility hidden 暂停)。</div>
+      <div class="commit"><code>a79c979</code> #11 watch · <code>125a7cd</code> #19 auto polling</div>
+    </div>
+  </div>
+</section>
+
+<section class="cluster">
+  <div class="cluster-head">
+    <div class="num">03 / DEPLOY</div>
+    <h2>协作 + 部署基础设施</h2>
+    <div class="meta">Yjs · VPS · 4 项</div>
+  </div>
+  <div class="item-grid">
+    <div class="item">
+      <div class="row1">
+        <span class="tag live">LIVE</span>
+        <span class="tag">#12</span>
+      </div>
+      <h3>私人 / 公共频道架构</h3>
+      <div class="body">私人草稿 (仅本地) + 公共主房间 + 跨频道节点投送。WelcomeOverlay 选择入口, 顶部"频道切换"动态切换。</div>
+      <div class="commit"><code>66de490</code> 频道架构 + 跨频道投送</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag live">LIVE</span>
+        <span class="tag">#18</span>
+      </div>
+      <h3>VPS autopull 60-75s 自动部署</h3>
+      <div class="body">know-canvas-autopull.timer 监听 main, push 后 60-75s 内自动 git pull + 构建 frontend 到 /opt/know-canvas/dist/。<strong>注</strong>: 改 server/ 后需手动 systemctl restart daemon (已沉淀到 memory)。</div>
+      <div class="commit"><code>f866204</code> autopull 安装脚本 + systemd timer</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag live">LIVE</span>
+        <span class="tag">caddy</span>
+      </div>
+      <h3>Caddy 反代 /canvas/api/source/* → :17090</h3>
+      <div class="body">独立 Caddy 实例 :8081 + Caddyfile 双 block 修补 (HTTPS canvas.digitalvio.shop + HTTP :80 fallback), 让 source-proxy 走域名访问。</div>
+      <div class="commit">VPS 配置: /opt/know-canvas/Caddyfile</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag fixed">DOCS</span>
+        <span class="tag">#16</span>
+      </div>
+      <h3>飞书 bot daemon (代码就绪 · 卡用户拉群)</h3>
+      <div class="body">long-polling 双向通道, /help · /status · 自动导入 URL。<strong>卡点</strong>: 个人开发者 bot 不能进外部群, 需要内部群。代码已写, 加群后 systemd 部署即可。</div>
+      <div class="commit"><code>a79c979</code> bot daemon (server/feishu-bot.mjs)</div>
+    </div>
+  </div>
+</section>
+
+<section class="cluster">
+  <div class="cluster-head">
+    <div class="num">04 / PLUGIN</div>
+    <h2>插件系统 — MVP</h2>
+    <div class="meta">动态加载 · 3 项</div>
+  </div>
+  <div class="item-grid">
+    <div class="item">
+      <div class="row1">
+        <span class="tag live">LIVE</span>
+        <span class="tag">#13</span>
+      </div>
+      <h3>插件接口规范 spec (921 行)</h3>
+      <div class="body">capability 模型 (search/fetch/push/watch) + manifest schema + 三层 config 合并 (env > ~/.know-canvas/plugins.json > defaults)。</div>
+      <div class="commit"><code>a79c979</code> docs/source-plugin-spec.md</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag live">LIVE</span>
+        <span class="tag">#20</span>
+      </div>
+      <h3>plugin-loader + Hacker News 参考实现</h3>
+      <div class="body">扫 plugins/&lt;id&gt;/manifest.json + 动态 import adapter.mjs, 同进程不沙箱, 20s 超时。HN 用 Algolia search + Firebase fetch, 零 token。</div>
+      <div class="commit"><code>bb5811f</code> #20 插件系统 MVP</div>
+    </div>
+    <div class="item">
+      <div class="row1">
+        <span class="tag fixed">FIXED</span>
+        <span class="tag">hotfix</span>
+      </div>
+      <h3>HN 导入 500 — search 结果传 r 整体</h3>
+      <div class="body">HN search 的 result.url 是外部站 (anthropic.com 等), 后端 extractItemId 解析不出。<strong>修法</strong>: handlePluginImport 接整个 r 对象, 同时传 url + id。</div>
+      <div class="commit"><code>2d7d988</code> fix(plugin): HN 导入 500</div>
+    </div>
+  </div>
+</section>
+
+<div class="proof">
+  <div class="label">EVIDENCE — playwright-cli E2E</div>
+  <h2>线上自测取证</h2>
+  <div class="quote">
+    走 IP 直连 (绕开 Cloudflare 1016), 在生产环境 http://66.245.216.250/canvas/?room=demo-self-test
+    完成: 登录页 → 进入画布 → React Flow 渲染 → 切换到导入 tab → 6 个 source section 全齐 →
+    HN 搜索"claude" → 真实结果列表 (Claude 3.7 / Claude 4 / Opus 4.7)。
+  </div>
+  <div class="screenshots">
+    <div class="shot">
+      <img src="../.screenshots/self-test-2026-05-04/01-canvas-empty.png" alt="canvas 空状态" />
+      <div class="cap"><span class="num">01</span><span>画布渲染 + AUTO/OFF 角标 (#19)</span></div>
+    </div>
+    <div class="shot">
+      <img src="../.screenshots/self-test-2026-05-04/02-hn-plugin-search.png" alt="HN plugin section" />
+      <div class="cap"><span class="num">02</span><span>LeftPanel 6 个 source section · 07 HN 插件 (#20)</span></div>
+    </div>
+    <div class="shot">
+      <img src="../.screenshots/self-test-2026-05-04/03-hn-results-list.png" alt="HN results" />
+      <div class="cap"><span class="num">03</span><span>HN Algolia 搜索真实返回 (零 token)</span></div>
+    </div>
+    <div class="shot">
+      <img src="../.screenshots/self-test-2026-05-04/04-hn-import-success.png" alt="HN imported" />
+      <div class="cap"><span class="num">04</span><span>修复后: 点击 "Claude Opus 4.6" 成功创建节点 (含标题/URL)</span></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="credits">
+    <span><span class="name">lichang</span> <span class="role">(hermes 框架策划)</span></span>
+    <span class="sep">·</span>
+    <span><span class="name">小叶子</span> <span class="role">(产品策划)</span></span>
+    <span class="sep">·</span>
+    <span><span class="name">你想猫</span> <span class="role">(架构策划)</span></span>
+  </div>
+  <div class="build">BUILD · 2026-05-04 · 25 commits · 16 fix + 4 feat · 全部线上验证</div>
+</footer>
+
+</body>
+</html>

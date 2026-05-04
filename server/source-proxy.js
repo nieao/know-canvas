@@ -67,12 +67,14 @@ let castReady = false
 let castTextNode = async () => { throw new Error('yjs-cast 未加载') }
 let castBookmarkNode = async () => { throw new Error('yjs-cast 未加载') }
 let castNodesToRoom = async () => { throw new Error('yjs-cast 未加载') }
+let castAletheiaPrompt = async () => { throw new Error('yjs-cast 未加载') }
 ;(async () => {
   try {
     const mod = await import('./yjs-cast.mjs')
     castTextNode = mod.castTextNode
     castBookmarkNode = mod.castBookmarkNode
     castNodesToRoom = mod.castNodesToRoom
+    castAletheiaPrompt = mod.castAletheiaPrompt
     castReady = true
   } catch (e) {
     console.error('[source-proxy] yjs-cast 加载失败:', e?.message || e)
@@ -758,6 +760,25 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, { ok: true, room, nodeId: r.nodeId, canvasUrl })
       } catch (e) {
         sendJson(res, 502, { ok: false, error: `canvas cast 失败: ${e?.message || e}` })
+      }
+      return
+    }
+
+    // ── /canvas/cast/aletheia-prompt ── 写一条 inbox prompt (前端自动 fire 元认知 5 步)
+    if (method === 'POST' && url.pathname === '/canvas/cast/aletheia-prompt') {
+      if (!castReady) { sendJson(res, 503, { ok: false, error: 'yjs-cast 未就绪' }); return }
+      const body = await readJsonBody(req)
+      const room = String(body.room || process.env.CANVAS_DEFAULT_ROOM || 'demo-final').trim()
+      const text = String(body.text || '').trim()
+      if (!text) { sendJson(res, 400, { ok: false, error: 'text 不能为空' }); return }
+      const attribution = body.attribution || { name: 'feishu-bot', via: 'feishu-bot' }
+      log(`canvas/cast/aletheia-prompt room=${room} len=${text.length}`)
+      try {
+        const r = await castAletheiaPrompt({ room, text, attribution })
+        const canvasUrl = (process.env.CANVAS_PUBLIC_URL || 'https://ha2.digitalvio.shop/canvas/') + `?room=${encodeURIComponent(room)}`
+        sendJson(res, 200, { ok: true, room, id: r.id, peers: r.peers, canvasUrl })
+      } catch (e) {
+        sendJson(res, 502, { ok: false, error: `cast aletheia 失败: ${e?.message || e}` })
       }
       return
     }

@@ -36,17 +36,27 @@
 
 import { spawn } from 'node:child_process'
 import readline from 'node:readline'
+import path from 'node:path'
+import os from 'node:os'
 
 const SOURCE_PROXY = process.env.SOURCE_PROXY || 'http://127.0.0.1:17090'
-const LARK_BIN = process.env.LARK_CLI || (process.platform === 'win32' ? 'lark-cli.cmd' : 'lark-cli')
 const CANVAS_PUBLIC_URL = process.env.CANVAS_PUBLIC_URL || 'https://ha2.digitalvio.shop/canvas/'
-const DEFAULT_ROOM = process.env.CANVAS_DEFAULT_ROOM || 'feishu-inbox'
+const DEFAULT_ROOM = process.env.CANVAS_DEFAULT_ROOM || 'demo-final'
 
-// Windows 下 spawn .cmd 必须经 cmd.exe /c (Node 18+ 安全策略)
-function spawnLark(args, opts = {}) {
+// 直接定位 lark-cli 原生 .exe 二进制 (Go 编译), 绕开 cmd.exe wrapper
+// (cmd.exe /c 包装会按 GBK 解读 lark-cli stdout 把 UTF-8 中文搞乱; 直接 spawn .exe 走 Node native unicode)
+function resolveLarkBin() {
+  if (process.env.LARK_CLI_BIN) return process.env.LARK_CLI_BIN
   if (process.platform === 'win32') {
-    return spawn('cmd.exe', ['/c', LARK_BIN, ...args], { windowsHide: true, ...opts })
+    const npmRoot = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+    return path.join(npmRoot, 'npm', 'node_modules', '@larksuite', 'cli', 'bin', 'lark-cli.exe')
   }
+  // 类 Unix: 默认包内二进制 / 或 PATH 上的 lark-cli
+  return process.env.LARK_CLI || 'lark-cli'
+}
+const LARK_BIN = resolveLarkBin()
+
+function spawnLark(args, opts = {}) {
   return spawn(LARK_BIN, args, { windowsHide: true, ...opts })
 }
 
@@ -315,7 +325,6 @@ async function handleMessage(evt) {
   const messageId = msg.message_id || ''
   const chatId = msg.chat_id || ''
   const senderId = msg.sender_id || msg.sender?.sender_id?.open_id || ''
-  const messageType = msg.message_type || msg.msg_type || 'text'
   let content = String(msg.content || '').trim()
 
   // 飞书 content 有时是 JSON {text: ".."}, 有时是裸字符串. 尝试 parse
@@ -334,135 +343,105 @@ async function handleMessage(evt) {
   log(`[msg] chat=${chatId.slice(0, 12)} sender=${senderId.slice(0, 12)}: ${content.slice(0, 80)}`)
 
   const room = roomOf(chatId)
+  const attribution = { name: senderId.slice(0, 16) || 'feishu', via: 'feishu-bot', chatId }
 
-  // === /help ===
+  // === 元命令: /help /status /room — 用纯文本回 (绕开互动卡片可能的乱码) ===
   if (/^\/help\b/i.test(content)) {
-    await reply(messageId, cardHelp(), { textFallback: '查看 /help 帮助' })
+    await replyText(messageId, [
+      'Aletheia 画布 bot — 直接发任何文字,自动启动元认知 5 步',
+      '',
+      '· 文字消息  → 落入画布对话框 + 自动启动元认知',
+      '· 链接 (飞书/Notion/任意 URL) → 写成画布书签节点',
+      '· /room <名字> → 切本群绑的画布房间',
+      '· /status → 看后端状态',
+      '· /help → 这条帮助',
+      '',
+      `画布: ${CANVAS_PUBLIC_URL}?room=${encodeURIComponent(room)}`,
+    ].join('\n'))
     return
   }
 
-  // === /status ===
   if (/^\/status\b/i.test(content)) {
-    await reply(messageId, await cardStatus(), { textFallback: '查看 /status 状态' })
+    let lines = ['后端状态']
+    try {
+      const h = await proxyGet('/health', 3000)
+      lines.push(`source-proxy: ${h.ok ? '✓ 在线' : '✗ 异常'} (port ${h.port})`)
+    } catch (e) { lines.push(`source-proxy: ✗ 不可达`) }
+    try {
+      const c = await proxyGet('/canvas/status', 3000)
+      lines.push(`yjs-cast: ${c.castReady ? '✓ 就绪' : '✗ 未加载'}`)
+      lines.push(`默认房间: ${c.defaultRoom}`)
+    } catch (e) { lines.push(`yjs-cast: ✗ 不可达`) }
+    lines.push(`本群房间: ${room}`)
+    await replyText(messageId, lines.join('\n'))
     return
   }
 
-  // === /room ===
   const roomMatch = content.match(/^\/room(?:\s+(.+))?$/i)
   if (roomMatch) {
     const newRoom = (roomMatch[1] || '').trim()
     if (newRoom) {
       chatRoomMap.set(chatId, newRoom)
-      await reply(messageId, buildCard({
-        title: '✓ 房间已切换',
-        header: 'green',
-        body: [`本群后续 → \`${newRoom}\``, '老房间内容不动'],
-        buttons: [{ text: '打开新房间', type: 'primary', url: CANVAS_PUBLIC_URL + `?room=${encodeURIComponent(newRoom)}` }],
-      }))
+      await replyText(messageId, `✓ 本群房间切到: ${newRoom}\n打开: ${CANVAS_PUBLIC_URL}?room=${encodeURIComponent(newRoom)}`)
     } else {
-      await reply(messageId, buildCard({
-        title: '当前房间',
-        header: 'blue',
-        body: [`本群 → \`${room}\``, '改用 `/room <名字>` 切换'],
-        buttons: [{ text: '打开此房间', type: 'primary', url: CANVAS_PUBLIC_URL + `?room=${encodeURIComponent(room)}` }],
-      }))
+      await replyText(messageId, `当前本群房间: ${room}\n打开: ${CANVAS_PUBLIC_URL}?room=${encodeURIComponent(room)}`)
     }
     return
   }
 
-  // === /canvas <text-or-url> ===
-  const canvasMatch = content.match(/^\/canvas\s+(.+)/is)
-  if (canvasMatch) {
-    const payload = canvasMatch[1].trim()
-    const urlInPayload = payload.match(ANY_URL_RE)?.[0]
-    const attribution = { name: senderId.slice(0, 16) || 'feishu', via: 'feishu-bot', chatId }
-    if (urlInPayload) {
-      // 当 bookmark 写入
-      const r = await proxyPost('/canvas/cast/bookmark', {
-        room, url: urlInPayload, title: payload, summary: payload, attribution,
-      })
-      if (r.ok) await reply(messageId, cardCastSuccess({ what: '🔖 链接节点', room: r.room, nodeId: r.nodeId, canvasUrl: r.canvasUrl }))
-      else await reply(messageId, cardCastFailed({ what: '🔖 链接节点', error: r.error || '未知' }))
-    } else {
-      const r = await proxyPost('/canvas/cast/text', { room, text: payload, attribution })
-      if (r.ok) await reply(messageId, cardCastSuccess({ what: '📝 文本节点', room: r.room, nodeId: r.nodeId, canvasUrl: r.canvasUrl }))
-      else await reply(messageId, cardCastFailed({ what: '📝 文本节点', error: r.error || '未知' }))
-    }
-    return
-  }
-
-  // === /aletheia <topic> ===
-  const aletheiaMatch = content.match(/^\/aletheia\s+(.+)/is)
-  if (aletheiaMatch) {
-    const topic = aletheiaMatch[1].trim()
-    // 先占位写入一个文本节点, 标记为 metacog seed
-    const attribution = { name: senderId.slice(0, 16) || 'feishu', via: 'feishu-bot', chatId, kind: 'aletheia-seed' }
-    const r = await proxyPost('/canvas/cast/text', {
-      room, text: `[Aletheia 元认知 · 种子]\n${topic}`, attribution,
-    })
-    if (r.ok) {
-      await reply(messageId, buildCard({
-        title: '🧠 已埋下元认知种子',
-        header: 'purple',
-        body: [
-          `话题: **${topic.slice(0, 80)}**`,
-          `房间: \`${r.room}\``,
-          '*(后续: 在画布点 "拆解" 触发 5 步元认知)*',
-        ],
-        buttons: [
-          { text: '到画布拆解', type: 'primary', url: r.canvasUrl },
-          { text: '换房间', type: 'default', value: { action: 'switch_room', text: topic } },
-        ],
-      }))
-    } else {
-      await reply(messageId, cardCastFailed({ what: '🧠 元认知种子', error: r.error || '未知' }))
-    }
-    return
-  }
-
-  // === 含飞书 URL → 自动 fetch + 写 bookmark ===
+  // === 链接消息 → 画布书签节点 (含飞书 / Notion 自动 fetch 标题) ===
   const feishuUrls = [...content.matchAll(FEISHU_URL_RE)].map((m) => m[1])
+  const notionUrls = [...content.matchAll(NOTION_URL_RE)].map((m) => m[1])
+  const otherUrls = [...content.matchAll(ANY_URL_RE)].map((m) => m[1])
+    .filter((u) => !feishuUrls.includes(u) && !notionUrls.includes(u))
+
+  let handledAsLink = false
   for (const u of feishuUrls.slice(0, 2)) {
+    handledAsLink = true
     try {
       const j = await proxyPost('/feishu/fetch', { docUrl: u })
-      const title = j.ok ? (j.data?.title || '(无标题)') : '(fetch 失败)'
+      const title = j.ok ? (j.data?.title || u) : u
       const summary = j.ok ? String(j.data?.content || '').slice(0, 400) : ''
-      const r = await proxyPost('/canvas/cast/bookmark', {
-        room, url: u, title, summary,
-        attribution: { name: senderId.slice(0, 16) || 'feishu', via: 'feishu-bot', chatId },
-      })
-      if (r.ok) await reply(messageId, cardCastSuccess({ what: `📄 飞书 · ${title}`, room: r.room, nodeId: r.nodeId, canvasUrl: r.canvasUrl }))
-      else await reply(messageId, cardCastFailed({ what: `📄 飞书 · ${title}`, error: r.error || '未知' }))
-    } catch (e) {
-      await reply(messageId, cardCastFailed({ what: '📄 飞书链接', error: e.message }))
-    }
+      const r = await proxyPost('/canvas/cast/bookmark', { room, url: u, title, summary, attribution })
+      if (r.ok) await replyText(messageId, `✓ 飞书已记录: ${title}\n打开: ${r.canvasUrl}`)
+      else await replyText(messageId, `✗ 飞书写入失败: ${r.error || '未知'}`)
+    } catch (e) { await replyText(messageId, `✗ 飞书链接异常: ${e.message}`) }
   }
-
-  // === 含 Notion URL ===
-  const notionUrls = [...content.matchAll(NOTION_URL_RE)].map((m) => m[1])
   for (const u of notionUrls.slice(0, 2)) {
+    handledAsLink = true
     try {
       const j = await proxyPost('/notion/fetch', { pageUrl: u })
-      const title = j.ok ? (j.data?.title || '(无标题)') : '(fetch 失败)'
+      const title = j.ok ? (j.data?.title || u) : u
       const summary = j.ok ? String(j.data?.content || '').slice(0, 400) : ''
-      const r = await proxyPost('/canvas/cast/bookmark', {
-        room, url: u, title, summary,
-        attribution: { name: senderId.slice(0, 16) || 'feishu', via: 'feishu-bot', chatId },
-      })
-      if (r.ok) await reply(messageId, cardCastSuccess({ what: `📒 Notion · ${title}`, room: r.room, nodeId: r.nodeId, canvasUrl: r.canvasUrl }))
-      else await reply(messageId, cardCastFailed({ what: `📒 Notion · ${title}`, error: r.error || '未知' }))
-    } catch (e) {
-      await reply(messageId, cardCastFailed({ what: '📒 Notion 链接', error: e.message }))
-    }
+      const r = await proxyPost('/canvas/cast/bookmark', { room, url: u, title, summary, attribution })
+      if (r.ok) await replyText(messageId, `✓ Notion 已记录: ${title}\n打开: ${r.canvasUrl}`)
+      else await replyText(messageId, `✗ Notion 写入失败: ${r.error || '未知'}`)
+    } catch (e) { await replyText(messageId, `✗ Notion 链接异常: ${e.message}`) }
   }
+  for (const u of otherUrls.slice(0, 2)) {
+    handledAsLink = true
+    const r = await proxyPost('/canvas/cast/bookmark', { room, url: u, title: u, summary: '', attribution })
+    if (r.ok) await replyText(messageId, `✓ 链接已记录\n打开: ${r.canvasUrl}`)
+  }
+  if (handledAsLink) return
 
-  // === 已经处理过 URL 就别再问了 ===
-  if (feishuUrls.length || notionUrls.length) return
-
-  // === 纯文本 → 弹确认卡 (避免误触每条群消息都写) ===
-  // 短消息 < 6 字 视为闲聊, 不弹卡
-  if (content.length < 6) return
-  await reply(messageId, cardConfirmCast({ text: content, room }))
+  // === 默认: 纯文本 → 写入 aletheia-inbox, 让画布前端自动启动元认知 ===
+  // 短消息 < 4 字视为闲聊, 不触发 (避免 "嗯", "好的" 等触发 LLM)
+  if (content.length < 4) return
+  try {
+    const r = await proxyPost('/canvas/cast/aletheia-prompt', { room, text: content, attribution })
+    if (r.ok) {
+      const peers = (r.peers ?? 0)
+      const tip = peers > 0
+        ? `当前画布在线 ${peers} 人, 即将自动启动元认知 5 步`
+        : `当前画布暂无人在线, 一旦有人打开会自动启动 (或你直接打开)`
+      await replyText(messageId, `✓ 已送入元认知\n${tip}\n打开: ${r.canvasUrl}`)
+    } else {
+      await replyText(messageId, `✗ 写入失败: ${r.error || '未知'}`)
+    }
+  } catch (e) {
+    await replyText(messageId, `✗ 异常: ${e.message}`)
+  }
 }
 
 // === 处理按钮回调 ===
@@ -530,14 +509,27 @@ async function handleCardAction(evt) {
 }
 
 // === 主入口 ===
+let _currentConsumer = null
+
+// 全局 SIGTERM/SIGINT — 只挂一次, 避免每次 start() 累积 listener
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    log(`收到 ${sig}, 优雅关闭`)
+    try { _currentConsumer?.kill('SIGTERM') } catch {}
+    setTimeout(() => process.exit(0), 1500)
+  })
+}
+
 function start() {
-  log(`启动 bot — source-proxy: ${SOURCE_PROXY}, default room: ${DEFAULT_ROOM}`)
+  log(`启动 bot — source-proxy: ${SOURCE_PROXY}, default room: ${DEFAULT_ROOM}, lark-bin: ${LARK_BIN}`)
 
   // 用 +subscribe catch-all (不传 --event-types 才能同时拿 message + card.action.trigger)
+  // --force 绕过 single-instance lock (旧 daemon SIGKILL 不释放锁; 我们重启时若锁未失效会卡死)
   const consumer = spawnLark(
-    ['event', '+subscribe', '--as', 'bot', '--quiet'],
+    ['event', '+subscribe', '--as', 'bot', '--force'],
     { stdio: ['pipe', 'pipe', 'pipe'] },
   )
+  _currentConsumer = consumer
   consumer.stdin.on('error', () => {})
 
   const rl = readline.createInterface({ input: consumer.stdout })
@@ -561,13 +553,6 @@ function start() {
     setTimeout(start, 5000)
   })
 
-  for (const sig of ['SIGTERM', 'SIGINT']) {
-    process.on(sig, () => {
-      log(`收到 ${sig}, 优雅关闭`)
-      try { consumer.kill('SIGTERM') } catch {}
-      setTimeout(() => process.exit(0), 1500)
-    })
-  }
 }
 
 start()

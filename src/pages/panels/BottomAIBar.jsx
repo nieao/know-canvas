@@ -56,6 +56,42 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
   const askAndCreateHtmlNode = useCanvasStore((s) => s.askAndCreateHtmlNode)
   const askAndStartMetaProject = useCanvasStore((s) => s.askAndStartMetaProject)
 
+  // aletheia-inbox 远程触发 (飞书 bot 写到 yjs inbox map → useCollabSession 选举执行者 → fire 事件)
+  // 我们这里收到事件后:
+  //   1) 把飞书发的文字塞到 textarea, 让用户在画布上看见 (即便提交中 disable 也保留文本)
+  //   2) 自动调 askAndStartMetaProject 启动 5 步元认知
+  //   3) 完成后 focus 到新 root + 清空 input
+  useEffect(() => {
+    const handler = async (e) => {
+      const { text, attribution } = e.detail || {}
+      if (!text || submitting) return
+      const tag = attribution?.name ? `飞书 · ${attribution.name}` : '飞书'
+      const final = `[来自 ${tag}]\n${text}`
+      setInput(final)
+      setMode('meta')
+      // 等 React 把文字渲到 textarea 上
+      await new Promise((r) => setTimeout(r, 250))
+      setSubmitting(true)
+      try {
+        const nodeId = await askAndStartMetaProject(final)
+        setLastNodeId(nodeId)
+        setInput('')
+        if (nodeId) {
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('canvas-focus-node', { detail: { nodeId } }))
+          }, 200)
+        }
+      } catch (err) {
+        console.error('[BottomAIBar] aletheia-inbox-fire 失败:', err)
+        // 失败时保留 input 让用户手动重试
+      } finally {
+        setSubmitting(false)
+      }
+    }
+    window.addEventListener('aletheia-inbox-fire', handler)
+    return () => window.removeEventListener('aletheia-inbox-fire', handler)
+  }, [askAndStartMetaProject, submitting])
+
   // 文件选择 → 解析 → 预览到 input 提示 (支持多选 + 多次追加)
   const handleFilePick = async (e) => {
     const files = Array.from(e.target.files || [])

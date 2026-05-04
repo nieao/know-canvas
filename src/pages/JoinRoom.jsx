@@ -30,8 +30,11 @@ const PRIMARY_ROOM = 'demo-final'
 // 三人组快捷名字 — 点击即填入用户名
 const PRESET_NAMES = ['lichang', '你想猫', '小叶']
 
+// 默认用户名 — 没历史 localStorage 时使用
+const DEFAULT_NAME = '你想猫'
+
 export default function JoinRoom() {
-  const [name, setName] = useState(getUsername())
+  const [name, setName] = useState(getUsername() || DEFAULT_NAME)
   const [room, setRoom] = useState(getRoomFromUrl())
   const [color, setColor] = useState(getUserColor())
   const [error, setError] = useState('')
@@ -236,10 +239,10 @@ export default function JoinRoom() {
           <p className="text-xs mb-3" style={{ color: '#ef4444' }}>{error}</p>
         )}
 
-        {/* 默认入口: 私人草稿 — 个人空间, 别人看不到 */}
+        {/* 默认入口: 进主公共房间 — 三人协作 + 飞书 bot 默认落点 */}
         <button
           type="button"
-          onClick={handleJoinPrivate}
+          onClick={handleJoinPrimary}
           disabled={!canCreate}
           className="w-full py-3 text-sm font-medium rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed mb-2"
           style={{
@@ -247,16 +250,17 @@ export default function JoinRoom() {
             color: '#fafafa',
             letterSpacing: '0.05em',
           }}
-          title="进入只属于你的草稿画布, 想协作时随时切到公共频道"
+          title="进入主公共房间, 跟其他在线用户一起协作 (飞书 bot 也默认写到这里)"
+          autoFocus
         >
-          <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle" style={{ backgroundColor: '#9e7cb2' }} />
-          进入私人草稿{name.trim() ? ` · ${name.trim()}` : ''}
+          <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle" style={{ backgroundColor: '#c8a882' }} />
+          进公共主房间 · {PRIMARY_ROOM}{name.trim() ? ` · ${name.trim()}` : ''}
         </button>
 
-        {/* 进主公共房间 */}
+        {/* 次入口: 私人草稿 */}
         <button
           type="button"
-          onClick={handleJoinPrimary}
+          onClick={handleJoinPrivate}
           disabled={!canCreate}
           className="w-full py-2.5 text-sm rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed mb-2"
           style={{
@@ -265,10 +269,10 @@ export default function JoinRoom() {
             border: '1px solid #e8e8e8',
             letterSpacing: '0.05em',
           }}
-          title="进入主公共房间, 跟其他在线用户一起协作"
+          title="进入只属于你的草稿画布, 想协作时随时切到公共频道"
         >
-          <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle" style={{ backgroundColor: '#c8a882' }} />
-          进公共主房间 · {PRIMARY_ROOM}
+          <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle" style={{ backgroundColor: '#9e7cb2' }} />
+          进入私人草稿{name.trim() ? ` · ${name.trim()}` : ''}
         </button>
 
         <div className="flex items-center gap-3 my-3">

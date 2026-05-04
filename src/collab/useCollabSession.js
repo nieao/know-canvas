@@ -14,6 +14,7 @@ import { useEffect } from 'react'
 import { startSync, stopSync, setLocalUser } from './yjsClient'
 import { attachYjsSync, detachYjsSync } from './yjsSync'
 import { startGlobalPresence, stopGlobalPresence } from './globalPresence'
+import { attachAletheiaInbox, detachAletheiaInbox } from './aletheiaInbox'
 import { getUsername, getUserColor, getRoomFromUrl, clearSession } from './session'
 import useProjectLibraryStore from '../stores/useProjectLibraryStore'
 
@@ -31,7 +32,10 @@ export function useCollabSession() {
     useProjectLibraryStore.getState().bindToYjs?.()
     // 全局 presence — 跨房间看到所有同伴 + 一键跳到他们的频道
     startGlobalPresence({ user: { name: username, color: userColor }, currentRoom: room })
+    // aletheia inbox — 飞书等远程消息自动 fire 元认知 (选举只让一个 cc 真实执行 LLM)
+    attachAletheiaInbox()
     return () => {
+      detachAletheiaInbox()
       stopGlobalPresence()
       useProjectLibraryStore.getState().unbindFromYjs?.()
       detachYjsSync()

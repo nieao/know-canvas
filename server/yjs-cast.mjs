@@ -119,6 +119,73 @@ export async function castTextNode({ room, text, attribution }, opts = {}) {
 }
 
 /**
+ * 写一条 aletheia-prompt 到 inbox map (前端订阅会自动 fire 元认知 5 步)
+ *
+ * 写到 ydoc.getMap('aletheia-inbox') 里, 不在 nodes/edges 上
+ *   key = `inbox_{ts}_{rand}`, value = { id, text, attribution, ts, status:'pending', targetClient:null }
+ *
+ * 同时返回当前 awareness peers 数量, 让 bot 能告诉用户"在线 N 人"
+ */
+export async function castAletheiaPrompt({ room, text, attribution }, opts = {}) {
+  if (!room) throw new Error('castAletheiaPrompt: room 必填')
+  if (!text) throw new Error('castAletheiaPrompt: text 必填')
+
+  const wsUrl = opts.wsUrl || DEFAULT_WS
+  const timeoutMs = opts.timeoutMs || 8000
+
+  const id = newId('inbox')
+  const item = {
+    id,
+    text: String(text).slice(0, 4000),
+    attribution: attribution || { name: 'feishu-bot', via: 'feishu-bot' },
+    ts: Date.now(),
+    status: 'pending',
+  }
+
+  const doc = new Y.Doc()
+  const provider = new WebsocketProvider(wsUrl, room, doc, {
+    connect: true,
+    WebSocketPolyfill: WebSocket,
+  })
+
+  try {
+    await new Promise((resolve, reject) => {
+      let done = false
+      const timer = setTimeout(() => {
+        if (done) return
+        done = true
+        reject(new Error(`yjs-cast: 连接 ${wsUrl} ${room} 超时 ${timeoutMs}ms`))
+      }, timeoutMs)
+      provider.once('synced', () => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        resolve()
+      })
+    })
+
+    // 数当前在线 peers (不含我们自己这个临时 client)
+    const states = provider.awareness.getStates()
+    const selfId = doc.clientID
+    let peers = 0
+    states.forEach((_state, clientId) => { if (clientId !== selfId) peers += 1 })
+
+    const yInbox = doc.getMap('aletheia-inbox')
+    doc.transact(() => {
+      yInbox.set(id, item)
+    }, 'feishu-bot-aletheia-prompt')
+
+    await new Promise((r) => setTimeout(r, 600))
+
+    return { id, room, peers }
+  } finally {
+    try { provider.disconnect() } catch {}
+    try { provider.destroy() } catch {}
+    try { doc.destroy() } catch {}
+  }
+}
+
+/**
  * 快捷: 建一个链接节点 (可选 title/summary 由调用方提供)
  */
 export async function castBookmarkNode({ room, url, title, summary, attribution }, opts = {}) {

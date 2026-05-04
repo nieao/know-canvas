@@ -53,6 +53,68 @@ const META_STEP_LABEL_CN = {
   synthesize: '综合',
 }
 
+// === 外部源 watch sync 工具函数 — 详见 docs/source-watch-sync-spec.md ===
+// 12 字符快速 hash (DJB2 变种) — 给 sourceMeta.remoteContentHash 用
+// 同步检测时仅当远端时间戳变了才会调用, 性能不是热点
+function _quickHash(str) {
+  if (!str) return ''
+  let h = 5381
+  const s = String(str)
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  }
+  // 转无符号 16 进制, 取前 12 位
+  return (h >>> 0).toString(16).padStart(8, '0').slice(0, 12)
+}
+
+// 把 ISO 字符串 / number ts 统一转成 number ts (毫秒)
+function _toTs(v) {
+  if (!v) return 0
+  if (typeof v === 'number') return v
+  const t = Date.parse(v)
+  return isNaN(t) ? 0 : t
+}
+
+// 比较远端时间是否严格新于本地 (用 lastSyncedAt 当 baseline, 没有 baseline 则用 importedAt fallback)
+// 容忍 5s 时钟漂移 — 远端必须比本地基线早过 5s 才算"新"
+function _isRemoteNewer(remoteAt, oldRemoteAt, baselineTs) {
+  const r = _toTs(remoteAt)
+  const baseline = _toTs(baselineTs)
+  if (!r) return false
+  if (!baseline) return true  // 第一次, 远端有时间就标新 (不应该, 但兜底)
+  // 允许 5s 漂移
+  return r > baseline + 5000
+}
+
+// 给单个节点拉 fetch-meta — 返回 { remoteUpdatedAt, title? }
+async function _fetchMetaForNode(node) {
+  const meta = node.data?.sourceMeta
+  if (!meta?.platform) throw new Error('节点没有 sourceMeta')
+  if (meta.platform === 'feishu') {
+    const resp = await fetch('/canvas/api/source/feishu/fetch-meta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ docUrl: meta.originalUrl }),
+    })
+    if (!resp.ok) throw new Error(`fetch-meta ${resp.status}`)
+    const json = await resp.json()
+    if (!json.ok) throw new Error(json.error || 'fetch-meta 失败')
+    return json.data || {}
+  }
+  if (meta.platform === 'notion') {
+    const resp = await fetch('/canvas/api/source/notion/fetch-meta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ pageUrl: meta.originalUrl, pageId: meta.pageId }),
+    })
+    if (!resp.ok) throw new Error(`fetch-meta ${resp.status}`)
+    const json = await resp.json()
+    if (!json.ok) throw new Error(json.error || 'fetch-meta 失败')
+    return json.data || {}
+  }
+  throw new Error(`不支持的 platform: ${meta.platform}`)
+}
+
 // 由任意画布节点向上找到所属项目库的 projectId
 //   - 节点 → parentNode → projectGroup → 兄弟 ontologyNode 项目根 → libraryId
 //   - 找不到时返回 null (调用方可 fallback 到 projects[0]?.id)
@@ -3751,6 +3813,7 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
         const nodeId = addBookmarkNode(url, title, summary, '', '', position, false)
 
         // 标记 sourceMeta 让节点知道是从飞书来 + 后续推回时能找到原 URL
+        // source-watch 字段 (remoteUpdatedAt 等) 见 docs/source-watch-sync-spec.md §2.1
         set((state) => {
           const n = state.nodes.find((x) => x.id === nodeId)
           if (n) {
@@ -3760,6 +3823,12 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
               originalUrl: url,
               importedAt: Date.now(),
               fullContent: content, // 全文留着, 后续节点详情面板可展开
+              // source-watch fields
+              remoteUpdatedAt: data.update_time_iso || data.update_time || '', // 飞书 fetch 偶尔带, 没有就空
+              remoteContentHash: _quickHash(content),
+              lastCheckedAt: Date.now(),
+              lastSyncedAt: Date.now(),
+              syncStatus: 'idle',
             }
           }
         })
@@ -3891,10 +3960,208 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
               pageId: data.pageId || '',
               importedAt: Date.now(),
               fullContent: content,
+              // source-watch fields
+              remoteUpdatedAt: data.lastEditedTime || '',
+              remoteContentHash: _quickHash(content),
+              lastCheckedAt: Date.now(),
+              lastSyncedAt: Date.now(),
+              syncStatus: 'idle',
             }
           }
         })
         return { nodeId, title, contentLength: content.length }
+      },
+
+      // ──────────────────────────────────────────────────────────────────
+      // 外部源 watch 同步 — 详细设计见 docs/source-watch-sync-spec.md
+      //   - checkSourceUpdates: 全量扫一遍 sourceMeta 节点, 调 fetch-meta 比对时间戳, 标 syncStatus
+      //   - syncNodeFromSource: 单节点拉全文覆盖
+      //   状态字段:
+      //     sourceMeta.syncStatus: 'idle' | 'checking' | 'updated-available' | 'synced' | 'conflict' | 'error'
+      //     sourceMeta.remoteUpdatedAt: ISO 时间字符串 (远端最近修改)
+      //     sourceMeta.lastCheckedAt: ts (本地上次 poll)
+      //     sourceMeta.lastSyncedAt: ts (用户上次同步覆盖)
+      // ──────────────────────────────────────────────────────────────────
+
+      // sourceWatch 全局状态 (持久化 enabled, 其他运行时)
+      sourceWatch: {
+        enabled: true,
+        mode: 'manual',  // 'manual' (MVP) | 'auto' (Phase 2)
+        intervalMs: 60 * 1000,
+        lastRunAt: 0,
+        inFlight: false,
+        lastReport: null,  // { total, checked, updated, errors, durationMs }
+      },
+
+      // 主入口: 检查所有外部源节点是否有更新
+      checkSourceUpdates: async () => {
+        const state = get()
+        if (state.sourceWatch?.inFlight) {
+          return { skipped: true, reason: 'already-running' }
+        }
+        const targets = state.nodes.filter((n) => {
+          const m = n.data?.sourceMeta
+          return m && (m.platform === 'feishu' || m.platform === 'notion')
+        })
+        const startTs = Date.now()
+        const report = { total: targets.length, checked: 0, updated: 0, errors: 0, durationMs: 0 }
+
+        // 标记 inFlight
+        set((s) => {
+          s.sourceWatch = s.sourceWatch || {}
+          s.sourceWatch.inFlight = true
+        })
+
+        // 标节点为 checking (UI 立即反馈)
+        set((s) => {
+          for (const n of s.nodes) {
+            const m = n.data?.sourceMeta
+            if (m && (m.platform === 'feishu' || m.platform === 'notion')) {
+              m.syncStatus = 'checking'
+            }
+          }
+        })
+
+        try {
+          // 分批并发, 3 节点一批, 批间 200ms
+          const BATCH = 3
+          const PAUSE_MS = 200
+          for (let i = 0; i < targets.length; i += BATCH) {
+            const chunk = targets.slice(i, i + BATCH)
+            await Promise.all(chunk.map(async (node) => {
+              try {
+                const meta = await _fetchMetaForNode(node)
+                const oldRemote = node.data?.sourceMeta?.remoteUpdatedAt || ''
+                const oldImported = node.data?.sourceMeta?.importedAt || 0
+                const oldSynced = node.data?.sourceMeta?.lastSyncedAt || oldImported
+                const newRemote = meta.remoteUpdatedAt || ''
+                const isNewer = _isRemoteNewer(newRemote, oldRemote, oldSynced)
+                set((s) => {
+                  const tn = s.nodes.find((x) => x.id === node.id)
+                  if (!tn) return
+                  tn.data = tn.data || {}
+                  tn.data.sourceMeta = tn.data.sourceMeta || {}
+                  tn.data.sourceMeta.lastCheckedAt = Date.now()
+                  tn.data.sourceMeta.remoteUpdatedAt = newRemote || tn.data.sourceMeta.remoteUpdatedAt
+                  tn.data.sourceMeta.syncStatus = isNewer ? 'updated-available' : 'idle'
+                  tn.data.sourceMeta.syncError = null
+                })
+                if (isNewer) report.updated++
+                report.checked++
+              } catch (err) {
+                set((s) => {
+                  const tn = s.nodes.find((x) => x.id === node.id)
+                  if (!tn) return
+                  tn.data = tn.data || {}
+                  tn.data.sourceMeta = tn.data.sourceMeta || {}
+                  tn.data.sourceMeta.syncStatus = 'error'
+                  tn.data.sourceMeta.syncError = String(err?.message || err).slice(0, 200)
+                  tn.data.sourceMeta.lastCheckedAt = Date.now()
+                })
+                report.errors++
+              }
+            }))
+            if (i + BATCH < targets.length) {
+              await new Promise((r) => setTimeout(r, PAUSE_MS))
+            }
+          }
+          report.durationMs = Date.now() - startTs
+          set((s) => {
+            s.sourceWatch = s.sourceWatch || {}
+            s.sourceWatch.lastRunAt = Date.now()
+            s.sourceWatch.lastReport = report
+          })
+          return report
+        } finally {
+          set((s) => {
+            if (s.sourceWatch) s.sourceWatch.inFlight = false
+          })
+        }
+      },
+
+      // 单节点同步: 从远端拉全文覆盖本地 title/description/fullContent
+      // opts: { force?: bool 跳过 conflict 检测直接覆盖 }
+      syncNodeFromSource: async (nodeId, opts = {}) => {
+        const node = get().nodes.find((n) => n.id === nodeId)
+        if (!node) throw new Error(`syncNodeFromSource: 节点 ${nodeId} 不存在`)
+        const meta = node.data?.sourceMeta
+        if (!meta?.platform) throw new Error('节点没有 sourceMeta, 不是外部源导入的')
+
+        // 冲突检测 (字段已埋, MVP 仅记录, 不弹 modal)
+        // localEditedAt > lastSyncedAt 且 remoteUpdatedAt > lastSyncedAt → conflict
+        const localEdited = meta.localEditedAt || 0
+        const lastSynced = meta.lastSyncedAt || meta.importedAt || 0
+        const remoteAt = _toTs(meta.remoteUpdatedAt)
+        if (!opts.force && localEdited > lastSynced && remoteAt > lastSynced) {
+          set((s) => {
+            const tn = s.nodes.find((x) => x.id === nodeId)
+            if (tn?.data?.sourceMeta) tn.data.sourceMeta.syncStatus = 'conflict'
+          })
+          return { ok: false, conflict: true, reason: 'local-edits-detected' }
+        }
+
+        // 拉全文
+        let data
+        if (meta.platform === 'feishu') {
+          const resp = await fetch('/canvas/api/source/feishu/fetch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+            body: JSON.stringify({ docUrl: meta.originalUrl }),
+          })
+          if (!resp.ok) throw new Error(`feishu fetch ${resp.status}`)
+          const json = await resp.json()
+          if (!json.ok) throw new Error(json.error || 'feishu fetch 失败')
+          data = json.data
+        } else if (meta.platform === 'notion') {
+          const resp = await fetch('/canvas/api/source/notion/fetch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+            body: JSON.stringify({ pageUrl: meta.originalUrl, pageId: meta.pageId }),
+          })
+          if (!resp.ok) throw new Error(`notion fetch ${resp.status}`)
+          const json = await resp.json()
+          if (!json.ok) throw new Error(json.error || 'notion fetch 失败')
+          data = json.data
+        } else {
+          throw new Error(`不支持的 platform: ${meta.platform}`)
+        }
+
+        const newTitle = data.title || meta.originalUrl
+        const newContent = String(data.content || '').replace(/\s+/g, ' ').trim()
+        const newSummary = newContent.slice(0, 240) + (newContent.length > 240 ? '...' : '')
+        const newRemoteAt = data.lastEditedTime || data.update_time_iso || ''
+
+        set((s) => {
+          const tn = s.nodes.find((x) => x.id === nodeId)
+          if (!tn) return
+          tn.data = tn.data || {}
+          // 仅覆盖远端字段, 保留 position/marked/category/tags/parentNode 等本地加工
+          tn.data.title = newTitle
+          tn.data.description = newSummary
+          tn.data.sourceMeta = {
+            ...tn.data.sourceMeta,
+            fullContent: newContent,
+            remoteUpdatedAt: newRemoteAt || tn.data.sourceMeta?.remoteUpdatedAt,
+            remoteContentHash: _quickHash(newContent),
+            lastSyncedAt: Date.now(),
+            lastCheckedAt: Date.now(),
+            syncStatus: 'synced',
+            syncError: null,
+          }
+        })
+
+        // 'synced' 3s 后回 'idle' (UI 角标淡出)
+        setTimeout(() => {
+          const cur = get().nodes.find((n) => n.id === nodeId)
+          if (cur?.data?.sourceMeta?.syncStatus === 'synced') {
+            set((s) => {
+              const tn = s.nodes.find((x) => x.id === nodeId)
+              if (tn?.data?.sourceMeta) tn.data.sourceMeta.syncStatus = 'idle'
+            })
+          }
+        }, 3000)
+
+        return { ok: true, nodeId, title: newTitle, contentLength: newContent.length }
       },
 
       // ──────────────────────────────────────────────────────────────────

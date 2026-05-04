@@ -5,7 +5,7 @@
  */
 
 import { memo, useState, useEffect } from 'react'
-import { useCanvasStore } from '../../stores/useCanvasStore'
+import useCanvasStore from '../../stores/useCanvasStore'
 
 // 默认分类选项
 const CATEGORIES = ['概念', '技术', '人物', '事件', '方法', '工具', '理论', '资源']

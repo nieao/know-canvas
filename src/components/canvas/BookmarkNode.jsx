@@ -70,6 +70,23 @@ function BookmarkNode({ id, data, selected }) {
   const brandColor = BRAND_COLORS[domain] || 'var(--text-muted)'
   const isLoading = data.loading
 
+  // ── 外部源 watch 同步角标状态 (详见 docs/source-watch-sync-spec.md §9.1) ──
+  // sourceMeta.syncStatus: 'idle' | 'checking' | 'updated-available' | 'synced' | 'conflict' | 'error'
+  const sourceMeta = data.sourceMeta
+  const syncStatus = sourceMeta?.syncStatus || 'idle'
+  const showSyncBadge = sourceMeta && (sourceMeta.platform === 'feishu' || sourceMeta.platform === 'notion')
+    && syncStatus !== 'idle'
+
+  // 点击角标 → 触发同步 (updated-available / conflict 时)
+  const handleSyncBadgeClick = useCallback(async (e) => {
+    e.stopPropagation()
+    if (syncStatus !== 'updated-available' && syncStatus !== 'conflict') return
+    // 派事件让 store 处理, 避免 BookmarkNode 直接 import store (维持渲染层纯净)
+    window.dispatchEvent(new CustomEvent('source-sync-node', {
+      detail: { nodeId: id, force: syncStatus === 'conflict' },
+    }))
+  }, [id, syncStatus])
+
   // 处理链接点击
   const handleClick = () => {
     if (!isEditing && url) {
@@ -251,6 +268,54 @@ function BookmarkNode({ id, data, selected }) {
       >
         链接
       </div>
+
+      {/* 外部源同步状态角标 — 右上角. 详见 docs/source-watch-sync-spec.md §9.1 */}
+      {showSyncBadge && (
+        <SyncBadge
+          status={syncStatus}
+          platform={sourceMeta?.platform}
+          error={sourceMeta?.syncError}
+          onClick={handleSyncBadgeClick}
+        />
+      )}
+    </div>
+  )
+}
+
+// 同步状态角标 — 右上角浮标
+// status: 'checking' | 'updated-available' | 'synced' | 'conflict' | 'error'
+function SyncBadge({ status, platform, error, onClick }) {
+  const config = {
+    checking: { color: '#c8a882', bg: '#fff', icon: '...', title: `检查中 (${platform})`, clickable: false, pulse: true },
+    'updated-available': { color: '#fff', bg: '#3b82f6', icon: '↑', title: `远端 ${platform} 有更新, 点击同步`, clickable: true, pulse: true },
+    synced: { color: '#fff', bg: '#22c55e', icon: '✓', title: '已同步', clickable: false, pulse: false },
+    conflict: { color: '#fff', bg: '#f59e0b', icon: '⚠', title: '本地与远端都有修改, 点击查看', clickable: true, pulse: false },
+    error: { color: '#fff', bg: '#ef4444', icon: '!', title: error || '同步失败', clickable: false, pulse: false },
+  }
+  const c = config[status] || config.checking
+  return (
+    <div
+      onClick={c.clickable ? onClick : undefined}
+      className="absolute top-2 right-2 z-20 flex items-center justify-center text-[10px] font-bold rounded-full select-none"
+      style={{
+        width: 18,
+        height: 18,
+        backgroundColor: c.bg,
+        color: c.color,
+        cursor: c.clickable ? 'pointer' : 'default',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+        animation: c.pulse ? 'syncBadgePulse 1.4s ease-in-out infinite' : 'none',
+        lineHeight: 1,
+      }}
+      title={c.title}
+    >
+      {c.icon}
+      <style>{`
+        @keyframes syncBadgePulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.12); opacity: 0.75; }
+        }
+      `}</style>
     </div>
   )
 }

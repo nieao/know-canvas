@@ -26,6 +26,27 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
   // (banner 的按钮坐标和工具栏的"排序"按钮在 1280 视口下 bbox 重叠, 工具栏会拦截 banner 的点击)
   const aletheiaActive = useAletheiaStore((s) => s?.aletheiaActive ?? false)
 
+  // 外部源 watch 同步 — 详见 docs/source-watch-sync-spec.md
+  const checkSourceUpdates = useCanvasStore((s) => s.checkSourceUpdates)
+  const sourceWatchInFlight = useCanvasStore((s) => s.sourceWatch?.inFlight ?? false)
+  const lastSourceReport = useCanvasStore((s) => s.sourceWatch?.lastReport ?? null)
+  const [showSourceReport, setShowSourceReport] = useState(false)
+
+  const handleCheckSourceUpdates = async () => {
+    if (sourceWatchInFlight) return
+    try {
+      const r = await checkSourceUpdates?.()
+      if (r && !r.skipped) {
+        setShowSourceReport(true)
+        setTimeout(() => setShowSourceReport(false), 4000)
+        logAction?.('toolbar.checkSourceUpdates', r)
+      }
+    } catch (e) {
+      console.error('[checkSourceUpdates] 失败:', e)
+      alert('检查外部源更新失败: ' + (e?.message || e))
+    }
+  }
+
   // 一键自动排序 — 按当前方向 + 节点连边算出新位置
   const handleAutoLayout = async () => {
     if (isLayouting) return
@@ -320,6 +341,64 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
           )}
           <span className="text-xs font-medium">{isLayouting ? '排序中...' : '排序'}</span>
         </button>
+      </div>
+
+      {/* 外部源 watch 同步按钮 — 检查飞书/Notion 节点是否有更新 */}
+      <div className="relative">
+        <button
+          onClick={handleCheckSourceUpdates}
+          disabled={sourceWatchInFlight}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-sm transition-all duration-300 card-hover disabled:opacity-50"
+          style={{
+            background: 'var(--white)',
+            border: '1px solid var(--gray-100)',
+            color: 'var(--dark)',
+          }}
+          onMouseEnter={(e) => { if (!sourceWatchInFlight) e.currentTarget.style.borderColor = 'var(--warm)' }}
+          onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--gray-100)'}
+          title="检查飞书 / Notion 导入的节点是否有更新"
+        >
+          <svg
+            className={`w-4 h-4 ${sourceWatchInFlight ? 'animate-spin' : ''}`}
+            style={{ color: 'var(--warm)' }}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span className="text-xs font-medium">
+            {sourceWatchInFlight ? '检查中...' : '外部源'}
+          </span>
+        </button>
+        {/* 报告气泡 — 检查完 4s 内显示 */}
+        {showSourceReport && lastSourceReport && (
+          <div
+            className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 rounded-lg shadow-md text-[11px] whitespace-nowrap z-50"
+            style={{
+              background: 'var(--white)',
+              border: '1px solid var(--gray-100)',
+              color: 'var(--dark)',
+            }}
+          >
+            {lastSourceReport.total === 0 ? (
+              <span style={{ color: 'var(--gray-500)' }}>暂无外部源节点</span>
+            ) : (
+              <>
+                <span>检查 {lastSourceReport.checked}/{lastSourceReport.total}</span>
+                {' · '}
+                <span style={{ color: lastSourceReport.updated > 0 ? '#3b82f6' : 'var(--gray-500)' }}>
+                  更新 {lastSourceReport.updated}
+                </span>
+                {lastSourceReport.errors > 0 && (
+                  <>
+                    {' · '}
+                    <span style={{ color: '#ef4444' }}>错误 {lastSourceReport.errors}</span>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ⚙ 设置下拉 — 收纳次要操作: 横竖切换/导入/导出/清空 */}

@@ -606,6 +606,30 @@ export default function KnowledgeGraph() {
         })
     }
 
+    // 外部源 watch 节点同步 — BookmarkNode 角标点击派来 (详见 docs/source-watch-sync-spec.md §9.1)
+    const onSourceSyncNode = async (e) => {
+      const { nodeId, force } = e.detail || {}
+      if (!nodeId) return
+      const store = useCanvasStore.getState()
+      if (typeof store.syncNodeFromSource !== 'function') {
+        console.warn('[source-sync-node] syncNodeFromSource action 未实现')
+        return
+      }
+      try {
+        const r = await store.syncNodeFromSource(nodeId, { force: !!force })
+        if (r?.conflict) {
+          // MVP: 简单 confirm, Phase 2 换 modal + diff
+          if (window.confirm('本地修改与远端都有更新, 同步将覆盖本地修改. 是否继续?')) {
+            await store.syncNodeFromSource(nodeId, { force: true })
+          }
+        } else {
+          pushLog({ level: 'info', source: 'source-watch', msg: `已同步: ${r?.title || nodeId}` })
+        }
+      } catch (err) {
+        pushLog({ level: 'warn', source: 'source-watch', msg: `同步失败 ${nodeId}: ${err?.message || err}` })
+      }
+    }
+
     window.addEventListener('canvas-file-drop', onCanvasFileDrop)
     window.addEventListener('canvas-url-drop', onCanvasUrlDrop)
     window.addEventListener('canvas-paste', onCanvasPaste)
@@ -619,6 +643,7 @@ export default function KnowledgeGraph() {
     window.addEventListener('challenge:chain-todos', onChainTodos)
     window.addEventListener('challenge:verify-hermes', onVerifyHermes)
     window.addEventListener('canvas-auto-save', onAutoSave)
+    window.addEventListener('source-sync-node', onSourceSyncNode)
 
     return () => {
       window.removeEventListener('canvas-file-drop', onCanvasFileDrop)
@@ -634,6 +659,7 @@ export default function KnowledgeGraph() {
       window.removeEventListener('challenge:chain-todos', onChainTodos)
       window.removeEventListener('challenge:verify-hermes', onVerifyHermes)
       window.removeEventListener('canvas-auto-save', onAutoSave)
+      window.removeEventListener('source-sync-node', onSourceSyncNode)
     }
   }, [handleFileDrop, addBookmarkNode, addConceptNode, addNoteNode, addImageNode, addVideoNode, addFileNode, onNodesChange])
 

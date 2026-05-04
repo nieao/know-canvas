@@ -11,6 +11,9 @@
  *   POST /feishu/fetch   { docUrl }                  → { ok, data: { title, content, ... } }
  *   POST /notion/search  { query, pageSize? }        → { ok, results: [{title, url, id, lastEditedTime}] }
  *   POST /notion/fetch   { pageUrl | pageId }        → { ok, data: { title, content, blocks } }
+ *   POST /feishu/fetch-meta { docUrl }               → { ok, data: { title?, remoteUpdatedAt, platform } }
+ *   POST /notion/fetch-meta { pageUrl | pageId }     → { ok, data: { title?, remoteUpdatedAt, platform } }
+ *   (fetch-meta 仅返回 update_time, 不拉正文 — 给 source-watch-sync 用; 详见 docs/source-watch-sync-spec.md)
  *
  * (得到 待 #9 后续加 — 需 getnote-cli)
  *
@@ -34,6 +37,33 @@ const NOTION_VERSION = '2022-06-28'
 
 function log(...args) {
   console.log('[source-proxy]', new Date().toISOString().slice(11, 19), ...args)
+}
+
+// === 轻量 fetch-meta 缓存 — 防 source-watch 高频拉拍服务端 ===
+// 飞书 fetch-meta 比较贵 (要走 search 退化), 缓存 30s; Notion last_edited_time 也短缓存避免连点
+// 容量 200, LRU 淘汰. 仅缓存成功结果, 失败不进缓存
+const META_CACHE_TTL_MS = 30 * 1000
+const META_CACHE_MAX = 200
+const _metaCache = new Map() // key → { val, ts }
+function metaCacheGet(key) {
+  const hit = _metaCache.get(key)
+  if (!hit) return null
+  if (Date.now() - hit.ts > META_CACHE_TTL_MS) {
+    _metaCache.delete(key)
+    return null
+  }
+  // LRU touch — 重新插入移到末尾
+  _metaCache.delete(key)
+  _metaCache.set(key, hit)
+  return hit.val
+}
+function metaCacheSet(key, val) {
+  if (_metaCache.size >= META_CACHE_MAX) {
+    // 删最老 (Map 迭代序 = 插入序)
+    const first = _metaCache.keys().next().value
+    if (first) _metaCache.delete(first)
+  }
+  _metaCache.set(key, { val, ts: Date.now() })
 }
 
 // Windows 下 spawn .cmd 必须经 cmd.exe /c (Node 18+ 安全策略)
@@ -446,6 +476,80 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // ── /feishu/fetch-meta ── 仅取 update_time, 不拉正文 (source-watch 用)
+    //   飞书没单 doc 查 update_time 的 OpenAPI, 退化用 search by 短关键词 (从 URL token 抽前 8 字符做 query)
+    //   失败时退到 fetch (整篇拉) 拿 raw.update_time, 但代价大 — 用 LRU 30s 缓存平摊
+    if (method === 'POST' && url.pathname === '/feishu/fetch-meta') {
+      const body = await readJsonBody(req)
+      const docUrl = String(body.docUrl || '').trim()
+      if (!docUrl) { sendJson(res, 400, { ok: false, error: 'docUrl 不能为空' }); return }
+      const cacheKey = `feishu:meta:${docUrl}`
+      const cached = metaCacheGet(cacheKey)
+      if (cached) { sendJson(res, 200, { ok: true, data: cached, cached: true }); return }
+      log(`feishu/fetch-meta docUrl="${docUrl}" (cache miss)`)
+      let remoteUpdatedAt = ''
+      let title = ''
+      // 策略 1: 从 URL 抽 token, 用 token 当 search query 命中自己
+      const tokenMatch = docUrl.match(/\/([a-zA-Z0-9]{16,})(?:[?#]|$)/)
+      const token = tokenMatch ? tokenMatch[1] : ''
+      try {
+        if (token) {
+          const raw = await runLark(['docs', '+search', '--query', token, '--page-size', '5', '--format', 'json'])
+          const list = raw?.data?.results || []
+          // 找 result_meta.token === token 或 url === docUrl
+          const hit = list.find((r) => {
+            const mt = r.result_meta || {}
+            return mt.token === token || (mt.url && mt.url.indexOf(token) >= 0)
+          })
+          if (hit) {
+            remoteUpdatedAt = hit.result_meta?.update_time_iso || ''
+            title = String(hit.title_highlighted || '').replace(/<\/?h>/g, '').trim()
+          }
+        }
+        // 策略 2 fallback: 走 fetch 整篇 (贵, 但确保有 update_time)
+        if (!remoteUpdatedAt) {
+          const raw2 = await runLark(['docs', '+fetch', '--doc', docUrl, '--format', 'json'])
+          const d = raw2?.data || {}
+          remoteUpdatedAt = d.update_time_iso || d.update_time || d.updated_at || d.lastEditedTime || ''
+          if (!title) title = d.title || d.name || ''
+        }
+        const data = { title, remoteUpdatedAt, platform: 'feishu' }
+        if (remoteUpdatedAt) metaCacheSet(cacheKey, data)
+        sendJson(res, 200, { ok: true, data })
+      } catch (e) {
+        sendJson(res, 200, { ok: false, error: `feishu fetch-meta 失败: ${e?.message || e}` })
+      }
+      return
+    }
+
+    // ── /notion/fetch-meta ── GET /pages/{id} 取 last_edited_time, 不拉 children blocks
+    //   单次调用 ~80ms, 短缓存 (10s) 防连点
+    if (method === 'POST' && url.pathname === '/notion/fetch-meta') {
+      const body = await readJsonBody(req)
+      const input = String(body.pageUrl || body.pageId || '').trim()
+      if (!input) { sendJson(res, 400, { ok: false, error: 'pageUrl/pageId 不能为空' }); return }
+      const pageId = extractNotionId(input)
+      if (!pageId) { sendJson(res, 400, { ok: false, error: '无法从 URL 解析 page id' }); return }
+      const cacheKey = `notion:meta:${pageId}`
+      const cached = metaCacheGet(cacheKey)
+      if (cached) { sendJson(res, 200, { ok: true, data: cached, cached: true }); return }
+      log(`notion/fetch-meta pageId="${pageId}" (cache miss)`)
+      try {
+        const page = await notionFetch(`/pages/${pageId}`)
+        const data = {
+          title: extractNotionTitle(page) || '',
+          remoteUpdatedAt: page.last_edited_time || '',
+          platform: 'notion',
+          pageId,
+        }
+        if (data.remoteUpdatedAt) metaCacheSet(cacheKey, data)
+        sendJson(res, 200, { ok: true, data })
+      } catch (e) {
+        sendJson(res, 200, { ok: false, error: `notion fetch-meta 失败: ${e?.message || e}` })
+      }
+      return
+    }
+
     sendJson(res, 404, { ok: false, error: `unknown route: ${method} ${url.pathname}` })
   } catch (e) {
     log('error:', e?.message || e)
@@ -455,7 +559,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   log(`listening on http://${HOST}:${PORT}`)
-  log(`endpoints: GET /health  POST /feishu/search  POST /feishu/fetch`)
+  log(`endpoints: GET /health  POST /feishu/search|fetch|fetch-meta  POST /notion/search|fetch|fetch-meta|push`)
   log(`lark-cli: ${LARK_BIN}`)
 })
 

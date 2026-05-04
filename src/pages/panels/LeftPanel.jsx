@@ -21,6 +21,8 @@ import ProjectsLibraryTab from '../../components/library/ProjectsLibraryTab'
 import useCanvasStore from '../../stores/useCanvasStore'
 import useProjectLibraryStore from '../../stores/useProjectLibraryStore'
 import { onAppend, getAll as getAllLogs } from '../../utils/logBus'
+import { getGlobalPeers, onGlobalPresenceChange } from '../../collab/globalPresence'
+import { navigateToRoom } from '../../collab/session'
 
 // 文件类型图标映射 (导入 tab 用)
 const FILE_ICONS = {
@@ -434,6 +436,9 @@ function LeftPanel({
           知识库 hub
         </h2>
       </div>
+
+      {/* 同伴 — 跨房间 presence, 点击跳到他们的频道 */}
+      <PeersSection />
 
       {/* 4-Tab 切换条 */}
       <div
@@ -1767,3 +1772,165 @@ function LeftPanel({
 }
 
 export default LeftPanel
+
+// === 同伴 (跨房间 presence) ===
+// 显示当前所有在线同伴 + 他们在哪个房间, 点击跳过去
+function PeersSection() {
+  const [peers, setPeers] = useState([])
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    // 初始拉一次 (presence ws 可能还没 ready, 用 setTimeout 延迟)
+    const tick = () => { if (alive) setPeers(getGlobalPeers()) }
+    tick()
+    const t = setTimeout(tick, 1500)
+    const off = onGlobalPresenceChange((next) => { if (alive) setPeers(next || []) })
+    return () => { alive = false; clearTimeout(t); off && off() }
+  }, [])
+
+  // 按 currentRoom 分组
+  const byRoom = useMemo(() => {
+    const m = new Map()
+    for (const p of peers) {
+      const k = p.currentRoom || 'unknown'
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push(p)
+    }
+    return [...m.entries()]
+  }, [peers])
+
+  const total = peers.length
+
+  return (
+    <div
+      style={{
+        borderBottom: '1px solid var(--border-subtle, var(--gray-100))',
+        flexShrink: 0,
+      }}
+    >
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          width: '100%',
+          padding: '10px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          fontFamily: FONT_SANS,
+          color: 'var(--text-secondary, var(--gray-700))',
+          fontSize: 11,
+          letterSpacing: '0.2em',
+          textTransform: 'uppercase',
+        }}
+        title={total === 0 ? '当前没有其他在线同伴' : `点击展开 / 折叠 同伴列表`}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>同伴</span>
+          <span
+            style={{
+              padding: '1px 7px',
+              fontSize: 10,
+              borderRadius: 999,
+              background: total > 0 ? 'var(--accent-bg, #f5f0eb)' : 'transparent',
+              color: total > 0 ? 'var(--accent, var(--warm))' : 'var(--text-faint, var(--gray-500))',
+              border: `1px solid ${total > 0 ? 'var(--accent, var(--warm))' : 'var(--border-subtle, var(--gray-100))'}`,
+              letterSpacing: '0.05em',
+            }}
+          >
+            {total}
+          </span>
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--text-faint, var(--gray-500))' }}>
+          {expanded ? '收起 ▴' : '展开 ▾'}
+        </span>
+      </button>
+      {expanded && (
+        <div style={{ padding: '4px 8px 12px 8px' }}>
+          {total === 0 && (
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--text-faint, var(--gray-500))',
+                padding: '8px 8px',
+                textAlign: 'center',
+                fontStyle: 'italic',
+              }}
+            >
+              暂无其他在线同伴
+            </div>
+          )}
+          {byRoom.map(([roomId, list]) => (
+            <div key={roomId} style={{ marginBottom: 8 }}>
+              <button
+                onClick={() => navigateToRoom(roomId)}
+                title={`跳到频道 ${roomId}`}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  fontSize: 10,
+                  letterSpacing: '0.15em',
+                  textTransform: 'uppercase',
+                  textAlign: 'left',
+                  background: 'transparent',
+                  border: '1px dashed var(--border-subtle, var(--gray-100))',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  color: 'var(--accent, var(--warm))',
+                  marginBottom: 4,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent-bg, #f5f0eb)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              >
+                ▸ {roomId}
+              </button>
+              {list.map((p) => (
+                <div
+                  key={p.clientId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '4px 12px 4px 16px',
+                    fontSize: 12,
+                    color: 'var(--text-primary, var(--dark))',
+                    cursor: 'pointer',
+                    borderRadius: 4,
+                  }}
+                  onClick={() => navigateToRoom(p.currentRoom)}
+                  title={`${p.name} 在 ${p.currentRoom} — 点击进入`}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover, var(--gray-100))' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: '50%',
+                      background: p.color || '#888',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontSize: 9,
+                      fontWeight: 600,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {(p.name || '?').slice(0, 1).toUpperCase()}
+                  </span>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

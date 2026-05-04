@@ -13,6 +13,7 @@
 import { useEffect } from 'react'
 import { startSync, stopSync, setLocalUser } from './yjsClient'
 import { attachYjsSync, detachYjsSync } from './yjsSync'
+import { startGlobalPresence, stopGlobalPresence } from './globalPresence'
 import { getUsername, getUserColor, getRoomFromUrl, clearSession } from './session'
 import useProjectLibraryStore from '../stores/useProjectLibraryStore'
 
@@ -28,7 +29,10 @@ export function useCollabSession() {
     attachYjsSync()
     // 项目库共享 — 把本地 localStorage 的项目迁到 yjs, 并订阅远端协作者写入
     useProjectLibraryStore.getState().bindToYjs?.()
+    // 全局 presence — 跨房间看到所有同伴 + 一键跳到他们的频道
+    startGlobalPresence({ user: { name: username, color: userColor }, currentRoom: room })
     return () => {
+      stopGlobalPresence()
       useProjectLibraryStore.getState().unbindFromYjs?.()
       detachYjsSync()
       stopSync()

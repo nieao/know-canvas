@@ -749,7 +749,6 @@ function start() {
       '--event-types', 'im.message.receive_v1,card.action.trigger',
       '--output-dir', EVENTS_DIR,
       '--force',
-      '--quiet',
     ],
     { stdio: ['pipe', 'pipe', 'pipe'] },
   )

@@ -3856,6 +3856,56 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
         return { results: json.results || [], total: json.total || 0 }
       },
 
+      // 飞书 webhook 单向 push — 给外部群推消息 (custom robot, 非 self-built bot)
+      // 入参: { webhookUrl, text, keyword? }   keyword 用于命中飞书自定义关键词安全设置
+      // 用途: 外部群无法加 self-built bot, 走 custom robot 单向通知
+      notifyFeishuChat: async ({ webhookUrl, text, keyword }) => {
+        if (!webhookUrl || !text) throw new Error('notifyFeishuChat: webhookUrl + text 都必填')
+        const resp = await fetch('/canvas/api/source/feishu/webhook-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ webhookUrl, text, keyword: keyword || '' }),
+        })
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => '')
+          throw new Error(`source-proxy ${resp.status}: ${txt.slice(0, 200)}`)
+        }
+        const json = await resp.json()
+        if (!json.ok) throw new Error(json.error || 'source-proxy 返回失败')
+        return json
+      },
+
+      // 把节点摘要推到飞书群 (复用 webhookUrl + keyword 从 localStorage)
+      pushNodeToFeishuChat: async (nodeId, opts = {}) => {
+        const webhookUrl = opts.webhookUrl || localStorage.getItem('feishuWebhookUrl') || ''
+        const keyword = opts.keyword || localStorage.getItem('feishuWebhookKeyword') || ''
+        if (!webhookUrl) throw new Error('未配置飞书 webhook URL — 在节点面板里配置')
+        const { nodes } = get()
+        const node = nodes.find((n) => n.id === nodeId)
+        if (!node) throw new Error(`pushNodeToFeishuChat: 节点 ${nodeId} 不存在`)
+        const title = String(node.data?.label || node.data?.title || node.data?.text || '节点').slice(0, 100)
+        const summary = String(node.data?.summary || node.data?.fullContent || node.data?.content || '').slice(0, 500)
+        const sourceUrl = node.data?.sourceMeta?.originalUrl || node.data?.url || ''
+        const lines = [`📌 ${title}`]
+        if (summary) lines.push('', summary)
+        if (sourceUrl) lines.push('', `🔗 ${sourceUrl}`)
+        const text = lines.join('\n')
+        const r = await get().notifyFeishuChat({ webhookUrl, text, keyword })
+        set((state) => {
+          const n = state.nodes.find((x) => x.id === nodeId)
+          if (n) {
+            n.data = n.data || {}
+            n.data.publishedTo = n.data.publishedTo || []
+            n.data.publishedTo.push({
+              platform: 'feishu-chat',
+              webhookSuffix: webhookUrl.slice(-12), // 只存末尾防泄漏
+              pushedAt: Date.now(),
+            })
+          }
+        })
+        return r
+      },
+
       // 节点 → Notion 页面 (创建到指定数据库, 默认 AI 学习库)
       // opts: { databaseId? = AI学习库, includeChildren? = true 含子节点拼接 }
       pushNodeToNotion: async (nodeId, opts = {}) => {

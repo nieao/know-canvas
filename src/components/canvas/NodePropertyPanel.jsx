@@ -49,12 +49,50 @@ const focusRingColor = '#c8a882'
 function NodePropertyPanel({ node, position, onClose, onSave }) {
   const [formData, setFormData] = useState({})
   const [pushingNotion, setPushingNotion] = useState(false)
+  const [pushingFeishu, setPushingFeishu] = useState(false)
 
   useEffect(() => {
     if (node) {
       setFormData({ ...node.data })
     }
   }, [node])
+
+  // 推送当前节点到飞书群 (custom robot webhook)
+  // 首次使用提示输入 webhook URL + 自定义关键词, 存 localStorage 复用
+  const handlePushToFeishuChat = async () => {
+    if (!node || pushingFeishu) return
+    let webhookUrl = localStorage.getItem('feishuWebhookUrl') || ''
+    let keyword = localStorage.getItem('feishuWebhookKeyword') || ''
+    // 首次或长按 shift 改 — 让用户输入
+    const needConfig = !webhookUrl || (typeof window !== 'undefined' && window.event?.shiftKey)
+    if (needConfig) {
+      const url = window.prompt(
+        '飞书自定义机器人 webhook URL\n(群设置 → 群机器人 → 自定义机器人 → 复制 URL)',
+        webhookUrl,
+      )
+      if (!url) return
+      webhookUrl = url.trim()
+      const kw = window.prompt('自定义关键词 (机器人安全设置里填的, 留空 = 不补)', keyword || 'know-canvas')
+      keyword = (kw || '').trim()
+      localStorage.setItem('feishuWebhookUrl', webhookUrl)
+      localStorage.setItem('feishuWebhookKeyword', keyword)
+    }
+    setPushingFeishu(true)
+    try {
+      await useCanvasStore.getState().pushNodeToFeishuChat(node.id, { webhookUrl, keyword })
+      // 静默成功 — 群里能看到, 不弹 confirm
+      const flash = document.createElement('div')
+      flash.textContent = '✓ 已发到飞书群'
+      flash.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:8px 16px;border-radius:4px;z-index:9999;font-size:12px;'
+      document.body.appendChild(flash)
+      setTimeout(() => flash.remove(), 2000)
+    } catch (err) {
+      console.error('[feishu-push]', err)
+      alert(`推送飞书群失败:\n${err?.message || err}\n\n按住 Shift 点按钮可重新配置 webhook URL`)
+    } finally {
+      setPushingFeishu(false)
+    }
+  }
 
   // 推送当前节点到 Notion (默认 AI学习库)
   const handlePushToNotion = async () => {
@@ -520,6 +558,20 @@ function NodePropertyPanel({ node, position, onClose, onSave }) {
             >
               <span>{pushingNotion ? '⟳' : '↗'}</span>
               <span>{pushingNotion ? '推送中' : '推 Notion'}</span>
+            </button>
+            <button
+              onClick={handlePushToFeishuChat}
+              disabled={pushingFeishu}
+              className="px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+              style={{
+                backgroundColor: pushingFeishu ? '#e8e8e8' : 'rgba(0,0,0,0.04)',
+                color: pushingFeishu ? '#888' : '#2d2d2d',
+                cursor: pushingFeishu ? 'wait' : 'pointer',
+              }}
+              title="推送当前节点摘要到飞书群 (自定义机器人 webhook). 首次会问你 URL + 关键词. Shift+点击重新配置"
+            >
+              <span>{pushingFeishu ? '⟳' : '💬'}</span>
+              <span>{pushingFeishu ? '推送中' : '推飞书群'}</span>
             </button>
           </div>
           {/* 右侧 — 取消 / 保存 */}

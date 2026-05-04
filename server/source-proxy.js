@@ -407,6 +407,50 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // ── /feishu/webhook-push ── 把消息推到飞书自定义机器人 webhook (单向)
+    //   入参: { webhookUrl, msgType?='text', text?, post?, keyword? }
+    //         keyword: 飞书自定义机器人若开"自定义关键词"安全设置, 必须在 text 里出现这个词
+    //   响应: { ok, response: <feishu API resp> }
+    //   用途: 外部群无法加 self-built bot, 用 custom robot webhook 单向 push
+    if (method === 'POST' && url.pathname === '/feishu/webhook-push') {
+      const body = await readJsonBody(req)
+      const webhookUrl = String(body.webhookUrl || '').trim()
+      const msgType = String(body.msgType || 'text').toLowerCase()
+      const keyword = String(body.keyword || '').trim()
+      let text = String(body.text || '').trim()
+      if (!webhookUrl) { sendJson(res, 400, { ok: false, error: 'webhookUrl 不能为空' }); return }
+      if (!/^https:\/\/(open\.feishu\.cn|open\.larksuite\.com)\/open-apis\/bot\/v2\/hook\//.test(webhookUrl)) {
+        sendJson(res, 400, { ok: false, error: 'webhookUrl 格式不对 (应为飞书 webhook bot URL)' })
+        return
+      }
+      if (msgType !== 'text' && msgType !== 'post') {
+        sendJson(res, 400, { ok: false, error: 'msgType 只支持 text / post' }); return
+      }
+      if (!text && msgType === 'text') { sendJson(res, 400, { ok: false, error: 'text 不能为空' }); return }
+      // 自动补关键词 (用户开启自定义关键词安全设置时必须命中)
+      if (keyword && msgType === 'text' && !text.includes(keyword)) {
+        text = `[${keyword}] ${text}`
+      }
+      // 飞书 webhook 单条限 20KB, text 截断
+      if (text.length > 8000) text = text.slice(0, 8000) + '...(截断)'
+      log(`feishu/webhook-push msgType=${msgType} len=${text.length}`)
+      const payload = msgType === 'text'
+        ? { msg_type: 'text', content: { text } }
+        : { msg_type: 'post', content: { post: body.post || {} } }
+      const resp = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(payload),
+      })
+      const respJson = await resp.json().catch(() => ({}))
+      if (respJson.code !== 0 && respJson.StatusCode !== 0) {
+        sendJson(res, 502, { ok: false, error: `feishu webhook 返回错误: ${respJson.msg || respJson.StatusMessage || JSON.stringify(respJson).slice(0, 200)}`, response: respJson })
+        return
+      }
+      sendJson(res, 200, { ok: true, response: respJson })
+      return
+    }
+
     // ── /notion/push ── 节点 → 创建一个 Notion 数据库页面
     //   入参: { databaseId, title, content (markdown-ish), sourceUrl? }
     //   响应: { ok, pageId, pageUrl }

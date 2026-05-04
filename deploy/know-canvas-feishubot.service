@@ -1,0 +1,56 @@
+# Know Canvas Feishu Bot daemon systemd unit
+# 飞书消息 ↔ 画布双向通道 (long-poll lark-cli event +subscribe)
+#
+# 安装:
+#   sudo cp deploy/know-canvas-feishubot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now know-canvas-feishubot
+#   sudo systemctl status know-canvas-feishubot
+#
+# 查看日志:
+#   sudo journalctl -u know-canvas-feishubot -f
+#
+# 前置:
+#   - lark-cli 已注入 profile cli_a9434cff84381bd9 (猫蛋 CLI App)
+#     echo -n '<App-Secret>' | lark-cli config init --app-id cli_a9434cff84381bd9 \
+#       --app-secret-stdin --name cli_a9434cff84381bd9 --brand feishu
+#   - 飞书后台 cli_a9434cff84381bd9 → 事件与回调 → 回调配置 已订阅 card.action.trigger 长连接
+#   - 飞书后台 cli_a9434cff84381bd9 → 事件与回调 → 事件配置 已订阅 im.message.receive_v1 长连接
+#   - 同企业 source-proxy (17090) 已运行
+
+[Unit]
+Description=Know Canvas Feishu Bot (long-poll lark-cli event +subscribe)
+After=network.target know-canvas-source-proxy.service know-canvas-yws.service
+Wants=know-canvas-source-proxy.service
+
+[Service]
+Type=simple
+# 必须用 root: 复用 /root/.lark-cli/ 下的 profile 凭证
+User=root
+Group=root
+WorkingDirectory=/opt/know-canvas-repo
+Environment=NODE_ENV=production
+Environment=LARK_PROFILE=cli_a9434cff84381bd9
+Environment=LARK_CLI=/usr/local/bin/lark-cli
+Environment=SOURCE_PROXY=http://127.0.0.1:17090
+Environment=CANVAS_PUBLIC_URL=https://ha2.digitalvio.shop/canvas/
+Environment=CANVAS_DEFAULT_ROOM=demo-final
+Environment=DAEMON_AS_NAME=猫蛋
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+ExecStart=/usr/bin/node /opt/know-canvas-repo/server/feishu-bot.mjs
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 资源限制
+MemoryMax=256M
+CPUQuota=20%
+
+# 安全加固 (lark-cli 需读 ~/.lark-cli/, 不能 ProtectHome=true)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

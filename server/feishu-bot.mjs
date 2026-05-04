@@ -43,6 +43,10 @@ const SOURCE_PROXY = process.env.SOURCE_PROXY || 'http://127.0.0.1:17090'
 const CANVAS_PUBLIC_URL = process.env.CANVAS_PUBLIC_URL || 'https://ha2.digitalvio.shop/canvas/'
 const DEFAULT_ROOM = process.env.CANVAS_DEFAULT_ROOM || 'demo-final'
 
+// 当前 daemon 用 user OAuth 身份 (你想猫), 写到画布的节点 attribution 统一显示成"你想猫"
+// (将来若切 Aletheia-bot 真身份, 这里改成 '飞书 bot' 之类)
+const DAEMON_AS_NAME = process.env.DAEMON_AS_NAME || '你想猫'
+
 // 直接定位 lark-cli 原生 .exe 二进制 (Go 编译), 绕开 cmd.exe wrapper
 // (cmd.exe /c 包装会按 GBK 解读 lark-cli stdout 把 UTF-8 中文搞乱; 直接 spawn .exe 走 Node native unicode)
 function resolveLarkBin() {
@@ -56,8 +60,13 @@ function resolveLarkBin() {
 }
 const LARK_BIN = resolveLarkBin()
 
+// LARK_PROFILE 控制 lark-cli 用哪个 App 凭证 (多 profile 共存时用)
+// 不设则走 lark-cli default profile
+const LARK_PROFILE = process.env.LARK_PROFILE || ''
+
 function spawnLark(args, opts = {}) {
-  return spawn(LARK_BIN, args, { windowsHide: true, ...opts })
+  const finalArgs = LARK_PROFILE ? ['--profile', LARK_PROFILE, ...args] : args
+  return spawn(LARK_BIN, finalArgs, { windowsHide: true, ...opts })
 }
 
 function log(...args) {
@@ -307,6 +316,36 @@ function sendCard(chatId, card) {
   })
 }
 
+// 给 chat 主动发纯文本 (callback 后简短反馈用)
+function sendText(chatId, text) {
+  return new Promise((resolve) => {
+    const proc = spawnLark(['im', '+messages-send', '--chat-id', chatId, '--text', text, '--as', 'bot'])
+    let err = ''
+    proc.stderr.on('data', (b) => { err += b.toString('utf8') })
+    proc.on('close', (code) => {
+      if (code !== 0) logErr('sendText 失败:', err.slice(0, 300))
+      resolve(code === 0)
+    })
+    proc.on('error', () => resolve(false))
+  })
+}
+
+// node type → 中文显示标签
+const TYPE_LABEL = {
+  ontologyNode: '拆解',
+  agentRoleNode: '角色',
+  synthesisNode: '综合',
+  metaStepNode: '元认知步骤',
+  taskNode: '任务',
+  resultNode: '结果',
+  conceptNode: '概念',
+  noteNode: '笔记',
+  bookmarkNode: '链接',
+  challengeNode: '反驳',
+  group: '分组',
+}
+function typeLabel(t) { return TYPE_LABEL[t] || t }
+
 // === 命令处理 ===
 async function handleMessage(evt) {
   // im.message.receive_v1 在 lark-cli +subscribe 输出里是 {event_type, ...flatFields}
@@ -343,7 +382,14 @@ async function handleMessage(evt) {
   log(`[msg] chat=${chatId.slice(0, 12)} sender=${senderId.slice(0, 12)}: ${content.slice(0, 80)}`)
 
   const room = roomOf(chatId)
-  const attribution = { name: senderId.slice(0, 16) || 'feishu', via: 'feishu-bot', chatId }
+  // attribution 统一用 daemon 身份 (你想猫), 让画布节点跟用户自己写的看起来一致
+  // 原始飞书 senderId 留在 sourceUserId 字段, 调试时可见
+  const attribution = {
+    name: DAEMON_AS_NAME,
+    via: 'feishu',
+    chatId,
+    sourceUserId: senderId.slice(0, 32) || '',
+  }
 
   // === 元命令: /help /status /room — 用纯文本回 (绕开互动卡片可能的乱码) ===
   if (/^\/help\b/i.test(content)) {
@@ -428,14 +474,19 @@ async function handleMessage(evt) {
   // === 默认: 纯文本 → 写入 aletheia-inbox, 让画布前端自动启动元认知 ===
   // 短消息 < 4 字视为闲聊, 不触发 (避免 "嗯", "好的" 等触发 LLM)
   if (content.length < 4) return
+
+  // 立即先回一句"去办了" 让用户看到 bot 收到指令 (不等 yjs cast 完)
+  // 这样用户体验上 < 1s 就能看到反馈, 不会以为 bot 没响应
+  replyText(messageId, `🤖 收到, 去办了 — 即将启动元认知 5 步...`).catch(() => {})
+
   try {
     const r = await proxyPost('/canvas/cast/aletheia-prompt', { room, text: content, attribution })
     if (r.ok) {
       const peers = (r.peers ?? 0)
       const tip = peers > 0
-        ? `当前画布在线 ${peers} 人, 即将自动启动元认知 5 步`
-        : `当前画布暂无人在线, 一旦有人打开会自动启动 (或你直接打开)`
-      await replyText(messageId, `✓ 已送入元认知\n${tip}\n打开: ${r.canvasUrl}`)
+        ? `已写入画布 inbox · 在线 ${peers} 人 · 选举执行者中`
+        : `已写入画布 inbox · ⚠ 0 人在线 · 等画布有人打开自动跑`
+      await replyText(messageId, `${tip}\n${r.canvasUrl}`)
     } else {
       await replyText(messageId, `✗ 写入失败: ${r.error || '未知'}`)
     }
@@ -505,6 +556,108 @@ async function handleCardAction(evt) {
       if (chatId) await sendCard(chatId, buildCard({ title: '重试', header: 'blue', body: ['请重新发送命令或链接'] }))
       return
     }
+
+    // === 元认知反馈卡 — 单分支按钮 ===
+    case 'decompose': {
+      // 深挖单个 ontology 分支 → 在画布上再触发一轮元认知, 让 cc 客户端响应
+      const room = value.room || roomOf(chatId)
+      const title = String(value.title || '').slice(0, 80)
+      if (!title) return
+      if (chatId) sendText(chatId, `⏳ 深挖中: 「${title}」...`).catch(() => {})
+      const prompt = `深挖这个分支: 「${title}」 — 拆解到下一层细节, 给出可执行的子任务和关键变量.`
+      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
+        room,
+        text: prompt,
+        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'decompose', srcNodeId: value.nodeId || '' },
+      })
+      if (chatId) {
+        await sendText(chatId, r.ok
+          ? `✓ 已下达深挖指令 (在线 ${r.peers ?? 0} cc) — 等画布产生新节点后会再发一轮反馈\n${r.canvasUrl}`
+          : `✗ 深挖失败: ${r.error || '未知'}`)
+      }
+      return
+    }
+
+    case 'dispatch': {
+      // 派单单个分支 → cast 一条 "执行" 指令, 由画布前端转给 Hermes worker
+      const room = value.room || roomOf(chatId)
+      const title = String(value.title || '').slice(0, 80)
+      if (!title) return
+      if (chatId) sendText(chatId, `⏳ 派单中: 「${title}」 → Hermes worker...`).catch(() => {})
+      const prompt = `派单执行: 「${title}」 — 把它转成一个 taskNode 并派给 Hermes worker, 拿真实结果回填 resultNode.`
+      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
+        room,
+        text: prompt,
+        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'dispatch', srcNodeId: value.nodeId || '' },
+      })
+      if (chatId) {
+        await sendText(chatId, r.ok
+          ? `✓ 派单已下达 (在线 ${r.peers ?? 0} cc) — Hermes 跑完后会写 resultNode 到画布\n${r.canvasUrl}`
+          : `✗ 派单失败: ${r.error || '未知'}`)
+      }
+      return
+    }
+
+    case 'challenge': {
+      // 反驳单个分支 → cast 一条让 LLM 列质疑点的指令
+      const room = value.room || roomOf(chatId)
+      const title = String(value.title || '').slice(0, 80)
+      if (!title) return
+      if (chatId) sendText(chatId, `⏳ 反驳中: 「${title}」...`).catch(() => {})
+      const prompt = `反驳这个分支: 「${title}」 — 列出最致命的 3 条质疑, 每条说明"假设 / 反例 / 影响". 用建设性的口吻.`
+      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
+        room,
+        text: prompt,
+        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'challenge', srcNodeId: value.nodeId || '' },
+      })
+      if (chatId) {
+        await sendText(chatId, r.ok
+          ? `✓ 反驳指令已下达 (在线 ${r.peers ?? 0} cc) — challengeNode 出来后会再发一轮反馈\n${r.canvasUrl}`
+          : `✗ 反驳失败: ${r.error || '未知'}`)
+      }
+      return
+    }
+
+    case 'dispatch_all': {
+      // 派单全部 ontology 分支
+      const room = value.room || roomOf(chatId)
+      if (chatId) sendText(chatId, `⏳ 派单全部分支中, 给 Hermes worker...`).catch(() => {})
+      const prompt = `派单全部: 把当前画布上所有未派单的 ontology 分支转为 taskNode, 批量派给 Hermes worker, 拿真实结果回填.`
+      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
+        room,
+        text: prompt,
+        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'dispatch_all' },
+      })
+      if (chatId) {
+        await sendText(chatId, r.ok
+          ? `✓ 全量派单已下达 (在线 ${r.peers ?? 0} cc)\n${r.canvasUrl}`
+          : `✗ 全量派单失败: ${r.error || '未知'}`)
+      }
+      return
+    }
+
+    case 'redecompose': {
+      // 重新拆解 — 用原 prompt 再触发一轮元认知 (从头跑 5 步)
+      const room = value.room || roomOf(chatId)
+      const origPrompt = String(value.prompt || '').slice(0, 400)
+      if (!origPrompt) {
+        if (chatId) await sendText(chatId, '✗ 重新拆解失败: 没拿到原始 prompt')
+        return
+      }
+      if (chatId) sendText(chatId, `⏳ 重新拆解中: 「${origPrompt.slice(0, 40)}」...`).catch(() => {})
+      const prompt = `重新拆解 (上次结论不满意): ${origPrompt} — 这次换一个角度, 例如限定具体场景或缩小规模.`
+      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
+        room,
+        text: prompt,
+        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'redecompose' },
+      })
+      if (chatId) {
+        await sendText(chatId, r.ok
+          ? `✓ 重新拆解已下达 (在线 ${r.peers ?? 0} cc)\n${r.canvasUrl}`
+          : `✗ 重新拆解失败: ${r.error || '未知'}`)
+      }
+      return
+    }
   }
 }
 
@@ -523,10 +676,15 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
 function start() {
   log(`启动 bot — source-proxy: ${SOURCE_PROXY}, default room: ${DEFAULT_ROOM}, lark-bin: ${LARK_BIN}`)
 
-  // 用 +subscribe catch-all (不传 --event-types 才能同时拿 message + card.action.trigger)
+  // 显式 --event-types 订阅 message + card 事件 (catch-all 模式 stdout 不 forward 事件 body)
   // --force 绕过 single-instance lock (旧 daemon SIGKILL 不释放锁; 我们重启时若锁未失效会卡死)
   const consumer = spawnLark(
-    ['event', '+subscribe', '--as', 'bot', '--force'],
+    [
+      'event', '+subscribe',
+      '--as', 'bot',
+      '--event-types', 'im.message.receive_v1,card.action.trigger',
+      '--force',
+    ],
     { stdio: ['pipe', 'pipe', 'pipe'] },
   )
   _currentConsumer = consumer

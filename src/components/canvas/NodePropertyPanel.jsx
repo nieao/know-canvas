@@ -72,7 +72,7 @@ function NodePropertyPanel({ node, position, onClose, onSave }) {
       )
       if (!url) return
       webhookUrl = url.trim()
-      const kw = window.prompt('自定义关键词 (机器人安全设置里填的, 留空 = 不补)', keyword || 'know-canvas')
+      const kw = window.prompt('自定义关键词 (机器人安全设置里填的, 留空 = 不补)', keyword || 'Aletheia-项目')
       keyword = (kw || '').trim()
       localStorage.setItem('feishuWebhookUrl', webhookUrl)
       localStorage.setItem('feishuWebhookKeyword', keyword)

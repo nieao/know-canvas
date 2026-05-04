@@ -256,6 +256,61 @@ function LeftPanel({
     }
   }
 
+  // 得到笔记 — 三 mode: list 最近 N / search 关键词 / id 直接导入
+  const [getnoteMode, setGetnoteMode] = useState('list')
+  const [getnoteId, setGetnoteId] = useState('')
+  const [getnoteQuery, setGetnoteQuery] = useState('')
+  const [getnoteResults, setGetnoteResults] = useState([])
+  const [getnoteLoading, setGetnoteLoading] = useState(false)
+  const [getnoteImportingId, setGetnoteImportingId] = useState('')
+
+  const handleGetnoteList = async () => {
+    setGetnoteLoading(true)
+    setGetnoteResults([])
+    try {
+      const r = await useCanvasStore.getState().listGetnote(15)
+      setGetnoteResults(r.results || [])
+      logAction('leftpanel.listGetnote', { count: r.results?.length || 0 })
+    } catch (err) {
+      alert(`得到笔记拉取失败:\n${err?.message || err}\n\n本地: getnote.exe 未配置或未登录\nVPS: 暂不支持 (Linux 二进制不存在)`)
+    } finally {
+      setGetnoteLoading(false)
+    }
+  }
+
+  const handleGetnoteSearch = async () => {
+    const q = getnoteQuery.trim()
+    if (!q) return
+    setGetnoteLoading(true)
+    setGetnoteResults([])
+    try {
+      const r = await useCanvasStore.getState().searchGetnote(q)
+      setGetnoteResults(r.results || [])
+      logAction('leftpanel.searchGetnote', { query: q, count: r.results?.length || 0 })
+    } catch (err) {
+      alert(`得到搜索失败:\n${err?.message || err}`)
+    } finally {
+      setGetnoteLoading(false)
+    }
+  }
+
+  const handleGetnoteImport = async (idOverride) => {
+    const id = (idOverride || getnoteId).trim()
+    if (!id) return
+    setGetnoteImportingId(id)
+    if (!idOverride) setGetnoteLoading(true)
+    try {
+      const r = await useCanvasStore.getState().importFromGetnoteId(id)
+      logAction('leftpanel.importGetnote', { id, title: r.title, contentLength: r.contentLength })
+      if (!idOverride) setGetnoteId('')
+    } catch (err) {
+      alert(`得到导入失败:\n${err?.message || err}`)
+    } finally {
+      setGetnoteImportingId('')
+      if (!idOverride) setGetnoteLoading(false)
+    }
+  }
+
   const handleTextImport = () => {
     if (!textInput.trim()) return
     const textName = textTitle.trim() || `文本片段 ${new Date().toLocaleTimeString()}`
@@ -1147,6 +1202,249 @@ function LeftPanel({
               </p>
             </div>
 
+            {/* === 得到笔记 === */}
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 8,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.35em',
+                    color: 'var(--accent, var(--warm))',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  06 / 得到笔记
+                </div>
+                <div style={{ display: 'flex', gap: 0, fontSize: 10 }}>
+                  {[
+                    { id: 'list', label: '最近' },
+                    { id: 'search', label: '搜索' },
+                    { id: 'id', label: 'ID' },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setGetnoteMode(m.id)}
+                      style={{
+                        padding: '2px 8px',
+                        letterSpacing: '0.1em',
+                        background: getnoteMode === m.id ? 'var(--accent, var(--warm))' : 'transparent',
+                        color: getnoteMode === m.id ? 'var(--surface, white)' : 'var(--text-muted, var(--gray-500))',
+                        border: '1px solid var(--border-subtle, var(--gray-100))',
+                        borderRadius: 0,
+                        cursor: 'pointer',
+                        fontFamily: FONT_SANS,
+                        transition: 'all 0.3s',
+                      }}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {getnoteMode === 'list' && (
+                <button
+                  onClick={handleGetnoteList}
+                  disabled={getnoteLoading}
+                  className="w-full"
+                  style={{
+                    padding: '8px',
+                    fontSize: 11,
+                    letterSpacing: '0.15em',
+                    background: getnoteLoading ? 'var(--border-subtle, var(--gray-100))' : 'var(--accent, var(--warm))',
+                    color: getnoteLoading ? 'var(--text-muted, var(--gray-500))' : 'var(--surface, white)',
+                    border: 'none',
+                    borderRadius: 4,
+                    cursor: getnoteLoading ? 'wait' : 'pointer',
+                    fontFamily: FONT_SANS,
+                  }}
+                >
+                  {getnoteLoading ? '...' : '拉取最近 15 条'}
+                </button>
+              )}
+
+              {getnoteMode === 'search' && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={getnoteQuery}
+                    onChange={(e) => setGetnoteQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !getnoteLoading && handleGetnoteSearch()}
+                    placeholder="语义搜索..."
+                    disabled={getnoteLoading}
+                    className="flex-1 px-3 py-2"
+                    style={{
+                      fontSize: 12,
+                      border: '1px solid var(--border-subtle, var(--gray-100))',
+                      color: 'var(--text-primary, var(--dark))',
+                      background: 'var(--surface, var(--white))',
+                      fontFamily: FONT_SANS,
+                      borderRadius: 4,
+                      outline: 'none',
+                      opacity: getnoteLoading ? 0.5 : 1,
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = 'var(--accent, var(--warm))')}
+                    onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle, var(--gray-100))')}
+                  />
+                  <button
+                    onClick={handleGetnoteSearch}
+                    disabled={!getnoteQuery.trim() || getnoteLoading}
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: 11,
+                      letterSpacing: '0.15em',
+                      background: getnoteQuery.trim() && !getnoteLoading
+                        ? 'var(--accent, var(--warm))'
+                        : 'var(--border-subtle, var(--gray-100))',
+                      color: getnoteQuery.trim() && !getnoteLoading ? 'var(--surface, white)' : 'var(--text-muted, var(--gray-500))',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: getnoteQuery.trim() && !getnoteLoading ? 'pointer' : 'not-allowed',
+                      fontFamily: FONT_SANS,
+                      minWidth: 50,
+                    }}
+                  >
+                    {getnoteLoading ? '...' : '搜'}
+                  </button>
+                </div>
+              )}
+
+              {getnoteMode === 'id' && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={getnoteId}
+                    onChange={(e) => setGetnoteId(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !getnoteLoading && handleGetnoteImport()}
+                    placeholder="note_id (19 位数字)"
+                    disabled={getnoteLoading}
+                    className="flex-1 px-3 py-2"
+                    style={{
+                      fontSize: 12,
+                      border: '1px solid var(--border-subtle, var(--gray-100))',
+                      color: 'var(--text-primary, var(--dark))',
+                      background: 'var(--surface, var(--white))',
+                      fontFamily: FONT_SANS,
+                      borderRadius: 4,
+                      outline: 'none',
+                      opacity: getnoteLoading ? 0.5 : 1,
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = 'var(--accent, var(--warm))')}
+                    onBlur={(e) => (e.target.style.borderColor = 'var(--border-subtle, var(--gray-100))')}
+                  />
+                  <button
+                    onClick={() => handleGetnoteImport()}
+                    disabled={!getnoteId.trim() || getnoteLoading}
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: 11,
+                      letterSpacing: '0.15em',
+                      background: getnoteId.trim() && !getnoteLoading
+                        ? 'var(--accent, var(--warm))'
+                        : 'var(--border-subtle, var(--gray-100))',
+                      color: getnoteId.trim() && !getnoteLoading ? 'var(--surface, white)' : 'var(--text-muted, var(--gray-500))',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: getnoteId.trim() && !getnoteLoading ? 'pointer' : 'not-allowed',
+                      fontFamily: FONT_SANS,
+                      minWidth: 56,
+                    }}
+                  >
+                    {getnoteLoading ? '...' : '导入'}
+                  </button>
+                </div>
+              )}
+
+              {getnoteResults.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    maxHeight: 360,
+                    overflowY: 'auto',
+                    border: '1px solid var(--border-subtle, var(--gray-100))',
+                    borderRadius: 4,
+                  }}
+                >
+                  {getnoteResults.map((r, i) => {
+                    const isImporting = getnoteImportingId === r.id
+                    return (
+                      <div
+                        key={r.id + i}
+                        onClick={() => !isImporting && handleGetnoteImport(r.id)}
+                        style={{
+                          padding: '8px 10px',
+                          borderBottom:
+                            i < getnoteResults.length - 1
+                              ? '1px solid var(--border-subtle, var(--gray-100))'
+                              : 'none',
+                          cursor: isImporting ? 'wait' : 'pointer',
+                          opacity: isImporting ? 0.5 : 1,
+                          transition: 'background 0.2s',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--gray-50, #f9f9f9)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        title={`点击导入: ${r.title}`}
+                      >
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--text-primary, var(--dark))',
+                            lineHeight: 1.3,
+                            marginBottom: 4,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {isImporting && '⟳ '}
+                          {r.title}
+                        </div>
+                        {r.summary && (
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--text-muted, var(--gray-500))',
+                              lineHeight: 1.4,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              marginBottom: 4,
+                            }}
+                          >
+                            {r.summary}
+                          </div>
+                        )}
+                        <div
+                          style={{
+                            fontSize: 9,
+                            color: 'var(--gray-500, #888)',
+                            letterSpacing: '0.05em',
+                          }}
+                        >
+                          {r.createdAt ? r.createdAt.slice(0, 10) : ''}
+                          {r.tags?.length > 0 && ' · ' + r.tags.slice(0, 3).join(' · ')}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              <p className="text-[10px] mt-1.5" style={{ color: 'var(--gray-500, #888)' }}>
+                得到 OpenAPI · 仅本地 dev (VPS 暂无 Linux 二进制)
+              </p>
+            </div>
+
             {/* === 文本片段导入 === */}
             <div>
               <div
@@ -1158,7 +1456,7 @@ function LeftPanel({
                   textTransform: 'uppercase',
                 }}
               >
-                05 / 文本片段
+                07 / 文本片段
               </div>
               <input
                 type="text"

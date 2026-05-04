@@ -35,6 +35,12 @@ const LARK_BIN = process.env.LARK_CLI || (process.platform === 'win32' ? 'lark-c
 const NOTION_TOKEN = process.env.NOTION_TOKEN || ''
 const NOTION_VERSION = '2022-06-28'
 
+// getnote CLI 位置: env > ~/.local/bin/getnote(.exe) > 项目本地 (per biji-notes skill)
+const GETNOTE_BIN = process.env.GETNOTE_BIN ||
+  (process.platform === 'win32'
+    ? 'E:/claude code/同频教学/edu-intel-vault/tools/getnote-cli/getnote.exe'
+    : '/root/.local/bin/getnote')
+
 function log(...args) {
   console.log('[source-proxy]', new Date().toISOString().slice(11, 19), ...args)
 }
@@ -135,6 +141,55 @@ function sendJson(res, status, body) {
     'Access-Control-Allow-Headers': 'Content-Type',
   })
   res.end(json)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getnote (得到笔记) adapter — spawn getnote.exe 拿用户笔记数据
+// ─────────────────────────────────────────────────────────────────────────────
+function spawnGetnote(args) {
+  return spawn(GETNOTE_BIN, args, { windowsHide: true })
+}
+
+function runGetnote(args) {
+  return new Promise((resolve, reject) => {
+    let stdout = ''
+    let stderr = ''
+    const proc = spawnGetnote(args)
+    const timer = setTimeout(() => {
+      try { proc.kill() } catch {}
+      reject(new Error(`getnote 超时 (${TIMEOUT_MS}ms): getnote ${args.join(' ')}`))
+    }, TIMEOUT_MS)
+    proc.stdout.on('data', (b) => { stdout += b.toString('utf8') })
+    proc.stderr.on('data', (b) => { stderr += b.toString('utf8') })
+    proc.on('error', (e) => { clearTimeout(timer); reject(e) })
+    proc.on('close', (code) => {
+      clearTimeout(timer)
+      if (code !== 0) {
+        reject(new Error(`getnote exit ${code}: ${stderr.slice(0, 400) || stdout.slice(0, 400)}`))
+        return
+      }
+      try {
+        resolve(JSON.parse(stdout))
+      } catch (e) {
+        reject(new Error(`getnote 输出非 JSON: ${stdout.slice(0, 400)}`))
+      }
+    })
+  })
+}
+
+// 单条笔记 → 压扁成 {title, summary, content, ...} (跟 feishu/notion 一致 schema)
+function compactGetnoteItem(n) {
+  const content = String(n.content || '').trim()
+  return {
+    id: String(n.note_id || n.id || ''),
+    title: n.title || '(无标题)',
+    summary: content.replace(/\s+/g, ' ').slice(0, 240),
+    content, // 全文留着, fetch 用
+    tags: (n.tags || []).map((t) => t.name || t).filter(Boolean),
+    createdAt: n.created_at || '',
+    updatedAt: n.updated_at || n.created_at || '',
+    noteType: n.note_type || '',
+  }
 }
 
 // === 飞书 search → 把 lark-cli 原始结构压扁成对前端友好的 [{title, summary, url, ...}] ===
@@ -404,6 +459,44 @@ const server = http.createServer(async (req, res) => {
         objectType: p.object || 'page',
       })).filter((r) => r.id)
       sendJson(res, 200, { ok: true, results, total: results.length })
+      return
+    }
+
+    // ── /getnote/list ── 列最近 N 条得到笔记
+    if (method === 'POST' && url.pathname === '/getnote/list') {
+      const body = await readJsonBody(req)
+      const limit = Math.min(Math.max(parseInt(body.limit, 10) || 20, 1), 50)
+      log(`getnote/list limit=${limit}`)
+      const raw = await runGetnote(['notes', '--limit', String(limit), '-o', 'json'])
+      const list = raw?.data?.notes || []
+      const results = list.map(compactGetnoteItem).filter((r) => r.id && r.title)
+      sendJson(res, 200, { ok: true, results, total: results.length })
+      return
+    }
+
+    // ── /getnote/search ── 语义搜索得到笔记
+    if (method === 'POST' && url.pathname === '/getnote/search') {
+      const body = await readJsonBody(req)
+      const query = String(body.query || '').trim()
+      if (!query) { sendJson(res, 400, { ok: false, error: 'query 不能为空' }); return }
+      log(`getnote/search query="${query}"`)
+      const raw = await runGetnote(['search', query, '-o', 'json'])
+      const list = raw?.data?.notes || raw?.data?.results || []
+      const results = list.map(compactGetnoteItem).filter((r) => r.id && r.title)
+      sendJson(res, 200, { ok: true, results, total: results.length })
+      return
+    }
+
+    // ── /getnote/fetch ── 拿单条笔记全文 (id 或从 URL 抽)
+    if (method === 'POST' && url.pathname === '/getnote/fetch') {
+      const body = await readJsonBody(req)
+      const noteId = String(body.noteId || '').trim()
+      if (!noteId) { sendJson(res, 400, { ok: false, error: 'noteId 不能为空' }); return }
+      log(`getnote/fetch noteId=${noteId}`)
+      const raw = await runGetnote(['note', noteId, '-o', 'json'])
+      const data = raw?.data?.note || raw?.data || {}
+      const compact = compactGetnoteItem(data)
+      sendJson(res, 200, { ok: true, data: compact })
       return
     }
 

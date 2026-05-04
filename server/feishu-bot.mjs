@@ -95,7 +95,7 @@ async function handleMessage(evt) {
   // /help 命令
   if (/^\s*\/help\b/i.test(content)) {
     await replyMessage(messageId, [
-      '📖 know-canvas bot 命令:',
+      '📖 [Aletheia-项目] bot 命令:',
       '',
       '· 直接发飞书/Notion 链接 → 自动记录到画布',
       '· /help → 这个帮助',

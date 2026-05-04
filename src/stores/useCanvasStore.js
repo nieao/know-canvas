@@ -3856,6 +3856,69 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
         return { results: json.results || [], total: json.total || 0 }
       },
 
+      // 得到笔记 — list 最近 N 条 / 搜索关键词 / fetch 单条全文
+      listGetnote: async (limit = 20) => {
+        const resp = await fetch('/canvas/api/source/getnote/list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ limit }),
+        })
+        if (!resp.ok) throw new Error(`source-proxy ${resp.status}`)
+        const json = await resp.json()
+        if (!json.ok) throw new Error(json.error || 'source-proxy 返回失败')
+        return { results: json.results || [], total: json.total || 0 }
+      },
+
+      searchGetnote: async (query) => {
+        const q = String(query || '').trim()
+        if (!q) throw new Error('searchGetnote: query 为空')
+        const resp = await fetch('/canvas/api/source/getnote/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ query: q }),
+        })
+        if (!resp.ok) throw new Error(`source-proxy ${resp.status}`)
+        const json = await resp.json()
+        if (!json.ok) throw new Error(json.error || 'source-proxy 返回失败')
+        return { results: json.results || [], total: json.total || 0 }
+      },
+
+      // 把得到笔记 → 画布 BookmarkNode (复用 addBookmarkNode 同款模式)
+      importFromGetnoteId: async (noteId, position = null) => {
+        const id = String(noteId || '').trim()
+        if (!id) throw new Error('importFromGetnoteId: noteId 为空')
+        const resp = await fetch('/canvas/api/source/getnote/fetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ noteId: id }),
+        })
+        if (!resp.ok) throw new Error(`source-proxy ${resp.status}`)
+        const json = await resp.json()
+        if (!json.ok) throw new Error(json.error || 'source-proxy 返回失败')
+        const data = json.data || {}
+        const title = data.title || `得到笔记 ${id}`
+        const content = String(data.content || '').replace(/\s+/g, ' ').trim()
+        const summary = content.slice(0, 240) + (content.length > 240 ? '...' : '')
+        const noteUrl = `https://www.biji.com/notes/${id}` // best-effort 反链 (得到没标准 URL)
+        const { addBookmarkNode } = get()
+        const nodeId = addBookmarkNode(noteUrl, title, summary, '', '', position, false)
+        set((state) => {
+          const n = state.nodes.find((x) => x.id === nodeId)
+          if (n) {
+            n.data = n.data || {}
+            n.data.sourceMeta = {
+              platform: 'getnote',
+              originalUrl: noteUrl,
+              noteId: id,
+              importedAt: Date.now(),
+              fullContent: content,
+              tags: data.tags || [],
+            }
+          }
+        })
+        return { nodeId, title, contentLength: content.length }
+      },
+
       // 飞书 webhook 单向 push — 给外部群推消息 (custom robot, 非 self-built bot)
       // 入参: { webhookUrl, text, keyword? }   keyword 用于命中飞书自定义关键词安全设置
       // 用途: 外部群无法加 self-built bot, 走 custom robot 单向通知

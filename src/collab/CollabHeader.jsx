@@ -211,8 +211,9 @@ function TaskModeSwitch() {
 }
 
 export default function CollabHeader({ room, username, onOpenAiSettings, onExit }) {
+  // 注意: 不再 absolute, 由父容器统一布局, 避免与 ProjectLibraryButton 重叠
   return (
-    <div className="absolute top-4 right-16 z-30 flex items-center gap-2">
+    <div className="flex items-center gap-2">
       <button
         onClick={onOpenAiSettings}
         className="px-2.5 py-1.5 rounded-lg shadow-sm transition-colors"

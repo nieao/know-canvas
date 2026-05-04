@@ -792,14 +792,6 @@ export default function KnowledgeGraph() {
           importCanvasData={importCanvasData}
         />
 
-        {/* 协作信息条（在线用户 + 房间号 + 退出 + AI 设置） */}
-        <CollabHeader
-          room={room}
-          username={username}
-          onOpenAiSettings={() => setShowAiSettings(true)}
-          onExit={exitSession}
-        />
-
         {/* 面板切换按钮 + ALETHEIA 品牌名 — left 跟 LeftPanel 联动偏移, 防遮挡 */}
         <div
           className="absolute top-4 z-30 flex items-center gap-3 transition-all duration-500"
@@ -847,10 +839,20 @@ export default function KnowledgeGraph() {
           <ScenarioSwitcher />
         </div>
 
+        {/* 右侧顶栏 — 协作信息 + 项目库 + 右栏折叠, 一行 flex 防重叠 */}
         <div
-          className="absolute top-4 z-30 flex gap-2 items-center transition-all duration-500"
-          style={{ right: showRightPanel ? rightPanelWidth + 16 : 16 }}
+          className="absolute top-4 z-30 flex gap-2 items-center transition-all duration-500 flex-wrap justify-end"
+          style={{
+            right: showRightPanel ? rightPanelWidth + 16 : 16,
+            maxWidth: showRightPanel ? `calc(100vw - ${rightPanelWidth + 32}px - 360px)` : 'calc(100vw - 32px - 360px)',
+          }}
         >
+          <CollabHeader
+            room={room}
+            username={username}
+            onOpenAiSettings={() => setShowAiSettings(true)}
+            onExit={exitSession}
+          />
           <ProjectLibraryButton onOpen={() => setShowProjectLibrary(true)} />
           <button
             onClick={() => setShowRightPanel(prev => !prev)}

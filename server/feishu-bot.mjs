@@ -513,6 +513,7 @@ async function handleMessage(evt) {
 
 const reverseChannels = new Map() // room → { doc, provider, yNodes, observer, baseline:Set, sentConclusions:Set }
 const pendingFeedbackByRoom = new Map() // room → { chatId, prompt, sentAt, fed: false }
+let _cardSchemaDumped = false
 
 function registerPendingFeedback(room, ctx) {
   pendingFeedbackByRoom.set(room, { ...ctx, fed: false })
@@ -663,13 +664,26 @@ async function sendFeedbackCard(room, ctx, conclusionNode, newNodes) {
 
 // === 处理按钮回调 ===
 async function handleCardAction(evt) {
-  // card.action.trigger schema: {operator, token, action: {value, tag, ...}, open_message_id, open_chat_id}
+  // schema 2.0 card.action.trigger 真实结构: header / event.operator / event.context / event.action
+  // 兼容多版本字段路径
   const ev = evt.event || evt
   const action = ev.action || {}
   const value = action.value || {}
-  const chatId = ev.open_chat_id || ev.chat_id || ''
-  const messageId = ev.open_message_id || ev.message_id || ''
-  const operatorId = ev.operator?.open_id || ev.operator_id || ''
+  const chatId =
+    ev.context?.open_chat_id || ev.context?.chat_id ||
+    ev.open_chat_id || ev.chat_id ||
+    ev.operator?.open_chat_id || ''
+  const messageId =
+    ev.context?.open_message_id || ev.context?.message_id ||
+    ev.open_message_id || ev.message_id || ''
+  const operatorId =
+    ev.operator?.open_id || ev.operator?.user_id ||
+    ev.operator_id || ''
+  // 调试: 第一次看到 card 事件时 dump 真实结构, 后续不再 dump
+  if (!_cardSchemaDumped) {
+    _cardSchemaDumped = true
+    log(`[card-schema-dump] ${JSON.stringify(evt).slice(0, 800)}`)
+  }
 
   log(`[card-action] chat=${chatId.slice(0, 12)} action=${value.action || '?'}`)
 

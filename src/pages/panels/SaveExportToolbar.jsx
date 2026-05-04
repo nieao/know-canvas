@@ -270,7 +270,8 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
   if (aletheiaActive) return null
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex gap-2">
+    // 注意: 不再 absolute 居中 (会跟左/右组重叠), 改 inline flex 由父容器 (左组) 排队
+    <div className="flex gap-2 z-40">
       {/* 保存按钮 */}
       <div className="relative">
         <button

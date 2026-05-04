@@ -784,15 +784,7 @@ export default function KnowledgeGraph() {
 
       {/* 中央画布区域 */}
       <div className="flex-1 relative" ref={(el) => { canvasRef.current = el; wrapperRef.current = el }}>
-        <SaveExportToolbar
-          canvasRef={canvasRef}
-          nodes={nodes}
-          edges={edges}
-          exportCanvasData={exportCanvasData}
-          importCanvasData={importCanvasData}
-        />
-
-        {/* 面板切换按钮 + ALETHEIA 品牌名 — left 跟 LeftPanel 联动偏移, 防遮挡 */}
+        {/* 左组顶栏 — 折叠 + ALETHEIA + 频道 + 场景 + SaveExportToolbar (一行 flex 防重叠) */}
         <div
           className="absolute top-4 z-30 flex items-center gap-3 transition-all duration-500"
           style={{ left: showLeftPanel ? 272 : 16 }}
@@ -837,6 +829,14 @@ export default function KnowledgeGraph() {
           <ChannelSwitcher />
           {/* toB/toC/toG 场景切换 — 默认收起胶囊, 点击展开 */}
           <ScenarioSwitcher />
+          {/* 保存/排序/外部源/⚙️ 工具栏 — 跟左组同行排, 不再居中 */}
+          <SaveExportToolbar
+            canvasRef={canvasRef}
+            nodes={nodes}
+            edges={edges}
+            exportCanvasData={exportCanvasData}
+            importCanvasData={importCanvasData}
+          />
         </div>
 
         {/* 右侧顶栏 — 协作信息 + 项目库 + 右栏折叠, 一行 flex 防重叠 */}

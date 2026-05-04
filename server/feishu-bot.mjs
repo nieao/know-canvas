@@ -571,6 +571,12 @@ function ensureReverseChannel(room) {
         newNodes.push({ id: k, ...nn })
       })
       log(`[reverse] room=${room} conclusion ready key=${key} 新节点=${newNodes.length}`)
+      // 调试: 第一次时 dump 所有新节点 data 字段, 找到伪 ontology 的 marker
+      if (process.env.LARK_DEBUG === '1') {
+        for (const nn of newNodes.filter(x => x.type === 'ontologyNode' && !x.data?.isConclusion).slice(0, 3)) {
+          log(`[reverse-dump] ontology id=${nn.id} data=${JSON.stringify(nn.data || {}).slice(0, 400)}`)
+        }
+      }
       sendFeedbackCard(room, ctx, n, newNodes).catch((e) => logErr('反馈卡发送失败:', e.message))
       ctx.fed = true
     })

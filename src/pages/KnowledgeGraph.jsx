@@ -784,14 +784,16 @@ export default function KnowledgeGraph() {
 
       {/* 中央画布区域 */}
       <div className="flex-1 relative" ref={(el) => { canvasRef.current = el; wrapperRef.current = el }}>
-        {/* 左组顶栏 — 折叠 + ALETHEIA + 频道 + 场景 + SaveExportToolbar (一行 flex 防重叠) */}
+        {/* 顶栏一体 — 单 absolute 横跨 .flex-1 全宽, justify-between 让左右组物理隔开
+            空间不足时中段 (频道/场景) 自动截断 (min-w-0 + overflow), 不再重叠右组 */}
         <div
-          className="absolute top-4 z-30 flex items-center gap-3 transition-all duration-500"
+          className="absolute top-4 z-30 flex items-center gap-3 transition-all duration-500 right-4"
           style={{ left: showLeftPanel ? 272 : 16 }}
         >
+          {/* 左段 — 折叠 + ALETHEIA (固定不收缩) */}
           <button
             onClick={() => setShowLeftPanel(prev => !prev)}
-            className="p-2 rounded-lg shadow-sm transition-all duration-300"
+            className="p-2 rounded-lg shadow-sm transition-all duration-300 shrink-0"
             style={{
               background: 'var(--white)',
               border: `1px solid ${showLeftPanel ? 'var(--warm)' : 'var(--gray-100)'}`,
@@ -803,9 +805,8 @@ export default function KnowledgeGraph() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
             </svg>
           </button>
-          {/* ALETHEIA 品牌标识 */}
           <div
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg shadow-sm"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg shadow-sm shrink-0"
             style={{
               background: 'var(--surface)',
               border: '1px solid var(--border-subtle)',
@@ -825,46 +826,44 @@ export default function KnowledgeGraph() {
               ALETHEIA
             </span>
           </div>
-          {/* 频道切换 — 默认收起胶囊, 私人/公共/最近/自定义 */}
-          <ChannelSwitcher />
-          {/* toB/toC/toG 场景切换 — 默认收起胶囊, 点击展开 */}
-          <ScenarioSwitcher />
-          {/* 保存/排序/外部源/⚙️ 工具栏 — 跟左组同行排, 不再居中 */}
-          <SaveExportToolbar
-            canvasRef={canvasRef}
-            nodes={nodes}
-            edges={edges}
-            exportCanvasData={exportCanvasData}
-            importCanvasData={importCanvasData}
-          />
-        </div>
 
-        {/* 右侧顶栏 — 协作信息 + 项目库 + 右栏折叠, 一行 flex 防重叠
-            注: RightPanel 是 .flex-1 的 sibling, flex 自动收窄, 这里 right=16 直接贴 .flex-1 右边即可 */}
-        <div
-          className="absolute top-4 right-4 z-30 flex gap-2 items-center transition-all duration-500 justify-end"
-        >
-          <CollabHeader
-            room={room}
-            username={username}
-            onOpenAiSettings={() => setShowAiSettings(true)}
-            onExit={exitSession}
-          />
-          <ProjectLibraryButton onOpen={() => setShowProjectLibrary(true)} />
-          <button
-            onClick={() => setShowRightPanel(prev => !prev)}
-            className="p-2 rounded-lg shadow-sm transition-all duration-300"
-            style={{
-              background: 'var(--white)',
-              border: `1px solid ${showRightPanel ? 'var(--warm)' : 'var(--gray-100)'}`,
-              color: showRightPanel ? 'var(--warm)' : 'var(--gray-500)',
-            }}
-            title="切换详情面板 (Ctrl+])"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </button>
+          {/* 中段 — 频道/场景/SaveExport (可收缩, 空间不够时溢出隐藏) */}
+          <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
+            <ChannelSwitcher />
+            <ScenarioSwitcher />
+            <SaveExportToolbar
+              canvasRef={canvasRef}
+              nodes={nodes}
+              edges={edges}
+              exportCanvasData={exportCanvasData}
+              importCanvasData={importCanvasData}
+            />
+          </div>
+
+          {/* 右段 — 协作 + 项目库 + 右栏折叠 (固定不收缩, 推到 .flex-1 右边) */}
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
+            <CollabHeader
+              room={room}
+              username={username}
+              onOpenAiSettings={() => setShowAiSettings(true)}
+              onExit={exitSession}
+            />
+            <ProjectLibraryButton onOpen={() => setShowProjectLibrary(true)} />
+            <button
+              onClick={() => setShowRightPanel(prev => !prev)}
+              className="p-2 rounded-lg shadow-sm transition-all duration-300"
+              style={{
+                background: 'var(--white)',
+                border: `1px solid ${showRightPanel ? 'var(--warm)' : 'var(--gray-100)'}`,
+                color: showRightPanel ? 'var(--warm)' : 'var(--gray-500)',
+              }}
+              title="切换详情面板 (Ctrl+])"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <KnowledgeCanvas

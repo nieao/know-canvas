@@ -5,6 +5,7 @@
  */
 
 import { memo, useState, useEffect } from 'react'
+import { useCanvasStore } from '../../stores/useCanvasStore'
 
 // 默认分类选项
 const CATEGORIES = ['概念', '技术', '人物', '事件', '方法', '工具', '理论', '资源']
@@ -47,12 +48,30 @@ const focusRingColor = '#c8a882'
 
 function NodePropertyPanel({ node, position, onClose, onSave }) {
   const [formData, setFormData] = useState({})
+  const [pushingNotion, setPushingNotion] = useState(false)
 
   useEffect(() => {
     if (node) {
       setFormData({ ...node.data })
     }
   }, [node])
+
+  // 推送当前节点到 Notion (默认 AI学习库)
+  const handlePushToNotion = async () => {
+    if (!node || pushingNotion) return
+    setPushingNotion(true)
+    try {
+      const r = await useCanvasStore.getState().pushNodeToNotion(node.id, { includeChildren: true })
+      // 成功 — 弹个非阻塞 toast 并尝试打开 Notion 页面
+      const open = window.confirm(`已推送到 Notion ✓\n\n标题: ${r.pageId.slice(0, 8)}...\n\n点 OK 在新标签打开 Notion 页面`)
+      if (open && r.pageUrl) window.open(r.pageUrl, '_blank')
+    } catch (err) {
+      console.error('[notion-push]', err)
+      alert(`推送 Notion 失败:\n${err?.message || err}\n\n常见原因:\n1. NOTION_TOKEN 未配置 (VPS systemd / 本地 .env)\n2. integration 没邀到目标数据库 (默认 AI学习库)\n3. 数据库 title 属性名异常`)
+    } finally {
+      setPushingNotion(false)
+    }
+  }
 
   if (!node) return null
 
@@ -483,23 +502,43 @@ function NodePropertyPanel({ node, position, onClose, onSave }) {
 
         {/* 底部操作栏 */}
         <div
-          className="flex items-center justify-end gap-2 px-4 py-3"
+          className="flex items-center justify-between gap-2 px-4 py-3"
           style={{ borderTop: '1px solid #e8e8e8', backgroundColor: '#f5f0eb' }}
         >
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium transition-colors"
-            style={{ color: '#888' }}
-          >
-            取消
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
-            style={{ backgroundColor: '#c8a882', color: '#fafafa' }}
-          >
-            保存
-          </button>
+          {/* 左侧 — 跨平台推送 */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handlePushToNotion}
+              disabled={pushingNotion}
+              className="px-3 py-2 text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+              style={{
+                backgroundColor: pushingNotion ? '#e8e8e8' : 'rgba(0,0,0,0.04)',
+                color: pushingNotion ? '#888' : '#2d2d2d',
+                cursor: pushingNotion ? 'wait' : 'pointer',
+              }}
+              title="推送当前节点（含子节点）到 Notion 默认数据库 (AI学习库)"
+            >
+              <span>{pushingNotion ? '⟳' : '↗'}</span>
+              <span>{pushingNotion ? '推送中' : '推 Notion'}</span>
+            </button>
+          </div>
+          {/* 右侧 — 取消 / 保存 */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium transition-colors"
+              style={{ color: '#888' }}
+            >
+              取消
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+              style={{ backgroundColor: '#c8a882', color: '#fafafa' }}
+            >
+              保存
+            </button>
+          </div>
         </div>
       </div>
     </>

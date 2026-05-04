@@ -3787,6 +3787,78 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
         return { results: json.results || [], total: json.total || 0 }
       },
 
+      // 节点 → Notion 页面 (创建到指定数据库, 默认 AI 学习库)
+      // opts: { databaseId? = AI学习库, includeChildren? = true 含子节点拼接 }
+      pushNodeToNotion: async (nodeId, opts = {}) => {
+        const databaseId = opts.databaseId || '9f6bbdc391484e7f85bf92cde6a74fe6' // AI学习库
+        const includeChildren = opts.includeChildren !== false
+        const { nodes } = get()
+        const node = nodes.find((n) => n.id === nodeId)
+        if (!node) throw new Error(`pushNodeToNotion: 节点 ${nodeId} 不存在`)
+
+        // 拼标题: data.label / data.title / data.text 优先
+        const title = String(
+          node.data?.label ||
+          node.data?.title ||
+          node.data?.text ||
+          node.data?.name ||
+          `节点 ${nodeId}`
+        ).slice(0, 200)
+
+        // 拼内容: 节点自身正文 + (可选) 子节点内容拼接
+        const lines = []
+        const nodeContent = node.data?.fullContent || node.data?.content || node.data?.summary || node.data?.description || ''
+        if (nodeContent) {
+          lines.push(String(nodeContent))
+          lines.push('')
+        }
+        if (includeChildren) {
+          const childIds = nodes.filter((n) => n.parentNode === nodeId).map((n) => n.id)
+          if (childIds.length > 0) {
+            lines.push('## 子节点')
+            for (const cid of childIds) {
+              const c = nodes.find((n) => n.id === cid)
+              if (!c) continue
+              const cTitle = c.data?.label || c.data?.title || c.data?.text || cid
+              const cBody = c.data?.fullContent || c.data?.content || c.data?.summary || ''
+              lines.push(`### ${cTitle}`)
+              if (cBody) lines.push(String(cBody))
+              lines.push('')
+            }
+          }
+        }
+        const sourceUrl = node.data?.sourceMeta?.originalUrl || node.data?.url || ''
+        const content = lines.join('\n').trim()
+
+        const resp = await fetch('/canvas/api/source/notion/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ databaseId, title, content, sourceUrl }),
+        })
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => '')
+          throw new Error(`source-proxy ${resp.status}: ${txt.slice(0, 200)}`)
+        }
+        const json = await resp.json()
+        if (!json.ok) throw new Error(json.error || 'source-proxy 返回失败')
+
+        // 在节点上打 publishedTo 标记 (跟 castNodesToChannel 同款语义)
+        set((state) => {
+          const n = state.nodes.find((x) => x.id === nodeId)
+          if (n) {
+            n.data = n.data || {}
+            n.data.publishedTo = n.data.publishedTo || []
+            n.data.publishedTo.push({
+              platform: 'notion',
+              pageId: json.pageId,
+              pageUrl: json.pageUrl,
+              pushedAt: Date.now(),
+            })
+          }
+        })
+        return { pageId: json.pageId, pageUrl: json.pageUrl }
+      },
+
       importFromNotionUrl: async (pageUrl, position = null) => {
         const url = String(pageUrl || '').trim()
         if (!url) throw new Error('importFromNotionUrl: pageUrl 为空')

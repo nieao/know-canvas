@@ -196,6 +196,87 @@ function richToText(rt) {
   return rt.map((t) => t.plain_text || '').join('')
 }
 
+// markdown-ish 文本 → Notion blocks (反向: 推送时用)
+// 支持: # / ## / ### / - / 1. / > / ``` / 普通段落
+function textToNotionBlocks(text) {
+  if (!text) return []
+  const blocks = []
+  const lines = String(text).split(/\r?\n/)
+  let inCode = false
+  let codeBuf = []
+  let codeLang = ''
+  for (const raw of lines) {
+    const line = raw.replace(/\r$/, '')
+    // code fence
+    if (line.startsWith('```')) {
+      if (inCode) {
+        blocks.push({
+          object: 'block', type: 'code',
+          code: { rich_text: [{ type: 'text', text: { content: codeBuf.join('\n').slice(0, 1900) } }], language: codeLang || 'plain text' },
+        })
+        inCode = false; codeBuf = []; codeLang = ''
+      } else {
+        inCode = true; codeLang = line.slice(3).trim().toLowerCase()
+      }
+      continue
+    }
+    if (inCode) { codeBuf.push(line); continue }
+    if (!line.trim()) continue
+    // heading
+    let m
+    if ((m = line.match(/^(#{1,3})\s+(.+)$/))) {
+      const level = m[1].length
+      blocks.push({
+        object: 'block', type: `heading_${level}`,
+        [`heading_${level}`]: { rich_text: [{ type: 'text', text: { content: m[2].slice(0, 1900) } }] },
+      })
+      continue
+    }
+    if ((m = line.match(/^[-*]\s+(.+)$/))) {
+      blocks.push({
+        object: 'block', type: 'bulleted_list_item',
+        bulleted_list_item: { rich_text: [{ type: 'text', text: { content: m[1].slice(0, 1900) } }] },
+      })
+      continue
+    }
+    if ((m = line.match(/^\d+\.\s+(.+)$/))) {
+      blocks.push({
+        object: 'block', type: 'numbered_list_item',
+        numbered_list_item: { rich_text: [{ type: 'text', text: { content: m[1].slice(0, 1900) } }] },
+      })
+      continue
+    }
+    if ((m = line.match(/^>\s+(.+)$/))) {
+      blocks.push({
+        object: 'block', type: 'quote',
+        quote: { rich_text: [{ type: 'text', text: { content: m[1].slice(0, 1900) } }] },
+      })
+      continue
+    }
+    if (line.trim() === '---') {
+      blocks.push({ object: 'block', type: 'divider', divider: {} })
+      continue
+    }
+    // 默认: paragraph
+    blocks.push({
+      object: 'block', type: 'paragraph',
+      paragraph: { rich_text: [{ type: 'text', text: { content: line.slice(0, 1900) } }] },
+    })
+  }
+  // Notion API 一次最多 100 个 children
+  return blocks.slice(0, 100)
+}
+
+// 拿数据库的 title 属性名 (不同库可能叫 Name / Title / 标题)
+async function getNotionTitlePropName(databaseId) {
+  const db = await notionFetch(`/databases/${databaseId}`)
+  const props = db.properties || {}
+  for (const k of Object.keys(props)) {
+    if (props[k]?.type === 'title') return k
+  }
+  throw new Error(`数据库 ${databaseId} 没找到 title 属性`)
+}
+
 // blocks → markdown-like 文本 (支持 paragraph / heading / list / quote / code / divider)
 function blocksToMarkdown(blocks) {
   if (!Array.isArray(blocks)) return ''
@@ -293,6 +374,48 @@ const server = http.createServer(async (req, res) => {
         objectType: p.object || 'page',
       })).filter((r) => r.id)
       sendJson(res, 200, { ok: true, results, total: results.length })
+      return
+    }
+
+    // ── /notion/push ── 节点 → 创建一个 Notion 数据库页面
+    //   入参: { databaseId, title, content (markdown-ish), sourceUrl? }
+    //   响应: { ok, pageId, pageUrl }
+    if (method === 'POST' && url.pathname === '/notion/push') {
+      const body = await readJsonBody(req)
+      const databaseId = String(body.databaseId || '').trim()
+      const title = String(body.title || '').trim().slice(0, 200) || '(无标题)'
+      const content = String(body.content || '')
+      const sourceUrl = String(body.sourceUrl || '').trim()
+      if (!databaseId) { sendJson(res, 400, { ok: false, error: 'databaseId 不能为空' }); return }
+      log(`notion/push db=${databaseId.slice(0, 8)} title="${title.slice(0, 30)}" len=${content.length}`)
+      const titleProp = await getNotionTitlePropName(databaseId)
+      const properties = {
+        [titleProp]: { title: [{ type: 'text', text: { content: title } }] },
+      }
+      const blocks = textToNotionBlocks(content)
+      // 顶部加一个回链 paragraph (如果有 sourceUrl)
+      if (sourceUrl) {
+        blocks.unshift({
+          object: 'block', type: 'paragraph',
+          paragraph: { rich_text: [
+            { type: 'text', text: { content: '↩ 来源: ' } },
+            { type: 'text', text: { content: sourceUrl, link: { url: sourceUrl } } },
+          ] },
+        })
+      }
+      const created = await notionFetch('/pages', {
+        method: 'POST',
+        body: JSON.stringify({
+          parent: { database_id: databaseId },
+          properties,
+          children: blocks.slice(0, 100),
+        }),
+      })
+      sendJson(res, 200, {
+        ok: true,
+        pageId: created.id,
+        pageUrl: created.url || '',
+      })
       return
     }
 

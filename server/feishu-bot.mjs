@@ -489,11 +489,8 @@ async function handleMessage(evt) {
   replyText(messageId, `🤖 收到, 去办了 — 即将启动元认知 5 步...`).catch(() => {})
 
   try {
-    const r = await proxyPost('/canvas/cast/aletheia-prompt', { room, text: content, attribution })
+    const r = await castAletheiaPrompt(room, chatId, content, attribution)
     if (r.ok) {
-      // 记录这一轮等元认知的"待反馈"上下文; reverse channel 看到 conclusion 时回查
-      registerPendingFeedback(room, { chatId, prompt: content, sentAt: Date.now() })
-      ensureReverseChannel(room)
       const peers = (r.peers ?? 0)
       const tip = peers > 0
         ? `已写入画布 inbox · 在线 ${peers} 人 · 选举执行者中 · 完成后我会发反馈卡片`
@@ -516,7 +513,20 @@ const pendingFeedbackByRoom = new Map() // room → { chatId, prompt, sentAt, fe
 let _cardSchemaDumped = false
 
 function registerPendingFeedback(room, ctx) {
+  // 重置 fed=false 让新一轮 conclusion 能再次触发反馈卡
+  // (老 ctx 已发过的 conclusion key 仍在 sentConclusions 防重复, 不影响新轮 conclusion)
   pendingFeedbackByRoom.set(room, { ...ctx, fed: false })
+  log(`[reverse] register pending feedback room=${room} prompt="${(ctx.prompt || '').slice(0, 30)}"`)
+}
+
+// 调用 source-proxy cast + 同时注册反馈跟踪 (callback 路径必走这个 helper, 避免漏注册)
+async function castAletheiaPrompt(room, chatId, text, attribution) {
+  const r = await proxyPost('/canvas/cast/aletheia-prompt', { room, text, attribution })
+  if (r.ok && chatId) {
+    registerPendingFeedback(room, { chatId, prompt: text, sentAt: Date.now() })
+    ensureReverseChannel(room)
+  }
+  return r
 }
 
 function ensureReverseChannel(room) {
@@ -745,11 +755,8 @@ async function handleCardAction(evt) {
       if (!title) return
       if (chatId) sendText(chatId, `⏳ 深挖中: 「${title}」...`).catch(() => {})
       const prompt = `深挖这个分支: 「${title}」 — 拆解到下一层细节, 给出可执行的子任务和关键变量.`
-      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
-        room,
-        text: prompt,
-        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'decompose', srcNodeId: value.nodeId || '' },
-      })
+      const r = await castAletheiaPrompt(room, chatId, prompt,
+        { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'decompose', srcNodeId: value.nodeId || '' })
       if (chatId) {
         await sendText(chatId, r.ok
           ? `✓ 已下达深挖指令 (在线 ${r.peers ?? 0} cc) — 等画布产生新节点后会再发一轮反馈\n${r.canvasUrl}`
@@ -765,11 +772,8 @@ async function handleCardAction(evt) {
       if (!title) return
       if (chatId) sendText(chatId, `⏳ 派单中: 「${title}」 → Hermes worker...`).catch(() => {})
       const prompt = `派单执行: 「${title}」 — 把它转成一个 taskNode 并派给 Hermes worker, 拿真实结果回填 resultNode.`
-      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
-        room,
-        text: prompt,
-        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'dispatch', srcNodeId: value.nodeId || '' },
-      })
+      const r = await castAletheiaPrompt(room, chatId, prompt,
+        { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'dispatch', srcNodeId: value.nodeId || '' })
       if (chatId) {
         await sendText(chatId, r.ok
           ? `✓ 派单已下达 (在线 ${r.peers ?? 0} cc) — Hermes 跑完后会写 resultNode 到画布\n${r.canvasUrl}`
@@ -785,11 +789,8 @@ async function handleCardAction(evt) {
       if (!title) return
       if (chatId) sendText(chatId, `⏳ 反驳中: 「${title}」...`).catch(() => {})
       const prompt = `反驳这个分支: 「${title}」 — 列出最致命的 3 条质疑, 每条说明"假设 / 反例 / 影响". 用建设性的口吻.`
-      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
-        room,
-        text: prompt,
-        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'challenge', srcNodeId: value.nodeId || '' },
-      })
+      const r = await castAletheiaPrompt(room, chatId, prompt,
+        { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'challenge', srcNodeId: value.nodeId || '' })
       if (chatId) {
         await sendText(chatId, r.ok
           ? `✓ 反驳指令已下达 (在线 ${r.peers ?? 0} cc) — challengeNode 出来后会再发一轮反馈\n${r.canvasUrl}`
@@ -803,11 +804,8 @@ async function handleCardAction(evt) {
       const room = value.room || roomOf(chatId)
       if (chatId) sendText(chatId, `⏳ 派单全部分支中, 给 Hermes worker...`).catch(() => {})
       const prompt = `派单全部: 把当前画布上所有未派单的 ontology 分支转为 taskNode, 批量派给 Hermes worker, 拿真实结果回填.`
-      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
-        room,
-        text: prompt,
-        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'dispatch_all' },
-      })
+      const r = await castAletheiaPrompt(room, chatId, prompt,
+        { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'dispatch_all' })
       if (chatId) {
         await sendText(chatId, r.ok
           ? `✓ 全量派单已下达 (在线 ${r.peers ?? 0} cc)\n${r.canvasUrl}`
@@ -826,11 +824,8 @@ async function handleCardAction(evt) {
       }
       if (chatId) sendText(chatId, `⏳ 重新拆解中: 「${origPrompt.slice(0, 40)}」...`).catch(() => {})
       const prompt = `重新拆解 (上次结论不满意): ${origPrompt} — 这次换一个角度, 例如限定具体场景或缩小规模.`
-      const r = await proxyPost('/canvas/cast/aletheia-prompt', {
-        room,
-        text: prompt,
-        attribution: { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'redecompose' },
-      })
+      const r = await castAletheiaPrompt(room, chatId, prompt,
+        { name: DAEMON_AS_NAME, via: 'feishu-card', chatId, action: 'redecompose' })
       if (chatId) {
         await sendText(chatId, r.ok
           ? `✓ 重新拆解已下达 (在线 ${r.peers ?? 0} cc)\n${r.canvasUrl}`

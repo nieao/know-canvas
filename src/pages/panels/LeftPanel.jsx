@@ -341,11 +341,15 @@ function LeftPanel({
     }
   }
 
-  const handlePluginImport = async (pluginId, urlOrId) => {
-    setPluginImportingUrl(urlOrId)
+  const handlePluginImport = async (pluginId, result) => {
+    // result 可以是 { url, id, title, ... } 或字符串 (兼容 URL 直接输入)
+    const id = typeof result === 'object' ? (result.id || '') : ''
+    const url = typeof result === 'object' ? (result.url || '') : String(result || '')
+    const key = id || url
+    setPluginImportingUrl(key)
     try {
-      const r = await useCanvasStore.getState().importFromPlugin(pluginId, { url: urlOrId, id: urlOrId })
-      logAction('leftpanel.importPlugin', { pluginId, url: urlOrId, title: r.title })
+      const r = await useCanvasStore.getState().importFromPlugin(pluginId, { url, id })
+      logAction('leftpanel.importPlugin', { pluginId, id, url, title: r.title })
     } catch (err) {
       alert(`${pluginId} 导入失败:\n${err?.message || err}`)
     } finally {
@@ -1570,11 +1574,11 @@ function LeftPanel({
                       }}
                     >
                       {results.map((r, i) => {
-                        const isImporting = pluginImportingUrl === r.url
+                        const isImporting = pluginImportingUrl === (r.id || r.url)
                         return (
                           <div
                             key={r.id || r.url || i}
-                            onClick={() => !isImporting && handlePluginImport(p.id, r.url || r.id)}
+                            onClick={() => !isImporting && handlePluginImport(p.id, r)}
                             style={{
                               padding: '8px 10px',
                               borderBottom:

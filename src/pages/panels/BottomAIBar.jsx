@@ -14,6 +14,7 @@
 import { useState, useRef, useEffect } from 'react'
 import useCanvasStore from '../../stores/useCanvasStore'
 import { parseFile } from '../../utils/fileParser'
+import { PROVIDER_PRESETS, getAiConfig } from '../../services/aiConfig'
 
 const MODES = [
   {
@@ -232,6 +233,8 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
             {submitting ? '提交中' : '就绪'}
           </span>
         </div>
+        {/* 当前活跃 LLM provider 徽章 — 点击直接打开 AI 设置 */}
+        <ActiveProviderBadge />
       </div>
 
       {/* === 已选附件预览 (多文件) === */}
@@ -392,3 +395,61 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
 }
 
 export default BottomAIBar
+
+// === 当前 LLM provider 徽章 ===
+// 显示用户当前选中的 AI provider + model, 点击打开 AI 设置面板
+// 让用户随时知道 "现在所有 AI 调用走的是哪个引擎"
+function ActiveProviderBadge() {
+  const [info, setInfo] = useState(() => readActiveInfo())
+
+  useEffect(() => {
+    const refresh = () => setInfo(readActiveInfo())
+    const onStorage = (e) => {
+      if (!e.key || e.key === 'know_canvas_ai_config_v1') refresh()
+    }
+    const onCustom = () => refresh()
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('ai-provider-changed', onCustom)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('ai-provider-changed', onCustom)
+    }
+  }, [])
+
+  if (!info) return null
+  const { label, model } = info
+  return (
+    <button
+      onClick={() => window.dispatchEvent(new CustomEvent('open-ai-settings'))}
+      title={`当前 LLM: ${label}\n模型: ${model}\n点击切换 / 配置`}
+      className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full transition-colors"
+      style={{
+        background: 'var(--white, #fafafa)',
+        border: '1px solid var(--gray-100, #e8e8e8)',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#c8a882' }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--gray-100, #e8e8e8)' }}
+    >
+      <span style={{ fontSize: 10, color: '#888', letterSpacing: '0.1em' }}>LLM</span>
+      <span style={{ fontSize: 10, color: '#c8a882', fontWeight: 500 }}>{label}</span>
+      <span style={{ fontSize: 9, color: '#bbb' }}>·</span>
+      <span style={{ fontSize: 10, color: '#555', fontFamily: 'monospace' }}>{model}</span>
+    </button>
+  )
+}
+
+function readActiveInfo() {
+  try {
+    const cfg = getAiConfig()
+    const preset = PROVIDER_PRESETS.find((p) => p.id === cfg.activeProviderId) || PROVIDER_PRESETS[0]
+    const merged = cfg.providers?.[preset.id] || preset.config
+    return {
+      id: preset.id,
+      label: preset.label.replace(/（.*?）|\(.*?\)/g, '').trim(),
+      model: merged.model || preset.config.model || '—',
+    }
+  } catch {
+    return null
+  }
+}

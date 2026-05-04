@@ -154,12 +154,19 @@ export function setActiveProvider(id) {
   const cfg = getAiConfig()
   cfg.activeProviderId = id
   setAiConfig(cfg)
+  // 通知 BottomAIBar 等订阅者刷新徽章
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ai-provider-changed'))
+  }
 }
 
 export function setProviderConfig(id, partial) {
   const cfg = getAiConfig()
   cfg.providers[id] = { ...(cfg.providers[id] || {}), ...partial }
   setAiConfig(cfg)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ai-provider-changed'))
+  }
 }
 
 /** 取当前激活 provider 的完整描述（含 type + config） */

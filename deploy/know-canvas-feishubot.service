@@ -28,7 +28,10 @@ Type=simple
 # 必须用 root: 复用 /root/.lark-cli/ 下的 profile 凭证
 User=root
 Group=root
-WorkingDirectory=/opt/know-canvas-repo
+# WorkingDirectory 必须是 events 目录的 parent — lark-cli --output-dir 强制相对路径
+# CacheDirectory 让 systemd 创建 /var/cache/know-canvas-feishubot/ 并挂为 cwd
+WorkingDirectory=/var/cache/know-canvas-feishubot
+CacheDirectory=know-canvas-feishubot
 Environment=NODE_ENV=production
 Environment=LARK_PROFILE=cli_a9434cff84381bd9
 Environment=LARK_CLI=/usr/local/bin/lark-cli
@@ -36,6 +39,7 @@ Environment=SOURCE_PROXY=http://127.0.0.1:17090
 Environment=CANVAS_PUBLIC_URL=https://ha2.digitalvio.shop/canvas/
 Environment=CANVAS_DEFAULT_ROOM=demo-final
 Environment=DAEMON_AS_NAME=猫蛋
+Environment=FEISHU_EVENTS_DIR=./events
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 
 ExecStart=/usr/bin/node /opt/know-canvas-repo/server/feishu-bot.mjs

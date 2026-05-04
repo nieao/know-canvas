@@ -38,6 +38,8 @@ import { spawn } from 'node:child_process'
 import readline from 'node:readline'
 import path from 'node:path'
 import os from 'node:os'
+import fs from 'node:fs'
+import fsp from 'node:fs/promises'
 
 const SOURCE_PROXY = process.env.SOURCE_PROXY || 'http://127.0.0.1:17090'
 const CANVAS_PUBLIC_URL = process.env.CANVAS_PUBLIC_URL || 'https://ha2.digitalvio.shop/canvas/'
@@ -359,11 +361,12 @@ async function handleMessage(evt) {
     return handleCardAction(evt)
   }
 
-  // 提取 message 字段 (兼容扁平 + envelope)
-  const msg = evt.message || evt
+  // 提取 message 字段 (schema 2.0: evt.event.message; 兼容扁平/旧 envelope)
+  const msg = evt.event?.message || evt.message || evt
+  const sender = evt.event?.sender || evt.sender || {}
   const messageId = msg.message_id || ''
   const chatId = msg.chat_id || ''
-  const senderId = msg.sender_id || msg.sender?.sender_id?.open_id || ''
+  const senderId = sender.sender_id?.open_id || msg.sender_id || ''
   let content = String(msg.content || '').trim()
 
   // 飞书 content 有时是 JSON {text: ".."}, 有时是裸字符串. 尝试 parse
@@ -673,32 +676,85 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   })
 }
 
+// === 事件接收: 用 lark-cli --output-dir 落盘 + fs.watch 监听 ===
+// 背景: lark-cli 默认 stdout NDJSON 模式实测不输出 event body (仅 stderr status counter),
+// --output-dir 把每条 event 写成独立 JSON 文件已验证可拿到完整 body.
+// cwd: systemd unit 设 WorkingDirectory=/var/cache/know-canvas-feishubot (CacheDirectory 管理)
+// 路径要求: lark-cli 强制 --output-dir 必须是 cwd 下的相对路径 (unsafe output path 校验)
+const EVENTS_DIR = process.env.FEISHU_EVENTS_DIR || './events'
+
+async function processEventFile(filePath) {
+  let raw
+  try { raw = await fsp.readFile(filePath, 'utf-8') }
+  catch (e) { logErr('读事件文件失败:', filePath, e.message); return }
+  let evt
+  try { evt = JSON.parse(raw) }
+  catch (e) { logErr('事件 JSON 解析失败:', filePath, e.message); return }
+  try {
+    if (evt.header?.event_type === 'card.action.trigger') {
+      await handleCardAction(evt)
+    } else {
+      await handleMessage(evt)
+    }
+  } catch (e) {
+    logErr('handler 异常:', e.message, e.stack?.slice(0, 300))
+  } finally {
+    // 处理完删文件 (避免目录无限增长)
+    fsp.unlink(filePath).catch(() => {})
+  }
+}
+
 function start() {
   log(`启动 bot — source-proxy: ${SOURCE_PROXY}, default room: ${DEFAULT_ROOM}, lark-bin: ${LARK_BIN}`)
+  log(`事件目录: ${path.resolve(EVENTS_DIR)} (cwd=${process.cwd()})`)
 
-  // 显式 --event-types 订阅 message + card 事件 (catch-all 模式 stdout 不 forward 事件 body)
+  // 准备事件目录 (清理上次残留, 创建新的)
+  try {
+    fs.mkdirSync(EVENTS_DIR, { recursive: true })
+    for (const f of fs.readdirSync(EVENTS_DIR)) {
+      if (f.endsWith('.json')) {
+        try { fs.unlinkSync(path.join(EVENTS_DIR, f)) } catch {}
+      }
+    }
+  } catch (e) {
+    logErr('创建/清理事件目录失败:', EVENTS_DIR, e.message)
+  }
+
+  // fs.watch: 监听文件创建 (Linux inotify; Windows ReadDirectoryChangesW)
+  // 落盘的瞬间会有 'rename' 事件 (Linux 创建用 rename), 我们去重处理
+  const seen = new Set()
+  const watcher = fs.watch(EVENTS_DIR, async (eventType, filename) => {
+    if (!filename || !filename.endsWith('.json')) return
+    const full = path.join(EVENTS_DIR, filename)
+    if (seen.has(full)) return
+    seen.add(full)
+    setTimeout(() => seen.delete(full), 30_000) // 30s 去重窗口
+    // 文件可能还在写, 等 50ms 让 lark-cli 写完
+    setTimeout(() => {
+      fs.access(full, fs.constants.R_OK, (err) => {
+        if (err) return // 文件可能已被处理删除
+        processEventFile(full)
+      })
+    }, 50)
+  })
+
+  // 显式 --event-types 订阅 message + card 事件
   // --force 绕过 single-instance lock (旧 daemon SIGKILL 不释放锁; 我们重启时若锁未失效会卡死)
+  // --output-dir 让每条 event 落盘独立 JSON 文件 (绕开 stdout NDJSON 失效的坑)
+  // --quiet 抑制 stderr status (减少 journal 噪音)
   const consumer = spawnLark(
     [
       'event', '+subscribe',
       '--as', 'bot',
       '--event-types', 'im.message.receive_v1,card.action.trigger',
+      '--output-dir', EVENTS_DIR,
       '--force',
+      '--quiet',
     ],
     { stdio: ['pipe', 'pipe', 'pipe'] },
   )
   _currentConsumer = consumer
   consumer.stdin.on('error', () => {})
-
-  const rl = readline.createInterface({ input: consumer.stdout })
-  rl.on('line', async (line) => {
-    if (!line.trim()) return
-    let evt
-    try { evt = JSON.parse(line) }
-    catch (e) { logErr('NDJSON 解析失败:', line.slice(0, 200)); return }
-    try { await handleMessage(evt) }
-    catch (e) { logErr('handleMessage 异常:', e.message, e.stack?.slice(0, 200)) }
-  })
 
   consumer.stderr.on('data', (b) => {
     const s = b.toString('utf8').trim()
@@ -707,6 +763,7 @@ function start() {
 
   consumer.on('error', (e) => { logErr('subscribe spawn 失败:', e.message); process.exit(1) })
   consumer.on('exit', (code, sig) => {
+    try { watcher.close() } catch {}
     logErr(`subscribe 退出 code=${code} sig=${sig} — 5s 后重启`)
     setTimeout(start, 5000)
   })

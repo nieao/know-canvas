@@ -602,7 +602,13 @@ function buildFeedbackCard(room, ctx, conclusionNode, newNodes) {
   else if (/NO[\s_-]*GO/i.test(decision)) headerTpl = 'red'
 
   // 列出 ontology (非结论) 分支
-  const ontologyBranches = newNodes.filter((n) => n.type === 'ontologyNode' && !n.data?.isConclusion)
+  // 排除项目级伪 ontology — 项目目标节点 (variant=goal) / projectMode=true 是项目根节点本身, 不是真分支
+  const ontologyBranches = newNodes.filter((n) => {
+    if (n.type !== 'ontologyNode' || n.data?.isConclusion) return false
+    if (n.data?.variant === 'goal') return false
+    if (n.data?.projectMode === true) return false
+    return true
+  })
   const branchLines = ontologyBranches.slice(0, 8).map((n) => {
     const title = String(n.data?.title || n.data?.label || '').slice(0, 60)
     const body = String(n.data?.description || n.data?.content || '').slice(0, 80)

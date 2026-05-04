@@ -839,10 +839,10 @@ export default function KnowledgeGraph() {
           />
         </div>
 
-        {/* 右侧顶栏 — 协作信息 + 项目库 + 右栏折叠, 一行 flex 防重叠 */}
+        {/* 右侧顶栏 — 协作信息 + 项目库 + 右栏折叠, 一行 flex 防重叠
+            注: RightPanel 是 .flex-1 的 sibling, flex 自动收窄, 这里 right=16 直接贴 .flex-1 右边即可 */}
         <div
-          className="absolute top-4 z-30 flex gap-2 items-center transition-all duration-500 justify-end"
-          style={{ right: showRightPanel ? rightPanelWidth + 16 : 16 }}
+          className="absolute top-4 right-4 z-30 flex gap-2 items-center transition-all duration-500 justify-end"
         >
           <CollabHeader
             room={room}

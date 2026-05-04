@@ -1,0 +1,45 @@
+# Know Canvas Source Proxy systemd unit
+# 外部源中转服务 (飞书 / 得到 / Notion) — spawn lark-cli 等本地 CLI
+#
+# 安装:
+#   sudo cp deploy/know-canvas-source-proxy.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now know-canvas-source-proxy
+#   sudo systemctl status know-canvas-source-proxy
+#
+# 查看日志:
+#   sudo journalctl -u know-canvas-source-proxy -f
+
+[Unit]
+Description=Know Canvas Source Proxy (Feishu/Getnote/Notion bridge via local CLIs)
+After=network.target
+
+[Service]
+Type=simple
+# 必须用 root: 复用 /root/.config/lark-cli/ 下的 OAuth token
+User=root
+Group=root
+WorkingDirectory=/opt/know-canvas-repo
+Environment=NODE_ENV=production
+Environment=SOURCE_PROXY_HOST=127.0.0.1
+Environment=SOURCE_PROXY_PORT=17090
+Environment=SOURCE_PROXY_TIMEOUT_MS=30000
+Environment=LARK_CLI=/usr/local/bin/lark-cli
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+ExecStart=/usr/bin/node /opt/know-canvas-repo/server/source-proxy.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 资源限制
+MemoryMax=256M
+CPUQuota=30%
+
+# 安全加固 (lark-cli 需读 ~/.config/lark-cli/, 不能 ProtectHome=true)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

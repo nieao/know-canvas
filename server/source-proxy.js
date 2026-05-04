@@ -22,6 +22,7 @@ const http = require('http')
 const { spawn } = require('child_process')
 
 const PORT = parseInt(process.env.SOURCE_PROXY_PORT || '17090', 10)
+const HOST = process.env.SOURCE_PROXY_HOST || '127.0.0.1'
 const TIMEOUT_MS = parseInt(process.env.SOURCE_PROXY_TIMEOUT_MS || '20000', 10)
 const LARK_BIN = process.env.LARK_CLI || (process.platform === 'win32' ? 'lark-cli.cmd' : 'lark-cli')
 
@@ -183,8 +184,8 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-server.listen(PORT, () => {
-  log(`listening on http://0.0.0.0:${PORT}`)
+server.listen(PORT, HOST, () => {
+  log(`listening on http://${HOST}:${PORT}`)
   log(`endpoints: GET /health  POST /feishu/search  POST /feishu/fetch`)
   log(`lark-cli: ${LARK_BIN}`)
 })

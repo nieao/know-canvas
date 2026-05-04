@@ -679,8 +679,8 @@ async function handleCardAction(evt) {
   const operatorId =
     ev.operator?.open_id || ev.operator?.user_id ||
     ev.operator_id || ''
-  // 调试: 第一次看到 card 事件时 dump 真实结构, 后续不再 dump
-  if (!_cardSchemaDumped) {
+  // 调试: LARK_DEBUG=1 时 dump 完整 card 事件结构 (默认关)
+  if (process.env.LARK_DEBUG === '1' && !_cardSchemaDumped) {
     _cardSchemaDumped = true
     log(`[card-schema-dump] ${JSON.stringify(evt).slice(0, 800)}`)
   }

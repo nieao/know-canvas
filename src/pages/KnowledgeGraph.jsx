@@ -663,6 +663,56 @@ export default function KnowledgeGraph() {
     }
   }, [handleFileDrop, addBookmarkNode, addConceptNode, addNoteNode, addImageNode, addVideoNode, addFileNode, onNodesChange])
 
+  // === 外部源 watch 自动 polling (#19) ===
+  // mode === 'auto' 时后台周期检查更新; idle (5min 无操作 OR tab 隐藏) 改 10min/次
+  useEffect(() => {
+    // 启动时从 localStorage 恢复 mode
+    const saved = (() => {
+      try { return localStorage.getItem('sourceWatchMode') } catch { return null }
+    })()
+    if (saved === 'auto' || saved === 'manual') {
+      useCanvasStore.getState().setSourceWatchMode(saved)
+    }
+
+    let lastActivityAt = Date.now()
+    const bumpActivity = () => { lastActivityAt = Date.now() }
+    const events = ['mousemove', 'keydown', 'click', 'wheel']
+    events.forEach((e) => window.addEventListener(e, bumpActivity, { passive: true }))
+
+    const tick = async () => {
+      const state = useCanvasStore.getState()
+      const watch = state.sourceWatch || {}
+      if (watch.mode !== 'auto' || !watch.enabled || watch.inFlight) return
+      // 没有 sourceMeta 节点就不跑 (省得 spam)
+      const hasTargets = state.nodes.some((n) => {
+        const m = n.data?.sourceMeta
+        return m && (m.platform === 'feishu' || m.platform === 'notion')
+      })
+      if (!hasTargets) return
+      // idle 判定: 5min 无操作 OR tab 隐藏 → 10min/次, 否则 60s/次
+      const isIdle = (Date.now() - lastActivityAt) > 5 * 60 * 1000 || document.visibilityState === 'hidden'
+      const wantedInterval = isIdle ? 10 * 60 * 1000 : 60 * 1000
+      const sinceLast = Date.now() - (watch.lastRunAt || 0)
+      if (sinceLast < wantedInterval) return
+      try {
+        const r = await state.checkSourceUpdates()
+        if (r && !r.skipped) console.log('[watch-auto]', r)
+      } catch (e) {
+        console.error('[watch-auto] error', e)
+      }
+    }
+    // 每 30s 检查一次条件 (实际 fetch 受 wantedInterval 节流)
+    const timer = setInterval(tick, 30 * 1000)
+    // 启动后 5s 跑一次 (避免每次刷新等 30s)
+    const initial = setTimeout(tick, 5000)
+
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, bumpActivity))
+      clearInterval(timer)
+      clearTimeout(initial)
+    }
+  }, [])
+
   // 键盘快捷键
   useEffect(() => {
     const handleKeyDown = (e) => {

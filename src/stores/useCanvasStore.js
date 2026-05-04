@@ -4192,6 +4192,17 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
         }
       },
 
+      // 切换 watch 模式: manual (用户手按按钮) | auto (后台 polling)
+      // intervalMs 可选, 默认 active 60s / idle 600s — 由 KnowledgeGraph useEffect 决定
+      setSourceWatchMode: (mode) => {
+        if (mode !== 'manual' && mode !== 'auto') return
+        set((s) => {
+          s.sourceWatch = s.sourceWatch || { enabled: true, inFlight: false }
+          s.sourceWatch.mode = mode
+        })
+        try { localStorage.setItem('sourceWatchMode', mode) } catch {}
+      },
+
       // 单节点同步: 从远端拉全文覆盖本地 title/description/fullContent
       // opts: { force?: bool 跳过 conflict 检测直接覆盖 }
       syncNodeFromSource: async (nodeId, opts = {}) => {

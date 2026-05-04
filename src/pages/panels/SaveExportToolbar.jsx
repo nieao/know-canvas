@@ -28,9 +28,16 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
 
   // 外部源 watch 同步 — 详见 docs/source-watch-sync-spec.md
   const checkSourceUpdates = useCanvasStore((s) => s.checkSourceUpdates)
+  const setSourceWatchMode = useCanvasStore((s) => s.setSourceWatchMode)
   const sourceWatchInFlight = useCanvasStore((s) => s.sourceWatch?.inFlight ?? false)
+  const sourceWatchMode = useCanvasStore((s) => s.sourceWatch?.mode ?? 'manual')
   const lastSourceReport = useCanvasStore((s) => s.sourceWatch?.lastReport ?? null)
   const [showSourceReport, setShowSourceReport] = useState(false)
+  const handleToggleAutoWatch = () => {
+    const next = sourceWatchMode === 'auto' ? 'manual' : 'auto'
+    setSourceWatchMode?.(next)
+    logAction?.('toolbar.setSourceWatchMode', { mode: next })
+  }
 
   const handleCheckSourceUpdates = async () => {
     if (sourceWatchInFlight) return
@@ -369,6 +376,25 @@ function SaveExportToolbar({ canvasRef, nodes, edges, exportCanvasData, importCa
           <span className="text-xs font-medium">
             {sourceWatchInFlight ? '检查中...' : '外部源'}
           </span>
+        </button>
+        {/* auto/manual 切换 — 小标签贴在外部源按钮右下角 */}
+        <button
+          onClick={handleToggleAutoWatch}
+          className="absolute -bottom-1.5 -right-1.5 px-1.5 rounded transition-all"
+          style={{
+            fontSize: 9,
+            letterSpacing: '0.05em',
+            background: sourceWatchMode === 'auto' ? 'var(--warm)' : 'var(--gray-100)',
+            color: sourceWatchMode === 'auto' ? 'var(--white)' : 'var(--gray-500)',
+            border: '1px solid var(--gray-100)',
+            lineHeight: '14px',
+            fontWeight: 600,
+          }}
+          title={sourceWatchMode === 'auto'
+            ? '已开自动 watch — 活跃 60s/次, idle 10min/次. 点击切回手动'
+            : '当前手动 — 点击切到自动 polling'}
+        >
+          {sourceWatchMode === 'auto' ? 'AUTO' : 'OFF'}
         </button>
         {/* 报告气泡 — 检查完 4s 内显示 */}
         {showSourceReport && lastSourceReport && (

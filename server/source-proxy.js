@@ -62,6 +62,23 @@ let pluginDispatch = async () => ({ status: 503, body: { ok: false, error: 'plug
   }
 })()
 
+// yjs-cast (ESM) — 给 /canvas/cast/* 端点用 (feishu bot 写节点入口)
+let castReady = false
+let castTextNode = async () => { throw new Error('yjs-cast 未加载') }
+let castBookmarkNode = async () => { throw new Error('yjs-cast 未加载') }
+let castNodesToRoom = async () => { throw new Error('yjs-cast 未加载') }
+;(async () => {
+  try {
+    const mod = await import('./yjs-cast.mjs')
+    castTextNode = mod.castTextNode
+    castBookmarkNode = mod.castBookmarkNode
+    castNodesToRoom = mod.castNodesToRoom
+    castReady = true
+  } catch (e) {
+    console.error('[source-proxy] yjs-cast 加载失败:', e?.message || e)
+  }
+})()
+
 function log(...args) {
   console.log('[source-proxy]', new Date().toISOString().slice(11, 19), ...args)
 }
@@ -714,6 +731,58 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // ── /canvas/status ── 给 feishu bot 检查 yjs-cast + sync server 是否在线
+    if (method === 'GET' && url.pathname === '/canvas/status') {
+      const yjsWs = process.env.YJS_WS_URL || 'ws://127.0.0.1:1234'
+      sendJson(res, 200, {
+        ok: true,
+        castReady,
+        yjsWs,
+        defaultRoom: process.env.CANVAS_DEFAULT_ROOM || 'feishu-inbox',
+      })
+      return
+    }
+
+    // ── /canvas/cast/text ── 写一个文本节点到 room (POST {room?, text, attribution?})
+    if (method === 'POST' && url.pathname === '/canvas/cast/text') {
+      if (!castReady) { sendJson(res, 503, { ok: false, error: 'yjs-cast 未就绪' }); return }
+      const body = await readJsonBody(req)
+      const room = String(body.room || process.env.CANVAS_DEFAULT_ROOM || 'feishu-inbox').trim()
+      const text = String(body.text || '').trim()
+      if (!text) { sendJson(res, 400, { ok: false, error: 'text 不能为空' }); return }
+      const attribution = body.attribution || { name: 'feishu-bot', via: 'feishu-bot' }
+      log(`canvas/cast/text room=${room} len=${text.length}`)
+      try {
+        const r = await castTextNode({ room, text, attribution })
+        const canvasUrl = (process.env.CANVAS_PUBLIC_URL || 'https://ha2.digitalvio.shop/canvas/') + `?room=${encodeURIComponent(room)}`
+        sendJson(res, 200, { ok: true, room, nodeId: r.nodeId, canvasUrl })
+      } catch (e) {
+        sendJson(res, 502, { ok: false, error: `canvas cast 失败: ${e?.message || e}` })
+      }
+      return
+    }
+
+    // ── /canvas/cast/bookmark ── 写一个链接节点 (POST {room?, url, title?, summary?, attribution?})
+    if (method === 'POST' && url.pathname === '/canvas/cast/bookmark') {
+      if (!castReady) { sendJson(res, 503, { ok: false, error: 'yjs-cast 未就绪' }); return }
+      const body = await readJsonBody(req)
+      const room = String(body.room || process.env.CANVAS_DEFAULT_ROOM || 'feishu-inbox').trim()
+      const u = String(body.url || '').trim()
+      if (!u) { sendJson(res, 400, { ok: false, error: 'url 不能为空' }); return }
+      const title = String(body.title || '').slice(0, 200)
+      const summary = String(body.summary || '').slice(0, 800)
+      const attribution = body.attribution || { name: 'feishu-bot', via: 'feishu-bot' }
+      log(`canvas/cast/bookmark room=${room} url=${u.slice(0, 60)}`)
+      try {
+        const r = await castBookmarkNode({ room, url: u, title, summary, attribution })
+        const canvasUrl = (process.env.CANVAS_PUBLIC_URL || 'https://ha2.digitalvio.shop/canvas/') + `?room=${encodeURIComponent(room)}`
+        sendJson(res, 200, { ok: true, room, nodeId: r.nodeId, canvasUrl })
+      } catch (e) {
+        sendJson(res, 502, { ok: false, error: `canvas cast 失败: ${e?.message || e}` })
+      }
+      return
+    }
+
     // ── /<pluginId>/<capability> ── 通用插件路由 (search/fetch/push)
     //   匹配除已知 hardcode 路由 (feishu/notion/getnote) 外的 POST /<id>/<cap>
     const pluginMatch = url.pathname.match(/^\/([a-z0-9_-]+)\/(search|fetch|push)$/i)
@@ -740,7 +809,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   log(`listening on http://${HOST}:${PORT}`)
-  log(`endpoints: GET /health  POST /feishu/search|fetch|fetch-meta  POST /notion/search|fetch|fetch-meta|push`)
+  log(`endpoints: GET /health  POST /feishu/search|fetch|fetch-meta  POST /notion/search|fetch|fetch-meta|push  POST /canvas/cast/text|bookmark  GET /canvas/status`)
   log(`lark-cli: ${LARK_BIN}`)
 })
 

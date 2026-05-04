@@ -2371,10 +2371,13 @@ const useCanvasStore = create(
         const ts = Date.now()
         const rand = Math.random().toString(36).slice(2, 8)
         const taskId = `task-${ts}-${rand}`
+        // 用绝对坐标定位新顶层 taskNode — src 若是 projectGroup 子节点, src.position 是相对父的偏移,
+        // 直接 + offset 当绝对值会让 task 跑到 (画布原点+offset, 离源几千 px) — 用户感知"跑很远"
+        const srcBox = getNodeAbsoluteBox(src, nodes)
         const taskNode = {
           id: taskId,
           type: 'taskNode',
-          position: { x: src.position.x + 280, y: src.position.y },
+          position: { x: srcBox.x + srcBox.w + 60, y: srcBox.y },
           data: {
             title: src.data?.title || '未命名任务',
             body: src.data?.description || '',
@@ -2490,6 +2493,9 @@ const useCanvasStore = create(
               isChallengeGroup: true,
               label: '反驳通道',
               relatedProjectGroupId: projectGroup?.id || null,
+              // sourceNodeId: minimal 折叠模式下 KnowledgeCanvas.shouldShow 用它判断是否展示本组
+              // (之前漏了字段, 反驳容器和卡片在 minimal 模式永远 hidden, 用户点反驳后看不到任何反馈)
+              sourceNodeId: ontoNodeId,
             },
           })
         }
@@ -2548,7 +2554,17 @@ const useCanvasStore = create(
               }
             }
           }
+          // minimal 折叠模式: 自动展开"源节点"那一支 — 否则反驳卡片虽然存在, shouldShow 也 false
+          if (Array.isArray(state.expandedSourceIds) && !state.expandedSourceIds.includes(ontoNodeId)) {
+            state.expandedSourceIds.push(ontoNodeId)
+          }
         })
+
+        // 派 focus 事件 — 反驳容器被 findFreePosition 推到 projectGroup 右侧 +80, 可能再下偏 1600px,
+        // 视野外, 用户点了反驳按钮以为没响应. 让视口跳到容器位置, 一眼看到新卡片.
+        try {
+          window.dispatchEvent(new CustomEvent('canvas-focus-node', { detail: { nodeId: challengeGroupId } }))
+        } catch {}
 
         // 反驳生成完成 — 追加一帧 commit (回放埋点)
         // 项目 id 来源: src 节点向上查 projectGroup 的项目根 libraryId; 找不到 fallback projects[0]
@@ -2740,8 +2756,26 @@ const useCanvasStore = create(
           descs.length ? `节点详情: ${descs.join(' / ')}` : '',
         ].filter(Boolean).join('\n')
 
-        // 2. 调 askAndStartMetaProject (同步返回 rootId, 6-stage 异步跑)
-        const rootId = askAndStartMetaProject(prompt)
+        // 2. 算所选节点 bbox 给新 projectGroup 一个有视觉关联的 origin —
+        // 默认 getNextGridPosition 会按用户专区螺旋找空位, 跟所选节点完全无关, 用户看不到"下一步出在哪"
+        let originPosition
+        try {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+          for (const n of srcNodes) {
+            const box = getNodeAbsoluteBox(n, nodes)
+            if (box.x < minX) minX = box.x
+            if (box.y < minY) minY = box.y
+            if (box.x + box.w > maxX) maxX = box.x + box.w
+            if (box.y + box.h > maxY) maxY = box.y + box.h
+          }
+          if (Number.isFinite(minX)) {
+            // 落在所选 bbox 的右侧 80px, 顶部对齐 — projectGroup 1600×1100 与源都在视野
+            originPosition = { x: maxX + 80, y: minY }
+          }
+        } catch (e) { console.warn('[analyzeGroupMetaCognitive] origin 计算失败, 回退默认网格', e?.message) }
+
+        // 3. 调 askAndStartMetaProject (同步返回 rootId, 6-stage 异步跑)
+        const rootId = askAndStartMetaProject(prompt, originPosition ? { originPosition } : undefined)
 
         // 3. 给 root 加 sourceNodeIds 标记 + 用边连回所有选中节点
         const ts = Date.now()
@@ -2761,6 +2795,11 @@ const useCanvasStore = create(
           title: `组合分析: ${titles.slice(0, 2).join(' · ')}${titles.length > 2 ? ` 等 ${titles.length} 项` : ''}`,
         })
         set((state) => { state.edges.push(...newEdges) })
+
+        // 派 focus 到新 projectGroup — 让视口跳过去, 用户立刻看到下一步在哪 (新 group + 与源的连边)
+        try {
+          window.dispatchEvent(new CustomEvent('canvas-focus-node', { detail: { nodeId: `pgroup-${rootId}` } }))
+        } catch {}
 
         return { groupId: rootId, sourceCount: srcNodes.length }
       },
@@ -3051,7 +3090,7 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
       //      → TOPOLOGY (画依赖虚线 + 染 stage 同色) → EXECUTE (按 stage 切 running/done)
       //      → REFLECT (跑决策引擎, 入项目库)
       // ──────────────────────────────────────────────────────────────────────
-      askAndStartMetaProject: (input) => {
+      askAndStartMetaProject: (input, opts = {}) => {
         const text = String(input || '').trim()
         if (!text) throw new Error('askAndStartMetaProject: 输入为空')
 
@@ -3060,7 +3099,9 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
         const rand = () => Math.random().toString(36).slice(2, 8)
         const rootId = `project-${ts}-${rand()}`
         const projectGroupId = `pgroup-${rootId}`  // 整个项目的 group 容器
-        const pos = getNextGridPosition()
+        // opts.originPosition: 绝对坐标 {x, y} — 让 projectGroup 落在指定位置 (例: 圈选组合分析时用源节点中心)
+        // 否则按用户专区螺旋找空位 (默认行为, 适合 BottomAIBar 自由提问)
+        const pos = opts.originPosition || getNextGridPosition()
 
         // 0. 项目独立"频道" — 用 react-flow group 节点把 root + tasks + agents + conclusion 全包起来
         //    用户拖 group 时整个项目跟随; 不同项目的 group 互不重叠 (用户独立 X 区已分配)
@@ -3621,10 +3662,12 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
 
           const rand = Math.random().toString(36).slice(2, 8)
           const resultNodeId = `result-${Date.now()}-${rand}`
+          // 同 promoteOntologyToTask: 用绝对坐标避免 src 在 group 内时新节点跑到画布原点附近
+          const srcBox = getNodeAbsoluteBox(src, state.nodes)
           const newResultNode = {
             id: resultNodeId,
             type: 'resultNode',
-            position: { x: src.position.x + 320, y: src.position.y },
+            position: { x: srcBox.x + srcBox.w + 60, y: srcBox.y },
             data: {
               source_task_id: hermesTask.id,
               source_title: src.data?.title || '未知任务',

@@ -25,6 +25,9 @@ import ProjectLibraryPanel from '../components/project-library/ProjectLibraryPan
 import useProjectLibraryStore from '../stores/useProjectLibraryStore'
 import { loadProjectToCanvas } from '../services/projectLibraryActions'
 import { pushLog } from '../utils/logBus'
+// toB/toC/toG 场景切换 — 之前埋在 AletheiaLayer 里, 而 AletheiaLayer 没挂载 → 用户找不到切换入口
+// 单独提到顶部 ALETHEIA 品牌右侧, 默认收起成胶囊, 不挡画布
+import ScenarioSwitcher from '../components/aletheia/ScenarioSwitcher'
 
 // 文件类型扩展名分组
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp']
@@ -745,6 +748,8 @@ export default function KnowledgeGraph() {
               ALETHEIA
             </span>
           </div>
+          {/* toB/toC/toG 场景切换 — 默认收起胶囊, 点击展开 */}
+          <ScenarioSwitcher />
         </div>
 
         <div

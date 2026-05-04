@@ -40,8 +40,14 @@ import path from 'node:path'
 import os from 'node:os'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
+import * as Y from 'yjs'
+import { WebsocketProvider } from 'y-websocket'
+import WebSocket from 'ws'
+
+if (typeof globalThis.WebSocket === 'undefined') globalThis.WebSocket = WebSocket
 
 const SOURCE_PROXY = process.env.SOURCE_PROXY || 'http://127.0.0.1:17090'
+const Y_WS_URL = process.env.Y_WS_URL || 'ws://127.0.0.1:1234'
 const CANVAS_PUBLIC_URL = process.env.CANVAS_PUBLIC_URL || 'https://ha2.digitalvio.shop/canvas/'
 const DEFAULT_ROOM = process.env.CANVAS_DEFAULT_ROOM || 'demo-final'
 
@@ -485,10 +491,13 @@ async function handleMessage(evt) {
   try {
     const r = await proxyPost('/canvas/cast/aletheia-prompt', { room, text: content, attribution })
     if (r.ok) {
+      // 记录这一轮等元认知的"待反馈"上下文; reverse channel 看到 conclusion 时回查
+      registerPendingFeedback(room, { chatId, prompt: content, sentAt: Date.now() })
+      ensureReverseChannel(room)
       const peers = (r.peers ?? 0)
       const tip = peers > 0
-        ? `已写入画布 inbox · 在线 ${peers} 人 · 选举执行者中`
-        : `已写入画布 inbox · ⚠ 0 人在线 · 等画布有人打开自动跑`
+        ? `已写入画布 inbox · 在线 ${peers} 人 · 选举执行者中 · 完成后我会发反馈卡片`
+        : `已写入画布 inbox · ⚠ 0 人在线 · 等画布有人打开自动跑 · 完成后我会发反馈卡片`
       await replyText(messageId, `${tip}\n${r.canvasUrl}`)
     } else {
       await replyText(messageId, `✗ 写入失败: ${r.error || '未知'}`)
@@ -496,6 +505,160 @@ async function handleMessage(evt) {
   } catch (e) {
     await replyText(messageId, `✗ 异常: ${e.message}`)
   }
+}
+
+// ============== 反向通道: 监听 yjs conclusion 节点 → 自动发飞书互动卡片 ==============
+// 每 room 一份 yjs 订阅; 监听 nodes Y.Map 增量, 出现 ontologyNode + isConclusion 时
+// 关联到最近一次该 room 的 cast (chatId), 拼卡片 (含 5 个分支 callback button) 发飞书.
+
+const reverseChannels = new Map() // room → { doc, provider, yNodes, observer, baseline:Set, sentConclusions:Set }
+const pendingFeedbackByRoom = new Map() // room → { chatId, prompt, sentAt, fed: false }
+
+function registerPendingFeedback(room, ctx) {
+  pendingFeedbackByRoom.set(room, { ...ctx, fed: false })
+}
+
+function ensureReverseChannel(room) {
+  if (reverseChannels.has(room)) return
+  log(`[reverse] 订阅 yjs room=${room} ws=${Y_WS_URL}`)
+  const doc = new Y.Doc()
+  const provider = new WebsocketProvider(Y_WS_URL, room, doc, { connect: true, WebSocketPolyfill: WebSocket })
+  const yNodes = doc.getMap('nodes')
+
+  // 等同步完成才记 baseline (否则会把已有节点都算成"新"的)
+  const baseline = new Set()
+  const sentConclusions = new Set()
+
+  const onSync = () => {
+    yNodes.forEach((_, k) => baseline.add(k))
+    log(`[reverse] room=${room} synced, 基线 ${baseline.size} 节点`)
+  }
+  provider.once('synced', onSync)
+
+  const observer = (event) => {
+    // 只关心新增 / 字段变化, 不处理删除
+    event.changes.keys.forEach((change, key) => {
+      if (change.action !== 'add' && change.action !== 'update') return
+      if (baseline.has(key)) return
+      const n = yNodes.get(key)
+      if (!n || typeof n !== 'object') return
+      // 关键判断: ontologyNode + isConclusion + 含 conclusion 文本
+      if (n.type !== 'ontologyNode' || !n.data?.isConclusion) return
+      if (sentConclusions.has(key)) return // 防同节点 update 重复触发
+      // 时间窗校验: 必须在 pendingFeedback.sentAt 之后产生
+      const ctx = pendingFeedbackByRoom.get(room)
+      if (!ctx || ctx.fed) return
+      const cAt = Number(n.data?.created_at || 0)
+      if (cAt && cAt < ctx.sentAt - 5000) return // 早于本次 cast 5s+ 的肯定不是
+      sentConclusions.add(key)
+      // 收集本次 cast 之后产生的所有新节点 (拼卡片用)
+      const newNodes = []
+      yNodes.forEach((nn, k) => {
+        if (baseline.has(k)) return
+        const at = Number(nn?.data?.created_at || 0)
+        if (at && at < ctx.sentAt - 5000) return
+        newNodes.push({ id: k, ...nn })
+      })
+      log(`[reverse] room=${room} conclusion ready key=${key} 新节点=${newNodes.length}`)
+      sendFeedbackCard(room, ctx, n, newNodes).catch((e) => logErr('反馈卡发送失败:', e.message))
+      ctx.fed = true
+    })
+  }
+  yNodes.observe(observer)
+
+  reverseChannels.set(room, { doc, provider, yNodes, observer, baseline, sentConclusions })
+}
+
+// 拼互动卡片 — 每 ontology 分支三按钮 (深挖/派单/反驳) + 全局三按钮 (打开画布/派单全部/重新拆解)
+function buildFeedbackCard(room, ctx, conclusionNode, newNodes) {
+  const PROMPT = ctx.prompt || ''
+  const conclusion = conclusionNode.data?.conclusion
+  const cObj = (conclusion && typeof conclusion === 'object') ? conclusion : {}
+  const decision = String(cObj.decision || '').toUpperCase()
+  const score = Number(cObj.score || cObj.confidence || 0)
+  const reasonStr = cObj.reasoning || cObj.summary || (typeof conclusion === 'string' ? conclusion : '')
+
+  // 头部颜色按 decision/score
+  let headerTpl = 'turquoise'
+  if (decision === 'GO' && score >= 80) headerTpl = 'green'
+  else if (decision === 'GO' && score < 80) headerTpl = 'yellow'
+  else if (/NO[\s_-]*GO/i.test(decision)) headerTpl = 'red'
+
+  // 列出 ontology (非结论) 分支
+  const ontologyBranches = newNodes.filter((n) => n.type === 'ontologyNode' && !n.data?.isConclusion)
+  const branchLines = ontologyBranches.slice(0, 8).map((n) => {
+    const title = String(n.data?.title || n.data?.label || '').slice(0, 60)
+    const body = String(n.data?.description || n.data?.content || '').slice(0, 80)
+    return `▸ **${title}**\n  ${body}`
+  })
+
+  // agentRole 角色 (compact)
+  const agentRoles = newNodes.filter((n) => n.type === 'agentRoleNode')
+  const roleLines = agentRoles.slice(0, 6).map((n) => {
+    const role = n.data?.responsibility || n.data?.role_name || n.data?.roleId || ''
+    return `· ${String(role).slice(0, 50)}`
+  })
+
+  // 每分支三按钮 — 飞书互动行最多 3 button
+  const branchActionRows = ontologyBranches.slice(0, 5).map((n) => {
+    const title = String(n.data?.title || '').slice(0, 14) || '分支'
+    return {
+      tag: 'action',
+      actions: [
+        { tag: 'button', text: { tag: 'plain_text', content: `▸ ${title} · 深挖` }, type: 'default',
+          value: { action: 'decompose', nodeId: n.id, room, title } },
+        { tag: 'button', text: { tag: 'plain_text', content: '派单' }, type: 'primary',
+          value: { action: 'dispatch', nodeId: n.id, room, title } },
+        { tag: 'button', text: { tag: 'plain_text', content: '反驳' }, type: 'danger',
+          value: { action: 'challenge', nodeId: n.id, room, title } },
+      ],
+    }
+  })
+
+  const elements = [
+    { tag: 'markdown', content: `**输入**: ${PROMPT}` },
+    { tag: 'hr' },
+    { tag: 'markdown', content: `**结论**: ${decision || 'N/A'} · ${score || '-'} 分\n${reasonStr.slice(0, 200)}` },
+  ]
+  if (branchLines.length > 0) {
+    elements.push({ tag: 'hr' })
+    elements.push({ tag: 'markdown', content: `**拆解 ${branchLines.length} 分支**:\n${branchLines.join('\n')}` })
+  }
+  if (roleLines.length > 0) {
+    elements.push({ tag: 'markdown', content: `**角色 ${roleLines.length}**:\n${roleLines.join('\n')}` })
+  }
+  if (branchActionRows.length > 0) {
+    elements.push({ tag: 'hr' })
+    elements.push({ tag: 'markdown', content: '**点击操作每个分支:**' })
+    elements.push(...branchActionRows)
+  }
+  elements.push({ tag: 'hr' })
+  elements.push({
+    tag: 'action',
+    actions: [
+      { tag: 'button', text: { tag: 'plain_text', content: '🌐 打开画布' }, type: 'primary',
+        url: `${CANVAS_PUBLIC_URL}?room=${encodeURIComponent(room)}` },
+      { tag: 'button', text: { tag: 'plain_text', content: '🤖 派单全部' }, type: 'default',
+        value: { action: 'dispatch_all', room } },
+      { tag: 'button', text: { tag: 'plain_text', content: '↩ 重新拆解' }, type: 'default',
+        value: { action: 'redecompose', prompt: PROMPT, room } },
+    ],
+  })
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      template: headerTpl,
+      title: { tag: 'plain_text', content: `🧠 元认知反馈 · ${decision || '?'} ${score || ''}` },
+    },
+    elements,
+  }
+}
+
+async function sendFeedbackCard(room, ctx, conclusionNode, newNodes) {
+  const card = buildFeedbackCard(room, ctx, conclusionNode, newNodes)
+  log(`[reverse] 发反馈卡 → chat=${ctx.chatId.slice(0, 14)} room=${room}`)
+  await sendCard(ctx.chatId, card)
 }
 
 // === 处理按钮回调 ===

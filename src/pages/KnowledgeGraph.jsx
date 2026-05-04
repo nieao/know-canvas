@@ -841,11 +841,8 @@ export default function KnowledgeGraph() {
 
         {/* 右侧顶栏 — 协作信息 + 项目库 + 右栏折叠, 一行 flex 防重叠 */}
         <div
-          className="absolute top-4 z-30 flex gap-2 items-center transition-all duration-500 flex-wrap justify-end"
-          style={{
-            right: showRightPanel ? rightPanelWidth + 16 : 16,
-            maxWidth: showRightPanel ? `calc(100vw - ${rightPanelWidth + 32}px - 360px)` : 'calc(100vw - 32px - 360px)',
-          }}
+          className="absolute top-4 z-30 flex gap-2 items-center transition-all duration-500 justify-end"
+          style={{ right: showRightPanel ? rightPanelWidth + 16 : 16 }}
         >
           <CollabHeader
             room={room}

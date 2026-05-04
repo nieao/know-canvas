@@ -230,8 +230,11 @@ export default function CollabHeader({ room, username, onOpenAiSettings, onExit 
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </button>
-      <ThemeToggle />
-      <TaskModeSwitch />
+      {/* 主题 / 任务模式 — 占位较大, 1536px 以下隐藏 (用户可在设置面板找到) */}
+      <div className="hidden 2xl:flex items-center gap-2">
+        <ThemeToggle />
+        <TaskModeSwitch />
+      </div>
       <RemoteUserList />
       <div
         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg shadow-sm"

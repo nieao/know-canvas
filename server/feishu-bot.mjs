@@ -554,10 +554,12 @@ function ensureReverseChannel(room) {
   const baseline = new Set()
   const inboxBaseline = new Set()
   const sentConclusions = new Set()
+  let synced = false  // sync 之前所有 observer 事件都跳过 (yjs 拉初始 state 也走 add 事件)
 
   const onSync = () => {
     yNodes.forEach((_, k) => baseline.add(k))
     yInbox.forEach((_, k) => inboxBaseline.add(k))
+    synced = true
     log(`[reverse] room=${room} synced, 基线 ${baseline.size} 节点 / inbox ${inboxBaseline.size}`)
   }
   provider.once('synced', onSync)
@@ -565,13 +567,13 @@ function ensureReverseChannel(room) {
   // === inbox 监听 — 任何带 attribution.chatId 的新 inbox item 都自动 register pending feedback
   // 用途: 测试脚本 / 第三方触发 cast 不需要走 feishu 消息也能让 bot 反向通道完整 fire
   const inboxObserver = (event) => {
+    if (!synced) return  // sync 前的 add 事件都是历史数据冒泡, 不能 register
     event.changes.keys.forEach((change, key) => {
       if (change.action !== 'add') return
       if (inboxBaseline.has(key)) return
       const item = yInbox.get(key)
       const chatId = item?.attribution?.chatId
       if (!chatId) return
-      // 已 register 过这条 (避免 status 改 processing 的 update 事件重复入队 — 但 add 不会重入)
       log(`[reverse] inbox 新 item key=${key} chatId=${chatId.slice(0, 14)} → register pending`)
       registerPendingFeedback(room, {
         chatId,
@@ -584,6 +586,7 @@ function ensureReverseChannel(room) {
 
   const observer = (event) => {
     // 只关心新增 / 字段变化, 不处理删除
+    if (!synced) return  // sync 前的 add 事件是 yjs 加载历史 state, 不是真新增
     event.changes.keys.forEach((change, key) => {
       if (change.action !== 'add' && change.action !== 'update') return
       if (baseline.has(key)) return

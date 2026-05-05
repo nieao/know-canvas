@@ -695,16 +695,41 @@ async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPa
   const PROMPT = ctx.prompt || ''
   const conclusion = conclusionNode.data?.conclusion
   const cObj = (conclusion && typeof conclusion === 'object') ? conclusion : {}
-  const decision = String(cObj.decision || '').toUpperCase()
+  // 决策字段实际叫 verdict (画布前端 useCanvasStore 写的), 兼容 decision/verdict 双路径
+  const decision = String(cObj.verdict || cObj.decision || '').toUpperCase()
   const score = Number(cObj.score || cObj.confidence || 0)
   const summary = cObj.summary || cObj.reasoning || ''
-  const profile = conclusionNode.data?.project_profile || {}
-  const taskDag = (conclusionNode.data?.structure?.task_dag || []).map((t, i) =>
-    `${i + 1}. **${t.title}** — ${t.desc || ''}`).join('\n')
+  // 项目画像 + structure 在 ROOT 项目节点 (variant=goal+projectMode), 不在 conclusion 节点
+  // 通过 conclusion.projectRootId 找 root, 兜底找第一个 variant=goal 节点
+  const rootNode = newNodes.find((n) => n.id === conclusionNode.data?.projectRootId) ||
+                    newNodes.find((n) => n.data?.variant === 'goal' && n.data?.projectMode)
+  const profile = rootNode?.data?.project_profile || conclusionNode.data?.project_profile || {}
+  const taskDagArr = rootNode?.data?.structure?.task_dag || conclusionNode.data?.structure?.task_dag || []
+  const taskDag = taskDagArr.map((t, i) => {
+    const deps = (t.deps && t.deps.length) ? ` (依赖: ${t.deps.join(', ')})` : ''
+    return `${i + 1}. **${t.id || ''} ${t.title}** — ${t.desc || ''}${deps}`
+  }).join('\n')
+  // 真分支: 排除 root (variant=goal) 和 conclusion. 实际 task entity (variant=entity) 才是分支
   const branches = newNodes.filter((n) => n.type === 'ontologyNode' && !n.data?.isConclusion && n.data?.variant !== 'goal' && !n.data?.projectMode)
-  const branchLines = branches.map((n, i) => `- ▸ **${n.data?.title || ''}** — ${n.data?.description || n.data?.content || ''}`).join('\n')
+  const branchLines = branches.map((n) => `- ▸ **${n.data?.title || ''}** — ${n.data?.description || n.data?.content || ''}`).join('\n')
+  // agentRole 节点 — 角色名 + 职责 + 工具 + 任务
   const roles = newNodes.filter((n) => n.type === 'agentRoleNode')
-  const roleLines = roles.map((n) => `- ${n.data?.responsibility || n.data?.role_name || ''}`).join('\n')
+  const roleLines = roles.map((n) => {
+    const d = n.data || {}
+    const name = d.role_name || d.agentName || d.name || (d.role && d.role.name) || `Agent ${d.roleId || ''}`.trim()
+    const resp = d.responsibility || ''
+    const tools = Array.isArray(d.tools) && d.tools.length ? ` · 工具: ${d.tools.join('/')}` : ''
+    const tasks = Array.isArray(d.assigned_tasks) && d.assigned_tasks.length ? ` · 派单: ${d.assigned_tasks.join(', ')}` : ''
+    return `- **${name}** — ${resp}${tools}${tasks}`
+  }).join('\n')
+
+  // 摘要扩充 — 合并 summary + reasoning + pros + cons + next_steps
+  const detailedSummary = [
+    summary,
+    Array.isArray(cObj.pros) && cObj.pros.length ? `\n**优势**:\n${cObj.pros.map(p => `- ${p}`).join('\n')}` : '',
+    Array.isArray(cObj.cons) && cObj.cons.length ? `\n**劣势**:\n${cObj.cons.map(c => `- ${c}`).join('\n')}` : '',
+    Array.isArray(cObj.next_steps) && cObj.next_steps.length ? `\n**下一步**:\n${cObj.next_steps.map(s => `- ${s}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n')
 
   // 1) 云文档 (markdown)
   if (FEISHU_DOCS_FOLDER_TOKEN || true) { // 没 folder 也建到根目录, 先测
@@ -738,7 +763,7 @@ async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPa
       '',
       '## 摘要 / 推理',
       '',
-      summary || '_无_',
+      detailedSummary || '_无_',
       '',
       '## 资源链接',
       '',

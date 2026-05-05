@@ -628,60 +628,60 @@ function runLarkJson(args, timeoutMs = 30000) {
   })
 }
 
-/** 上传图片拿 image_key — 用于卡片 img element. 失败返回 null */
+/** 上传图片拿 image_key — 用 im images create (multipart). 失败返回 null */
 async function uploadFeishuImage(imagePath) {
   if (!imagePath || !fs.existsSync(imagePath)) return null
-  const r = await runLarkJson(['im', '+images-upload', '--image-path', imagePath, '--image-type', 'message', '--as', 'bot'])
+  // lark-cli im images create --data '{"image_type":"message"}' --file image=<path> --as bot
+  const r = await runLarkJson([
+    'im', 'images', 'create',
+    '--data', JSON.stringify({ image_type: 'message' }),
+    '--file', `image=${imagePath}`,
+    '--as', 'bot',
+  ], 30000)
   if (!r.ok) { logErr('uploadFeishuImage 失败:', r.error); return null }
-  // lark-cli 返回结构: { code:0, data:{ image_key:'img_xxx' } } 或扁平 image_key
-  const key = r.data?.image_key || r.data?.data?.image_key
+  const data = r.data?.data || r.data
+  const key = data?.image_key
   if (!key) logErr('uploadFeishuImage 没拿到 image_key:', JSON.stringify(r.data || {}).slice(0, 300))
   return key || null
 }
 
 /** 创建云文档 (markdown), 返回 { url, doc_token } */
 async function createFeishuDoc(title, markdown) {
-  const args = ['docs', '+create', '--title', title.slice(0, 100), '--markdown', markdown]
+  const args = ['docs', '+create', '--title', title.slice(0, 100), '--markdown', markdown, '--api-version', 'v2']
   if (FEISHU_DOCS_FOLDER_TOKEN) args.push('--folder-token', FEISHU_DOCS_FOLDER_TOKEN)
   args.push('--as', 'bot')
   const r = await runLarkJson(args, 60000)
   if (!r.ok) { logErr('createFeishuDoc 失败:', r.error); return null }
-  // 返回结构: { code, data: { url, document: { document_id, title, ... } } } — 兼容多种
+  // lark-cli 返回 { ok:true, data: { doc_id, doc_url, log_id, message } } (实测)
   const data = r.data?.data || r.data
-  const url = data?.url || data?.document?.url || data?.public_url
-  const token = data?.document?.document_id || data?.document_id || data?.token
+  const url = data?.doc_url || data?.url || data?.document?.url
+  const token = data?.doc_id || data?.document?.document_id || data?.document_id
+  if (!url) logErr('createFeishuDoc 没拿到 doc_url:', JSON.stringify(data || {}).slice(0, 300))
   return { url: url || null, token: token || null }
 }
 
-/** 上传图片到 bitable 拿 file_token (附件字段用). 失败返回 null */
-async function uploadBitableAttachment(imagePath, appToken) {
-  if (!imagePath || !fs.existsSync(imagePath) || !appToken) return null
-  const r = await runLarkJson([
-    'drive', '+files-upload',
-    '--file-path', imagePath,
-    '--parent-type', 'bitable_image',
-    '--parent-node', appToken,
-    '--as', 'bot',
-  ], 60000)
-  if (!r.ok) { logErr('uploadBitableAttachment 失败:', r.error); return null }
-  const data = r.data?.data || r.data
-  return data?.file_token || null
+/** 上传文件到 Drive 拿 file_token (bitable 附件字段需要专门 upload, drive +upload 不一定兼容). 暂跳过. */
+async function uploadBitableAttachment(_imagePath, _appToken) {
+  // TODO: 飞书 bitable 附件字段需要 upload_all 接口 (parent_type=bitable_image),
+  //       lark-cli drive +upload 是普通 Drive 文件, file_token 不能直接给 attachment 字段用.
+  //       现阶段跳过附件, 用 URL 字段放 PNG 链接代替.
+  return null
 }
 
-/** 写一行多维表格记录, 失败返回 null */
+/** 写一行多维表格记录 (单条). 失败返回 null */
 async function upsertBitableRecord(appToken, tableId, fields) {
   if (!appToken || !tableId) return null
-  const payload = { records: [{ fields }] }
+  // lark-cli base +record-upsert --base-token X --table-id Y --json '{字段Map}' (单条 fields, 不是 records 数组)
   const r = await runLarkJson([
-    'base', '+record-upsert', appToken,
+    'base', '+record-upsert',
+    '--base-token', appToken,
     '--table-id', tableId,
-    '--data', JSON.stringify(payload),
+    '--json', JSON.stringify(fields),
     '--as', 'bot',
   ], 30000)
   if (!r.ok) { logErr('upsertBitableRecord 失败:', r.error); return null }
   const data = r.data?.data || r.data
-  // 飞书返回的 record url 通常需要拼: https://feishu.cn/base/{appToken}?table={tableId}&view=...
-  const recordId = data?.records?.[0]?.record_id || data?.record_id
+  const recordId = data?.record?.record_id || data?.records?.[0]?.record_id || data?.record_id
   const url = `https://feishu.cn/base/${appToken}?table=${tableId}${recordId ? `&record=${recordId}` : ''}`
   return { recordId, url }
 }
@@ -763,6 +763,7 @@ async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPa
       const fileToken = await uploadBitableAttachment(pngPath, FEISHU_BITABLE_APP_TOKEN)
       if (fileToken) attachment = [{ file_token: fileToken }]
     }
+    // URL 字段 — 飞书 bitable url type 期望裸字符串, 不是 {link,text}; 空时干脆不传
     const fields = {
       '标题': PROMPT.slice(0, 100),
       '决策': decision || 'UNKNOWN',
@@ -770,12 +771,12 @@ async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPa
       '输入 prompt': PROMPT,
       '摘要': String(summary).slice(0, 800),
       '任务拆解': taskDag.slice(0, 2000),
-      '画布链接': { link: `${CANVAS_PUBLIC_URL}?room=${encodeURIComponent(room)}`, text: '打开画布' },
-      '云文档': result.docUrl ? { link: result.docUrl, text: '查看详情' } : '',
-      '截图 (SVG)': screenshotSvgUrl ? { link: screenshotSvgUrl, text: '矢量大图' } : '',
+      '画布链接': `${CANVAS_PUBLIC_URL}?room=${encodeURIComponent(room)}`,
       '创建时间': Date.now(),
       'chat_id': ctx.chatId || '',
     }
+    if (result.docUrl) fields['云文档'] = result.docUrl
+    if (screenshotSvgUrl) fields['截图 (SVG)'] = screenshotSvgUrl
     if (attachment) fields['截图'] = attachment
     const rec = await upsertBitableRecord(FEISHU_BITABLE_APP_TOKEN, FEISHU_BITABLE_TABLE_ID, fields)
     if (rec?.url) {

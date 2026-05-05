@@ -647,7 +647,8 @@ async function uploadFeishuImage(imagePath) {
 
 /** 创建云文档 (markdown), 返回 { url, doc_token } */
 async function createFeishuDoc(title, markdown) {
-  const args = ['docs', '+create', '--title', title.slice(0, 100), '--markdown', markdown, '--api-version', 'v2']
+  // v2 需要 --content (block JSON), v1 接受 --markdown 直接转换 — 留 v1 不动 (deprecation 仅是 warning)
+  const args = ['docs', '+create', '--title', title.slice(0, 100), '--markdown', markdown]
   if (FEISHU_DOCS_FOLDER_TOKEN) args.push('--folder-token', FEISHU_DOCS_FOLDER_TOKEN)
   args.push('--as', 'bot')
   const r = await runLarkJson(args, 60000)

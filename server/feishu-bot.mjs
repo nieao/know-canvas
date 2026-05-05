@@ -40,6 +40,7 @@ import path from 'node:path'
 import os from 'node:os'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import WebSocket from 'ws'
@@ -688,7 +689,7 @@ async function upsertBitableRecord(appToken, tableId, fields) {
 }
 
 /** 元认知一轮跑完 → 同步云文档 + 多维表格 (异步, 失败不影响 IM 卡发送) */
-async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPath, screenshotPngUrl, screenshotSvgUrl }) {
+export async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPath, screenshotPngUrl, screenshotSvgUrl }) {
   const result = { docUrl: null, bitableUrl: null }
   if (!FEISHU_BITABLE_APP_TOKEN && !FEISHU_DOCS_FOLDER_TOKEN) return result // 全没配, 跳过
 
@@ -704,13 +705,39 @@ async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPa
   const rootNode = newNodes.find((n) => n.id === conclusionNode.data?.projectRootId) ||
                     newNodes.find((n) => n.data?.variant === 'goal' && n.data?.projectMode)
   const profile = rootNode?.data?.project_profile || conclusionNode.data?.project_profile || {}
-  const taskDagArr = rootNode?.data?.structure?.task_dag || conclusionNode.data?.structure?.task_dag || []
+  const structure = rootNode?.data?.structure || conclusionNode.data?.structure || {}
+  const taskDagArr = structure?.task_dag || []
+  // task DAG — bullet 列出, T-ID 当编号 (飞书 docx 数字列表会全渲染为 "1.", 改 bullet 避免误导)
   const taskDag = taskDagArr.map((t, i) => {
-    const deps = (t.deps && t.deps.length) ? ` (依赖: ${t.deps.join(', ')})` : ''
-    return `${i + 1}. **${t.id || ''} ${t.title}** — ${t.desc || ''}${deps}`
+    const deps = (t.deps && t.deps.length) ? ` _(依赖: ${t.deps.join(', ')})_` : ''
+    const desc = t.desc ? ` — ${t.desc}` : ''
+    const io = []
+    if (t.input) io.push(`输入: ${t.input}`)
+    if (t.output) io.push(`产出: ${t.output}`)
+    const ioStr = io.length ? ` _[${io.join(' · ')}]_` : ''
+    return `- **${t.id || `T${i+1}`} · ${t.title}**${deps}${desc}${ioStr}`
   }).join('\n')
-  // 真分支: 排除 root (variant=goal) 和 conclusion. 实际 task entity (variant=entity) 才是分支
-  const branches = newNodes.filter((n) => n.type === 'ontologyNode' && !n.data?.isConclusion && n.data?.variant !== 'goal' && !n.data?.projectMode)
+  // 执行阶段拓扑 — 哪些角色 / 任务并行, 哪些串行
+  const stages = structure?.execution_topology?.stages || []
+  const rolesArr = structure?.roles || []
+  const KIND_CN = { parallel: '并行', sequential: '串行', serial: '串行', single: '单角色' }
+  const stageLines = stages.map((s) => {
+    const kind = KIND_CN[s.kind] || s.kind || '?'
+    const rids = (s.role_ids || [])
+    const roleNames = rids.map((rid) => {
+      const r = rolesArr.find((x) => x.id === rid)
+      return r ? `${r.name || rid}` : rid
+    }).join(' / ')
+    return `- **阶段 ${s.stage_index}** _(${kind})_: ${roleNames}`
+  }).join('\n')
+  // 派生分支: 真正的拆解/反驳 (非 task 本体, 非 root, 非 conclusion)
+  const branches = newNodes.filter((n) =>
+    n.type === 'ontologyNode' &&
+    !n.data?.isConclusion &&
+    n.data?.variant !== 'goal' &&
+    !n.data?.projectMode &&
+    !n.data?.projectTaskId  // 排除 6 stage 自动建的 task entity (DAG 章节已展示)
+  )
   const branchLines = branches.map((n) => `- ▸ **${n.data?.title || ''}** — ${n.data?.description || n.data?.content || ''}`).join('\n')
   // agentRole 节点 — 角色名 + 职责 + 工具 + 任务
   const roles = newNodes.filter((n) => n.type === 'agentRoleNode')
@@ -723,12 +750,23 @@ async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPa
     return `- **${name}** — ${resp}${tools}${tasks}`
   }).join('\n')
 
-  // 摘要扩充 — 合并 summary + reasoning + pros + cons + next_steps
+  // 摘要扩充 — 把决策引擎所有结构化字段都摊开 (summary + key_insights + improvements + next_steps)
+  // 决策引擎实际 schema: {verdict, score, summary, key_insights[], improvements[], next_steps[]}
+  // 历史兼容: pros/cons/risks/reasoning 字段也保留拼接, 万一有旧版本数据
+  const arrSection = (label, arr) => Array.isArray(arr) && arr.length
+    ? `\n**${label}**:\n\n${arr.map((s) => `- ${s}`).join('\n')}`
+    : ''
+  const reasoningExtra = (cObj.reasoning && cObj.reasoning !== cObj.summary)
+    ? `\n\n**推理**:\n\n${cObj.reasoning}`
+    : ''
   const detailedSummary = [
-    summary,
-    Array.isArray(cObj.pros) && cObj.pros.length ? `\n**优势**:\n${cObj.pros.map(p => `- ${p}`).join('\n')}` : '',
-    Array.isArray(cObj.cons) && cObj.cons.length ? `\n**劣势**:\n${cObj.cons.map(c => `- ${c}`).join('\n')}` : '',
-    Array.isArray(cObj.next_steps) && cObj.next_steps.length ? `\n**下一步**:\n${cObj.next_steps.map(s => `- ${s}`).join('\n')}` : '',
+    summary + reasoningExtra,
+    arrSection('核心洞察', cObj.key_insights),
+    arrSection('改进建议', cObj.improvements),
+    arrSection('优势', cObj.pros),
+    arrSection('劣势', cObj.cons),
+    arrSection('风险', cObj.risks),
+    arrSection('下一步', cObj.next_steps),
   ].filter(Boolean).join('\n')
 
   // 1) 云文档 (markdown)
@@ -753,14 +791,15 @@ async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPa
       '',
       taskDag || '_无_',
       '',
-      '## 分支节点',
+      '## 执行阶段拓扑',
       '',
-      branchLines || '_无_',
+      stageLines || '_无_',
       '',
       '## 涌现角色',
       '',
       roleLines || '_无_',
       '',
+      ...(branches.length ? ['## 派生分支 (拆解 / 反驳)', '', branchLines, ''] : []),
       '## 摘要 / 推理',
       '',
       detailedSummary || '_无_',
@@ -1219,4 +1258,7 @@ function start() {
 
 }
 
-start()
+// 仅在直接 node 运行时启动 daemon — import 测试不会启动
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  start()
+}

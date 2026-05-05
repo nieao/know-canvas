@@ -543,6 +543,9 @@ function ensureReverseChannel(room) {
   log(`[reverse] 订阅 yjs room=${room} ws=${Y_WS_URL}`)
   const doc = new Y.Doc()
   const provider = new WebsocketProvider(Y_WS_URL, room, doc, { connect: true, WebSocketPolyfill: WebSocket })
+  // 关键: bot 不能参与 BottomAIBar 的"最小 clientID 选举", 否则比用户 cc id 小时会把用户挤出执行者位置
+  // setLocalState(null) 让 bot 在 awareness 里不可见, 用户 cc 不会把它算作竞争者
+  try { provider.awareness?.setLocalState(null) } catch {}
   const yNodes = doc.getMap('nodes')
 
   // 等同步完成才记 baseline (否则会把已有节点都算成"新"的)

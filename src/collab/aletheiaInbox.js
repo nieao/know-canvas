@@ -27,7 +27,8 @@ function getInboxMap() {
   return _inboxMap
 }
 
-/** 当前在线 awareness 状态里 client id 最小者 — 简单选举, 多 cc 不重复执行 */
+/** 当前在线 awareness 状态里 client id 最小者 — 简单选举, 多 cc 不重复执行
+ *  关键: 必须只算 *有 user 字段* 的 awareness — bot daemon 等 spectator 没有 user, 不参与选举 */
 function isElectedExecutor() {
   const provider = getProvider()
   if (!provider) return true // provider 未就绪默认让自己 fire (单机)
@@ -36,7 +37,11 @@ function isElectedExecutor() {
   const states = awareness.getStates()
   if (states.size === 0) return true
   let minId = myId
-  states.forEach((_state, clientId) => { if (clientId < minId) minId = clientId })
+  states.forEach((state, clientId) => {
+    // 只把"真用户" cc 计入选举 — 没 user 字段的是 bot/script 等 spectator
+    if (!state || !state.user) return
+    if (clientId < minId) minId = clientId
+  })
   return minId === myId
 }
 

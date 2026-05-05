@@ -790,10 +790,11 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    // ── /canvas/screenshot (POST) ── 元认知完成后前端上传截图 + 元数据
+    // ── /canvas/api/screenshot (POST) ── 元认知完成后前端上传截图 + 元数据
     //   body: { id, room, rootId, prompt, decision, score, pngDataUrl, svgDataUrl?, meta? }
+    //   走 /canvas/api/* 路径, Caddy 反代到 source-proxy (其他 /canvas/* 走静态)
     //   写到本地 disk, bot daemon 同 VPS 直接 fs 读, 不走 HTTP
-    if (method === 'POST' && url.pathname === '/canvas/screenshot') {
+    if (method === 'POST' && (url.pathname === '/canvas/api/screenshot' || url.pathname === '/canvas/screenshot')) {
       const body = await readJsonBody(req, 12 * 1024 * 1024) // 12MB 上限 — 高分辨率 PNG 可能 2-5MB
       const id = String(body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80)
       if (!id) { sendJson(res, 400, { ok: false, error: 'id 必填' }); return }
@@ -843,9 +844,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ── /canvas/screenshot/:id.(png|svg|json) (GET) ── 公开访问截图 + 元数据
-    const screenshotMatch = url.pathname.match(/^\/canvas\/screenshot\/([a-zA-Z0-9_-]+)\.(png|svg|json)$/)
+    //   两条路径同时支持: /canvas/screenshot/{id}.png (公开) + /canvas/api/screenshot/{id}.png (api 通道)
+    const screenshotMatch = url.pathname.match(/^\/canvas\/(api\/)?screenshot\/([a-zA-Z0-9_-]+)\.(png|svg|json)$/)
     if (method === 'GET' && screenshotMatch) {
-      const [, id, ext] = screenshotMatch
+      const [, , id, ext] = screenshotMatch
       const filePath = path.join(SCREENSHOTS_DIR, `${id}.${ext}`)
       try {
         if (!fs.existsSync(filePath)) { sendJson(res, 404, { ok: false, error: '截图不存在' }); return }

@@ -87,7 +87,8 @@ export async function captureAndUploadProjectScreenshot({ rootId, conclusionId, 
   // POST 到 source-proxy
   const ssId = conclusionId || rootId
   try {
-    const r = await fetch('/canvas/screenshot', {
+    // 走 /canvas/api/* 路径 — Caddy 反代到 source-proxy:17090; /canvas/screenshot 走静态服务会 405
+    const r = await fetch('/canvas/api/screenshot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({

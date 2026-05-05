@@ -392,7 +392,11 @@ function KnowledgeCanvasInner({
         },
         data: { isOrphanFallback: true },
       })
-      console.warn('[KnowledgeCanvas] 检测到孤儿子节点, 已挂 fallback root')
+      // 只 warn 一次/页面 — useMemo 会因 yjs sync 频繁重算, 不限速会炸 console + CPU
+      if (typeof window !== 'undefined' && !window.__orphanWarned) {
+        window.__orphanWarned = true
+        console.warn('[KnowledgeCanvas] 检测到孤儿子节点, 已挂 fallback root (后续静默)')
+      }
     }
     // 最终交给 React Flow 的数组: 把 hidden 节点直接剔除.
     // 单靠 hidden=true 字段不够 — React Flow 11 在 child layout 时仍可能 throw

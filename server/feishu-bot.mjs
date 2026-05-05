@@ -51,6 +51,12 @@ const Y_WS_URL = process.env.Y_WS_URL || 'ws://127.0.0.1:1234'
 const CANVAS_PUBLIC_URL = process.env.CANVAS_PUBLIC_URL || 'https://ha2.digitalvio.shop/canvas/'
 const DEFAULT_ROOM = process.env.CANVAS_DEFAULT_ROOM || 'demo-final'
 
+// 飞书归档配置 (云文档 + 多维表格) — 不设则跳过归档, 只发 IM 卡
+// 多维表格 schema 见 server/setup-feishu-archive.mjs (一次性建表脚本)
+const FEISHU_BITABLE_APP_TOKEN = process.env.FEISHU_BITABLE_APP_TOKEN || ''
+const FEISHU_BITABLE_TABLE_ID = process.env.FEISHU_BITABLE_TABLE_ID || ''
+const FEISHU_DOCS_FOLDER_TOKEN = process.env.FEISHU_DOCS_FOLDER_TOKEN || ''
+
 // 当前 daemon 用 user OAuth 身份 (你想猫), 写到画布的节点 attribution 统一显示成"你想猫"
 // (将来若切 Aletheia-bot 真身份, 这里改成 '飞书 bot' 之类)
 const DAEMON_AS_NAME = process.env.DAEMON_AS_NAME || '你想猫'
@@ -567,22 +573,30 @@ function ensureReverseChannel(room) {
       if (cAt && cAt < ctx.sentAt - 5000) return // 早于本次 cast 5s+ 的肯定不是
       sentConclusions.add(key)
       q.shift() // 消费 ctx
-      // 收集本次 cast 之后产生的所有新节点 (拼卡片用)
-      const newNodes = []
-      yNodes.forEach((nn, k) => {
-        if (baseline.has(k)) return
-        const at = Number(nn?.data?.created_at || 0)
-        if (at && at < ctx.sentAt - 5000) return
-        newNodes.push({ id: k, ...nn })
-      })
-      log(`[reverse] room=${room} conclusion ready key=${key} 新节点=${newNodes.length} 剩余队列=${q.length}`)
-      // 调试: 第一次时 dump 所有新节点 data 字段, 找到伪 ontology 的 marker
-      if (process.env.LARK_DEBUG === '1') {
-        for (const nn of newNodes.filter(x => x.type === 'ontologyNode' && !x.data?.isConclusion).slice(0, 3)) {
-          log(`[reverse-dump] ontology id=${nn.id} data=${JSON.stringify(nn.data || {}).slice(0, 400)}`)
+      log(`[reverse] room=${room} conclusion ready key=${key} 剩余队列=${q.length}, 延迟 3s 等截图上传`)
+      // 延迟 3s 让前端 captureAndUploadProjectScreenshot 写完 screenshotPngUrl 到 conclusion
+      // 同时重读 conclusion + newNodes (拿最新 data, 含 screenshot URLs)
+      setTimeout(() => {
+        try {
+          const fresh = yNodes.get(key) || n
+          const newNodes = []
+          yNodes.forEach((nn, k) => {
+            if (baseline.has(k)) return
+            const at = Number(nn?.data?.created_at || 0)
+            if (at && at < ctx.sentAt - 5000) return
+            newNodes.push({ id: k, ...nn })
+          })
+          log(`[reverse] room=${room} fire 反馈卡 key=${key} 新节点=${newNodes.length} 截图=${fresh?.data?.screenshotPngPath ? 'yes' : 'no'}`)
+          if (process.env.LARK_DEBUG === '1') {
+            for (const nn of newNodes.filter(x => x.type === 'ontologyNode' && !x.data?.isConclusion).slice(0, 3)) {
+              log(`[reverse-dump] ontology id=${nn.id} data=${JSON.stringify(nn.data || {}).slice(0, 400)}`)
+            }
+          }
+          sendFeedbackCard(room, ctx, fresh, newNodes).catch((e) => logErr('反馈卡发送失败:', e.message))
+        } catch (e) {
+          logErr('[reverse] 延迟 fire 失败:', e.message)
         }
-      }
-      sendFeedbackCard(room, ctx, n, newNodes).catch((e) => logErr('反馈卡发送失败:', e.message))
+      }, 3000)
     })
   }
   yNodes.observe(observer)
@@ -590,8 +604,190 @@ function ensureReverseChannel(room) {
   reverseChannels.set(room, { doc, provider, yNodes, observer, baseline, sentConclusions })
 }
 
+// ============== 飞书原生工具 — image upload / docs create / bitable upsert ==============
+
+/** spawn lark-cli 拿 stdout JSON 返回 */
+function runLarkJson(args, timeoutMs = 30000) {
+  return new Promise((resolve) => {
+    const proc = spawnLark(args)
+    let out = ''
+    let err = ''
+    const t = setTimeout(() => { try { proc.kill('SIGTERM') } catch {}; resolve({ ok: false, error: 'timeout' }) }, timeoutMs)
+    proc.stdout.on('data', (b) => { out += b.toString('utf8') })
+    proc.stderr.on('data', (b) => { err += b.toString('utf8') })
+    proc.on('close', (code) => {
+      clearTimeout(t)
+      if (code !== 0) return resolve({ ok: false, error: err.slice(0, 500) || `exit ${code}` })
+      try { resolve({ ok: true, data: JSON.parse(out) }) }
+      catch { resolve({ ok: true, data: { raw: out.slice(0, 500) } }) }
+    })
+    proc.on('error', (e) => { clearTimeout(t); resolve({ ok: false, error: e.message }) })
+  })
+}
+
+/** 上传图片拿 image_key — 用于卡片 img element. 失败返回 null */
+async function uploadFeishuImage(imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return null
+  const r = await runLarkJson(['im', '+images-upload', '--image-path', imagePath, '--image-type', 'message', '--as', 'bot'])
+  if (!r.ok) { logErr('uploadFeishuImage 失败:', r.error); return null }
+  // lark-cli 返回结构: { code:0, data:{ image_key:'img_xxx' } } 或扁平 image_key
+  const key = r.data?.image_key || r.data?.data?.image_key
+  if (!key) logErr('uploadFeishuImage 没拿到 image_key:', JSON.stringify(r.data || {}).slice(0, 300))
+  return key || null
+}
+
+/** 创建云文档 (markdown), 返回 { url, doc_token } */
+async function createFeishuDoc(title, markdown) {
+  const args = ['docs', '+create', '--title', title.slice(0, 100), '--markdown', markdown]
+  if (FEISHU_DOCS_FOLDER_TOKEN) args.push('--folder-token', FEISHU_DOCS_FOLDER_TOKEN)
+  args.push('--as', 'bot')
+  const r = await runLarkJson(args, 60000)
+  if (!r.ok) { logErr('createFeishuDoc 失败:', r.error); return null }
+  // 返回结构: { code, data: { url, document: { document_id, title, ... } } } — 兼容多种
+  const data = r.data?.data || r.data
+  const url = data?.url || data?.document?.url || data?.public_url
+  const token = data?.document?.document_id || data?.document_id || data?.token
+  return { url: url || null, token: token || null }
+}
+
+/** 上传图片到 bitable 拿 file_token (附件字段用). 失败返回 null */
+async function uploadBitableAttachment(imagePath, appToken) {
+  if (!imagePath || !fs.existsSync(imagePath) || !appToken) return null
+  const r = await runLarkJson([
+    'drive', '+files-upload',
+    '--file-path', imagePath,
+    '--parent-type', 'bitable_image',
+    '--parent-node', appToken,
+    '--as', 'bot',
+  ], 60000)
+  if (!r.ok) { logErr('uploadBitableAttachment 失败:', r.error); return null }
+  const data = r.data?.data || r.data
+  return data?.file_token || null
+}
+
+/** 写一行多维表格记录, 失败返回 null */
+async function upsertBitableRecord(appToken, tableId, fields) {
+  if (!appToken || !tableId) return null
+  const payload = { records: [{ fields }] }
+  const r = await runLarkJson([
+    'base', '+record-upsert', appToken,
+    '--table-id', tableId,
+    '--data', JSON.stringify(payload),
+    '--as', 'bot',
+  ], 30000)
+  if (!r.ok) { logErr('upsertBitableRecord 失败:', r.error); return null }
+  const data = r.data?.data || r.data
+  // 飞书返回的 record url 通常需要拼: https://feishu.cn/base/{appToken}?table={tableId}&view=...
+  const recordId = data?.records?.[0]?.record_id || data?.record_id
+  const url = `https://feishu.cn/base/${appToken}?table=${tableId}${recordId ? `&record=${recordId}` : ''}`
+  return { recordId, url }
+}
+
+/** 元认知一轮跑完 → 同步云文档 + 多维表格 (异步, 失败不影响 IM 卡发送) */
+async function archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPath, screenshotPngUrl, screenshotSvgUrl }) {
+  const result = { docUrl: null, bitableUrl: null }
+  if (!FEISHU_BITABLE_APP_TOKEN && !FEISHU_DOCS_FOLDER_TOKEN) return result // 全没配, 跳过
+
+  const PROMPT = ctx.prompt || ''
+  const conclusion = conclusionNode.data?.conclusion
+  const cObj = (conclusion && typeof conclusion === 'object') ? conclusion : {}
+  const decision = String(cObj.decision || '').toUpperCase()
+  const score = Number(cObj.score || cObj.confidence || 0)
+  const summary = cObj.summary || cObj.reasoning || ''
+  const profile = conclusionNode.data?.project_profile || {}
+  const taskDag = (conclusionNode.data?.structure?.task_dag || []).map((t, i) =>
+    `${i + 1}. **${t.title}** — ${t.desc || ''}`).join('\n')
+  const branches = newNodes.filter((n) => n.type === 'ontologyNode' && !n.data?.isConclusion && n.data?.variant !== 'goal' && !n.data?.projectMode)
+  const branchLines = branches.map((n, i) => `- ▸ **${n.data?.title || ''}** — ${n.data?.description || n.data?.content || ''}`).join('\n')
+  const roles = newNodes.filter((n) => n.type === 'agentRoleNode')
+  const roleLines = roles.map((n) => `- ${n.data?.responsibility || n.data?.role_name || ''}`).join('\n')
+
+  // 1) 云文档 (markdown)
+  if (FEISHU_DOCS_FOLDER_TOKEN || true) { // 没 folder 也建到根目录, 先测
+    const md = [
+      `# Aletheia 元认知报告: ${PROMPT.slice(0, 60)}`,
+      '',
+      `> **决策**: ${decision || '?'} · **置信度**: ${score || '-'} 分`,
+      '',
+      '## 输入',
+      '',
+      `> ${PROMPT}`,
+      '',
+      '## 项目画像',
+      '',
+      `- **目标**: ${profile.target || '-'}`,
+      `- **领域**: ${profile.domain || '-'}`,
+      `- **复杂度**: ${profile.complexity || '-'}`,
+      profile.key_constraints ? `- **关键约束**: ${(profile.key_constraints || []).join(', ')}` : '',
+      '',
+      '## 任务拆解 (DAG)',
+      '',
+      taskDag || '_无_',
+      '',
+      '## 分支节点',
+      '',
+      branchLines || '_无_',
+      '',
+      '## 涌现角色',
+      '',
+      roleLines || '_无_',
+      '',
+      '## 摘要 / 推理',
+      '',
+      summary || '_无_',
+      '',
+      '## 资源链接',
+      '',
+      `- 画布房间: ${CANVAS_PUBLIC_URL}?room=${encodeURIComponent(room)}`,
+      screenshotPngUrl ? `- 截图 (PNG): ${screenshotPngUrl}` : '',
+      screenshotSvgUrl ? `- 矢量大图 (SVG): ${screenshotSvgUrl}` : '',
+      '',
+      '---',
+      `*由 Know Canvas Aletheia bot 自动生成 · ${new Date().toLocaleString('zh-CN')}*`,
+    ].filter(Boolean).join('\n')
+    const docTitle = `[Aletheia] ${PROMPT.slice(0, 50)} · ${decision || '?'}${score ? ` ${score}` : ''}`
+    const doc = await createFeishuDoc(docTitle, md)
+    if (doc?.url) {
+      result.docUrl = doc.url
+      log(`[archive] 云文档已创建: ${doc.url}`)
+    }
+  }
+
+  // 2) 多维表格记录
+  if (FEISHU_BITABLE_APP_TOKEN && FEISHU_BITABLE_TABLE_ID) {
+    let attachment = null
+    if (pngPath) {
+      const fileToken = await uploadBitableAttachment(pngPath, FEISHU_BITABLE_APP_TOKEN)
+      if (fileToken) attachment = [{ file_token: fileToken }]
+    }
+    const fields = {
+      '标题': PROMPT.slice(0, 100),
+      '决策': decision || 'UNKNOWN',
+      '评分': score || 0,
+      '输入 prompt': PROMPT,
+      '摘要': String(summary).slice(0, 800),
+      '任务拆解': taskDag.slice(0, 2000),
+      '画布链接': { link: `${CANVAS_PUBLIC_URL}?room=${encodeURIComponent(room)}`, text: '打开画布' },
+      '云文档': result.docUrl ? { link: result.docUrl, text: '查看详情' } : '',
+      '截图 (SVG)': screenshotSvgUrl ? { link: screenshotSvgUrl, text: '矢量大图' } : '',
+      '创建时间': Date.now(),
+      'chat_id': ctx.chatId || '',
+    }
+    if (attachment) fields['截图'] = attachment
+    const rec = await upsertBitableRecord(FEISHU_BITABLE_APP_TOKEN, FEISHU_BITABLE_TABLE_ID, fields)
+    if (rec?.url) {
+      result.bitableUrl = rec.url
+      log(`[archive] 多维表格已写: ${rec.url}`)
+    }
+  }
+
+  return result
+}
+
 // 拼互动卡片 — 每 ontology 分支三按钮 (深挖/派单/反驳) + 全局三按钮 (打开画布/派单全部/重新拆解)
-function buildFeedbackCard(room, ctx, conclusionNode, newNodes) {
+// 含可选: imageKey (PNG 内嵌), docUrl (云文档详情归档), bitableUrl (历史看板), svgUrl (矢量大图)
+function buildFeedbackCard(room, ctx, conclusionNode, newNodes, extras = {}) {
+  const { imageKey, docUrl, bitableUrl, svgUrl } = extras
   const PROMPT = ctx.prompt || ''
   const conclusion = conclusionNode.data?.conclusion
   const cObj = (conclusion && typeof conclusion === 'object') ? conclusion : {}
@@ -647,6 +843,18 @@ function buildFeedbackCard(room, ctx, conclusionNode, newNodes) {
     { tag: 'hr' },
     { tag: 'markdown', content: `**结论**: ${decision || 'N/A'} · ${score || '-'} 分\n${reasonStr.slice(0, 200)}` },
   ]
+  // 截图 (PNG, 飞书原生支持点击放大)
+  if (imageKey) {
+    elements.push({ tag: 'hr' })
+    elements.push({
+      tag: 'img',
+      img_key: imageKey,
+      alt: { tag: 'plain_text', content: '画布截图' },
+      title: { tag: 'plain_text', content: '元认知项目结构' },
+      mode: 'fit_horizontal',
+      compact_width: false,
+    })
+  }
   if (branchLines.length > 0) {
     elements.push({ tag: 'hr' })
     elements.push({ tag: 'markdown', content: `**拆解 ${branchLines.length} 分支**:\n${branchLines.join('\n')}` })
@@ -671,6 +879,12 @@ function buildFeedbackCard(room, ctx, conclusionNode, newNodes) {
         value: { action: 'redecompose', prompt: PROMPT, room } },
     ],
   })
+  // 归档跳转按钮 (有什么显什么)
+  const archiveActions = []
+  if (docUrl) archiveActions.push({ tag: 'button', text: { tag: 'plain_text', content: '📄 详情归档' }, type: 'default', url: docUrl })
+  if (bitableUrl) archiveActions.push({ tag: 'button', text: { tag: 'plain_text', content: '📊 历史看板' }, type: 'default', url: bitableUrl })
+  if (svgUrl) archiveActions.push({ tag: 'button', text: { tag: 'plain_text', content: '🔍 矢量大图' }, type: 'default', url: svgUrl })
+  if (archiveActions.length) elements.push({ tag: 'action', actions: archiveActions })
 
   return {
     config: { wide_screen_mode: true },
@@ -683,8 +897,26 @@ function buildFeedbackCard(room, ctx, conclusionNode, newNodes) {
 }
 
 async function sendFeedbackCard(room, ctx, conclusionNode, newNodes) {
-  const card = buildFeedbackCard(room, ctx, conclusionNode, newNodes)
-  log(`[reverse] 发反馈卡 → chat=${ctx.chatId.slice(0, 14)} room=${room}`)
+  const pngPath = conclusionNode.data?.screenshotPngPath || ''
+  const screenshotPngUrl = conclusionNode.data?.screenshotPngUrl || ''
+  const screenshotSvgUrl = conclusionNode.data?.screenshotSvgUrl || ''
+
+  // 并行: (a) 上传 PNG 拿 image_key  (b) 同步云文档+多维表格归档
+  // 任一失败不影响 IM 卡发送
+  const [imageKey, archive] = await Promise.all([
+    pngPath ? uploadFeishuImage(pngPath) : Promise.resolve(null),
+    archiveMetacognition({ ctx, conclusionNode, newNodes, room, pngPath, screenshotPngUrl, screenshotSvgUrl }).catch((e) => {
+      logErr('[archive] 失败 (非致命):', e.message); return { docUrl: null, bitableUrl: null }
+    }),
+  ])
+
+  const card = buildFeedbackCard(room, ctx, conclusionNode, newNodes, {
+    imageKey,
+    docUrl: archive?.docUrl,
+    bitableUrl: archive?.bitableUrl,
+    svgUrl: screenshotSvgUrl,
+  })
+  log(`[reverse] 发反馈卡 → chat=${ctx.chatId.slice(0, 14)} room=${room} 图=${imageKey ? 'Y' : 'N'} doc=${archive?.docUrl ? 'Y' : 'N'} bitable=${archive?.bitableUrl ? 'Y' : 'N'}`)
   await sendCard(ctx.chatId, card)
 }
 

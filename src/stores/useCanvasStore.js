@@ -13,6 +13,7 @@ import {
 } from 'reactflow'
 import { fetchLinkMetadata, detectVideoUrl } from '../utils/linkPreview'
 import { getUsername, getUserColor } from '../collab/session'
+import { captureAndUploadProjectScreenshot } from '../utils/projectScreenshot'
 
 // 节点出生印记：写入 createdBy = { name, color, ts } —— 角标 UI 永久显示创建者
 function getCreatedByStamp() {
@@ -3575,6 +3576,36 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
               state.nodes.push(conclusionNode)
               state.edges.push(...conclusionEdges)
             })
+          }
+
+          // 元认知完成 — 项目截图 + 自动同步飞书 (PNG/SVG → source-proxy → bot 反馈卡 + 云文档 + Bitable)
+          // 选举的执行者负责截图; 非执行者跳过避免 N 份重复.
+          // 异步火 + 不 await — 不能阻塞项目库保存
+          if (decision) {
+            const conclusionId = `conclusion-${rootId}`
+            ;(async () => {
+              try {
+                // 等 conclusion 节点 + 边渲染稳定
+                await new Promise((r) => setTimeout(r, 800))
+                const { getRoomFromUrl } = await import('../collab/session')
+                const room = getRoomFromUrl?.() || 'demo-final'
+                const r = await captureAndUploadProjectScreenshot({
+                  rootId,
+                  conclusionId,
+                  allNodes: get().nodes,
+                  prompt: text || '',
+                  decision: decision.verdict || '',
+                  score: decision.score || 0,
+                  room,
+                })
+                if (r?.pngUrl) {
+                  // 写到 conclusion 节点的 data, bot 反向通道 observer 看到这字段就知道有图
+                  updateNode(conclusionId, { screenshotPngUrl: r.pngUrl, screenshotSvgUrl: r.svgUrl, screenshotPngPath: r.pngPath })
+                }
+              } catch (e) {
+                console.warn('[元认知截图] 失败 (非致命):', e?.message)
+              }
+            })()
           }
 
           // 入项目库 — snapshot 含整个 structure + decision + 创建的所有节点 id

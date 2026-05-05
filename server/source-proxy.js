@@ -151,13 +151,13 @@ function runLark(args) {
 }
 
 // 读 request body (JSON), 限 1MB 防 DoS
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = []
     let total = 0
     req.on('data', (c) => {
       total += c.length
-      if (total > 1024 * 1024) { req.destroy(); reject(new Error('body too large')); return }
+      if (total > maxBytes) { req.destroy(); reject(new Error('body too large')); return }
       chunks.push(c)
     })
     req.on('end', () => {
@@ -169,6 +169,13 @@ function readJsonBody(req) {
     req.on('error', reject)
   })
 }
+
+// 画布截图存放目录 — bot 直接 fs 读 PNG 上传飞书; SVG 通过 GET 端点公开访问
+const fs = require('fs')
+const os = require('os')
+const SCREENSHOTS_DIR = process.env.CANVAS_SCREENSHOTS_DIR ||
+  path.join(os.tmpdir(), 'canvas-screenshots')
+try { fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true }) } catch (e) {}
 
 function sendJson(res, status, body) {
   const json = JSON.stringify(body)
@@ -779,6 +786,82 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, { ok: true, room, id: r.id, peers: r.peers, canvasUrl })
       } catch (e) {
         sendJson(res, 502, { ok: false, error: `cast aletheia 失败: ${e?.message || e}` })
+      }
+      return
+    }
+
+    // ── /canvas/screenshot (POST) ── 元认知完成后前端上传截图 + 元数据
+    //   body: { id, room, rootId, prompt, decision, score, pngDataUrl, svgDataUrl?, meta? }
+    //   写到本地 disk, bot daemon 同 VPS 直接 fs 读, 不走 HTTP
+    if (method === 'POST' && url.pathname === '/canvas/screenshot') {
+      const body = await readJsonBody(req, 12 * 1024 * 1024) // 12MB 上限 — 高分辨率 PNG 可能 2-5MB
+      const id = String(body.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80)
+      if (!id) { sendJson(res, 400, { ok: false, error: 'id 必填' }); return }
+      try {
+        const written = []
+        if (body.pngDataUrl) {
+          const m = String(body.pngDataUrl).match(/^data:image\/png;base64,(.+)$/)
+          if (m) {
+            const png = Buffer.from(m[1], 'base64')
+            fs.writeFileSync(path.join(SCREENSHOTS_DIR, `${id}.png`), png)
+            written.push('png')
+          }
+        }
+        if (body.svgDataUrl) {
+          const m = String(body.svgDataUrl).match(/^data:image\/svg\+xml(?:;charset=utf-8)?[;,](?:base64,)?(.+)$/)
+          if (m) {
+            const isBase64 = String(body.svgDataUrl).includes(';base64,')
+            const svg = isBase64 ? Buffer.from(m[1], 'base64').toString('utf8') : decodeURIComponent(m[1])
+            fs.writeFileSync(path.join(SCREENSHOTS_DIR, `${id}.svg`), svg, 'utf8')
+            written.push('svg')
+          }
+        }
+        const meta = {
+          id,
+          room: String(body.room || ''),
+          rootId: String(body.rootId || ''),
+          prompt: String(body.prompt || '').slice(0, 2000),
+          decision: String(body.decision || ''),
+          score: Number(body.score || 0),
+          createdAt: Date.now(),
+          ...(body.meta || {}),
+        }
+        fs.writeFileSync(path.join(SCREENSHOTS_DIR, `${id}.json`), JSON.stringify(meta, null, 2), 'utf8')
+        written.push('meta')
+        log(`canvas/screenshot id=${id} written=${written.join(',')}`)
+        const publicBase = process.env.CANVAS_PUBLIC_URL || 'https://ha2.digitalvio.shop/canvas/'
+        sendJson(res, 200, {
+          ok: true, id,
+          pngPath: path.join(SCREENSHOTS_DIR, `${id}.png`),
+          svgUrl: `${publicBase.replace(/\/?$/, '')}/screenshot/${id}.svg`,
+          pngUrl: `${publicBase.replace(/\/?$/, '')}/screenshot/${id}.png`,
+        })
+      } catch (e) {
+        sendJson(res, 500, { ok: false, error: '截图保存失败: ' + (e?.message || e) })
+      }
+      return
+    }
+
+    // ── /canvas/screenshot/:id.(png|svg|json) (GET) ── 公开访问截图 + 元数据
+    const screenshotMatch = url.pathname.match(/^\/canvas\/screenshot\/([a-zA-Z0-9_-]+)\.(png|svg|json)$/)
+    if (method === 'GET' && screenshotMatch) {
+      const [, id, ext] = screenshotMatch
+      const filePath = path.join(SCREENSHOTS_DIR, `${id}.${ext}`)
+      try {
+        if (!fs.existsSync(filePath)) { sendJson(res, 404, { ok: false, error: '截图不存在' }); return }
+        const buf = fs.readFileSync(filePath)
+        const contentType = ext === 'png' ? 'image/png'
+          : ext === 'svg' ? 'image/svg+xml; charset=utf-8'
+          : 'application/json; charset=utf-8'
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Length': buf.length,
+          'Cache-Control': 'public, max-age=3600',
+          'Access-Control-Allow-Origin': '*',
+        })
+        res.end(buf)
+      } catch (e) {
+        sendJson(res, 500, { ok: false, error: '读取失败: ' + (e?.message || e) })
       }
       return
     }

@@ -509,14 +509,17 @@ async function handleMessage(evt) {
 // 关联到最近一次该 room 的 cast (chatId), 拼卡片 (含 5 个分支 callback button) 发飞书.
 
 const reverseChannels = new Map() // room → { doc, provider, yNodes, observer, baseline:Set, sentConclusions:Set }
-const pendingFeedbackByRoom = new Map() // room → { chatId, prompt, sentAt, fed: false }
+const pendingFeedbackByRoom = new Map() // room → Array<{ chatId, prompt, sentAt }> (FIFO 队列)
 let _cardSchemaDumped = false
 
 function registerPendingFeedback(room, ctx) {
-  // 重置 fed=false 让新一轮 conclusion 能再次触发反馈卡
-  // (老 ctx 已发过的 conclusion key 仍在 sentConclusions 防重复, 不影响新轮 conclusion)
-  pendingFeedbackByRoom.set(room, { ...ctx, fed: false })
-  log(`[reverse] register pending feedback room=${room} prompt="${(ctx.prompt || '').slice(0, 30)}"`)
+  // FIFO 队列 — 多 cast 之间不会互相覆盖. 每个 conclusion 弹出最早一条 ctx.
+  // 配 BottomAIBar 的串行处理 (aletheiaInbox.scanInboxNext): 前端按 ts 升序 fire,
+  // bot 按 cast 顺序入队, conclusion 顺序也保持一致 → 1:1 对应不会错配.
+  const q = pendingFeedbackByRoom.get(room) || []
+  q.push({ ...ctx })
+  pendingFeedbackByRoom.set(room, q)
+  log(`[reverse] register pending feedback room=${room} queue=${q.length} prompt="${(ctx.prompt || '').slice(0, 30)}"`)
 }
 
 // 调用 source-proxy cast + 同时注册反馈跟踪 (callback 路径必走这个 helper, 避免漏注册)
@@ -556,12 +559,14 @@ function ensureReverseChannel(room) {
       // 关键判断: ontologyNode + isConclusion + 含 conclusion 文本
       if (n.type !== 'ontologyNode' || !n.data?.isConclusion) return
       if (sentConclusions.has(key)) return // 防同节点 update 重复触发
-      // 时间窗校验: 必须在 pendingFeedback.sentAt 之后产生
-      const ctx = pendingFeedbackByRoom.get(room)
-      if (!ctx || ctx.fed) return
+      // 弹出 FIFO 队列最早一条 ctx — 1:1 对应每次 cast
+      const q = pendingFeedbackByRoom.get(room)
+      if (!q || q.length === 0) return
+      const ctx = q[0]
       const cAt = Number(n.data?.created_at || 0)
       if (cAt && cAt < ctx.sentAt - 5000) return // 早于本次 cast 5s+ 的肯定不是
       sentConclusions.add(key)
+      q.shift() // 消费 ctx
       // 收集本次 cast 之后产生的所有新节点 (拼卡片用)
       const newNodes = []
       yNodes.forEach((nn, k) => {
@@ -570,7 +575,7 @@ function ensureReverseChannel(room) {
         if (at && at < ctx.sentAt - 5000) return
         newNodes.push({ id: k, ...nn })
       })
-      log(`[reverse] room=${room} conclusion ready key=${key} 新节点=${newNodes.length}`)
+      log(`[reverse] room=${room} conclusion ready key=${key} 新节点=${newNodes.length} 剩余队列=${q.length}`)
       // 调试: 第一次时 dump 所有新节点 data 字段, 找到伪 ontology 的 marker
       if (process.env.LARK_DEBUG === '1') {
         for (const nn of newNodes.filter(x => x.type === 'ontologyNode' && !x.data?.isConclusion).slice(0, 3)) {
@@ -578,7 +583,6 @@ function ensureReverseChannel(room) {
         }
       }
       sendFeedbackCard(room, ctx, n, newNodes).catch((e) => logErr('反馈卡发送失败:', e.message))
-      ctx.fed = true
     })
   }
   yNodes.observe(observer)

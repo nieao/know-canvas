@@ -71,6 +71,30 @@ function handleItem(id, item) {
   }
 }
 
+/** 找最老的 pending (按 ts 升序), 没有则返回 null */
+function findOldestPending() {
+  const map = getInboxMap()
+  let oldest = null
+  map.forEach((item, key) => {
+    if (item?.status !== 'pending') return
+    const ts = Number(item.ts || 0)
+    if (!oldest || ts < oldest.ts) oldest = { key, item, ts }
+  })
+  return oldest
+}
+
+/**
+ * 扫一次, 只 fire 最老的一条 pending — 让 BottomAIBar 串行处理.
+ * 当前一条 LLM 跑完后, BottomAIBar 应主动调本函数取下一条.
+ * 不能一次性 fire 全部: 因为 handleItem 会立刻把 yjs 状态标 processing,
+ * 而 BottomAIBar 自己有 submitting 守护会把后续 fire 全部丢弃, 导致 inbox 永远卡死 processing.
+ */
+export function scanInboxNext() {
+  if (!_attached) return
+  const oldest = findOldestPending()
+  if (oldest) handleItem(oldest.key, oldest.item)
+}
+
 /** mount 时挂上, unmount 时清掉 */
 export function attachAletheiaInbox() {
   if (_attached) return
@@ -82,7 +106,7 @@ export function attachAletheiaInbox() {
     event.changes.keys.forEach((change, key) => {
       if (change.action === 'add') {
         const item = map.get(key)
-        // 新增的 pending 立即处理
+        // 新增的 pending 立即处理 (handleItem 自带 submitting / 选举守护)
         handleItem(key, item)
       } else if (change.action === 'update') {
         // update 不做 fire (避免循环)
@@ -91,12 +115,8 @@ export function attachAletheiaInbox() {
   }
   map.observe(_observer)
 
-  // 初次挂上时, 扫一遍未处理的 pending (如果别的 cc 还没处理过)
-  setTimeout(() => {
-    map.forEach((item, key) => {
-      if (item && item.status === 'pending') handleItem(key, item)
-    })
-  }, 1500) // 等 awareness 稳定再扫
+  // 初次挂上时, 只 fire 最老的一条 pending — 后续靠 BottomAIBar 跑完后回调 scanInboxNext()
+  setTimeout(() => { scanInboxNext() }, 1500) // 等 awareness 稳定再扫
 }
 
 export function detachAletheiaInbox() {

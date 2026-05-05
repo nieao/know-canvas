@@ -15,6 +15,7 @@ import { useState, useRef, useEffect } from 'react'
 import useCanvasStore from '../../stores/useCanvasStore'
 import { parseFile } from '../../utils/fileParser'
 import { PROVIDER_PRESETS, getAiConfig } from '../../services/aiConfig'
+import { scanInboxNext } from '../../collab/aletheiaInbox'
 
 const MODES = [
   {
@@ -86,6 +87,9 @@ function BottomAIBar({ showLeftPanel = true, showRightPanel = true, rightPanelWi
         // 失败时保留 input 让用户手动重试
       } finally {
         setSubmitting(false)
+        // 排队的下一条 inbox 由我们主动触发 — observer 只对 add 事件 fire,
+        // 多条 pending 排队时必须靠这里串行推进
+        setTimeout(() => scanInboxNext(), 200)
       }
     }
     window.addEventListener('aletheia-inbox-fire', handler)

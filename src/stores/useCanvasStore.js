@@ -3248,8 +3248,8 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
 
           // ───── Stage 2 DECOMPOSE (1.2s 后) — 建 task 节点 ─────
           await sleep(1200)
-          const COL_W = 260
-          const ROW_H = 220
+          const COL_W = 280       // task 列宽 (ontologyNode ~220 + 60 gap)
+          const ROW_H = 240       // 行高 (ontologyNode ~140 + label/desc 60 + 40 gap)
           const GROUP_CENTER_X = 800  // root 居中在 group 中心
           const ROOT_Y = 60
           const TASK_Y = ROOT_Y + ROW_H
@@ -3316,26 +3316,59 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
             })
           })
 
-          const roleIdMap = {}
-          // role 的 y 按它所在 stage_index 错位排, x 跟随 assigned_tasks 第一个 task
-          for (let i = 0; i < structure.roles.length; i++) {
-            const role = structure.roles[i]
-            const firstTaskId = role.assigned_tasks[0]
-            const anchorTaskNode = firstTaskId ? taskNodes.find((n) => n.data.projectTaskId === firstTaskId) : null
-            const stageInfo = roleStageMap[role.id]
-            const stageIndex = stageInfo?.stage_index || 1
-            // 同 stage 多 role 横向错开 — 计算这个 stage 里它的位置
-            const sameStageRoles = structure.execution_topology.stages.find((s) => s.stage_index === stageIndex)?.role_ids || [role.id]
-            const sameStageIdx = sameStageRoles.indexOf(role.id)
-            const sameStageCount = sameStageRoles.length
+          // 改进的 agent 布局: 不按 anchor task 找 x (会重叠), 改全部 agent 一行排开,
+          // 按 (stage_index, 同 stage 内顺序) 全局排 — 这样:
+          //   - 同 stage 的 agent 视觉上仍然相邻 (染色一致)
+          //   - 不会因为多 role 同 task 而横向只错开 60px (旧逻辑实测重叠严重)
+          //   - X 间距 = AGENT_COL_W (300), 对 agentRoleNode 宽度 220-260 安全
+          const AGENT_COL_W = 300
+          const orderedRoles = []
+          ;[...structure.execution_topology.stages]
+            .sort((a, b) => a.stage_index - b.stage_index)
+            .forEach((s) => {
+              s.role_ids.forEach((rid) => {
+                const role = structure.roles.find((r) => r.id === rid)
+                if (role) orderedRoles.push({ role, stageIndex: s.stage_index, stageInfo: s })
+              })
+            })
+          // 兜底: 如果有 role 没在 topology 里, 也排进去
+          structure.roles.forEach((role) => {
+            if (!orderedRoles.find((x) => x.role.id === role.id)) {
+              orderedRoles.push({ role, stageIndex: 1, stageInfo: { kind: 'parallel' } })
+            }
+          })
+          const totalAgentCount = orderedRoles.length
+          const stageMaxForLayout = Math.max(1, ...orderedRoles.map((r) => r.stageIndex))
 
-            // anchorTaskNode.position 已经是相对 projectGroup 的偏移
-            const anchorX = anchorTaskNode ? anchorTaskNode.position.x : taskOffsetX0 + i * COL_W
-            const xOffset = sameStageCount > 1 ? (sameStageIdx - (sameStageCount - 1) / 2) * 60 : 0
-            const x = anchorX + xOffset
-            // agent 作为 projectGroup 子, y = task 行下面 + stage 错开
-            const AGENT_Y_BASE = TASK_Y + ROW_H
-            const y = AGENT_Y_BASE + (stageIndex - 1) * 40
+          // 动态扩 projectGroup 宽高 — agent 多 / stage 深时不要溢出 group 边界
+          const requiredAgentRowWidth = totalAgentCount * AGENT_COL_W + 200
+          const requiredTaskRowWidth = taskCount * COL_W + 200
+          const requiredGroupWidth = Math.max(1600, requiredAgentRowWidth, requiredTaskRowWidth)
+          // height = root (60+220) + task row (240) + agent_y_offset + conclusion 间距 + 底 padding
+          // agent_y_max = TASK_Y + ROW_H + 20 + (stageMax-1)*100 + 140 (agent height)
+          // conclusion_y = agent_y_max + 100 (gap) + 140 (conclusion height) + 60 (bottom pad)
+          const requiredGroupHeight = TASK_Y + ROW_H + 20 + (stageMaxForLayout - 1) * 100 + 240 + 140 + 60
+          const finalGroupHeight = Math.max(1100, requiredGroupHeight)
+          if (requiredGroupWidth > 1600 || finalGroupHeight > 1100) {
+            set((state) => {
+              const g = state.nodes.find((n) => n.id === projectGroupId)
+              if (g) {
+                g.style = { ...g.style, width: requiredGroupWidth, height: finalGroupHeight }
+              }
+            })
+          }
+          const agentStartX = GROUP_CENTER_X - ((totalAgentCount - 1) * AGENT_COL_W) / 2
+
+          const roleIdMap = {}
+          for (let i = 0; i < orderedRoles.length; i++) {
+            const { role, stageIndex, stageInfo } = orderedRoles[i]
+
+            // x: 全局横向均分, 各 agent 一格 AGENT_COL_W
+            const x = agentStartX + i * AGENT_COL_W
+            // y: task 行下方 + 按 stage_index 阶梯下沉 (同 stage 同 y, 视觉成行)
+            // stage_index 1 → 紧贴 task 行下面; 后续 stage 再下沉一行
+            const AGENT_Y_BASE = TASK_Y + ROW_H + 20  // +20 让 agent 离 task 行远一点
+            const y = AGENT_Y_BASE + (stageIndex - 1) * 100
 
             const nid = `agent-${rootId}-${role.id}`
             roleIdMap[role.id] = nid
@@ -3545,11 +3578,13 @@ ${task.assignee ? `<div class="row"><b>Worker</b><span>${escape(task.assignee)}<
           if (decision) {
             const stageMaxIdx = Math.max(1, ...Object.values(roleStageMap).map((s) => s.stage_index || 1))
             const conclusionId = `conclusion-${rootId}`
+            // y = agent 最底行 (TASK_Y+ROW_H+20 + (stageMax-1)*100) + agent 高 ~140 + 间距 100
+            const conclusionY = TASK_Y + ROW_H + 20 + (stageMaxIdx - 1) * 100 + 240
             const conclusionNode = {
               id: conclusionId,
               type: 'ontologyNode',
-              // 相对 projectGroup: 居中横向, 纵向在所有 agent 之下
-              position: { x: GROUP_CENTER_X, y: TASK_Y + ROW_H + (stageMaxIdx - 1) * 40 + 220 },
+              // 相对 projectGroup: 居中横向 (GROUP_CENTER_X), 纵向在所有 agent 之下
+              position: { x: GROUP_CENTER_X, y: conclusionY },
               parentNode: projectGroupId,
               data: {
                 variant: 'goal',  // 深色显示

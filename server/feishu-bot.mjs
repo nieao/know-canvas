@@ -548,16 +548,39 @@ function ensureReverseChannel(room) {
   // setLocalState(null) 让 bot 在 awareness 里不可见, 用户 cc 不会把它算作竞争者
   try { provider.awareness?.setLocalState(null) } catch {}
   const yNodes = doc.getMap('nodes')
+  const yInbox = doc.getMap('aletheia-inbox')
 
   // 等同步完成才记 baseline (否则会把已有节点都算成"新"的)
   const baseline = new Set()
+  const inboxBaseline = new Set()
   const sentConclusions = new Set()
 
   const onSync = () => {
     yNodes.forEach((_, k) => baseline.add(k))
-    log(`[reverse] room=${room} synced, 基线 ${baseline.size} 节点`)
+    yInbox.forEach((_, k) => inboxBaseline.add(k))
+    log(`[reverse] room=${room} synced, 基线 ${baseline.size} 节点 / inbox ${inboxBaseline.size}`)
   }
   provider.once('synced', onSync)
+
+  // === inbox 监听 — 任何带 attribution.chatId 的新 inbox item 都自动 register pending feedback
+  // 用途: 测试脚本 / 第三方触发 cast 不需要走 feishu 消息也能让 bot 反向通道完整 fire
+  const inboxObserver = (event) => {
+    event.changes.keys.forEach((change, key) => {
+      if (change.action !== 'add') return
+      if (inboxBaseline.has(key)) return
+      const item = yInbox.get(key)
+      const chatId = item?.attribution?.chatId
+      if (!chatId) return
+      // 已 register 过这条 (避免 status 改 processing 的 update 事件重复入队 — 但 add 不会重入)
+      log(`[reverse] inbox 新 item key=${key} chatId=${chatId.slice(0, 14)} → register pending`)
+      registerPendingFeedback(room, {
+        chatId,
+        prompt: item.text || '',
+        sentAt: Number(item.ts) || Date.now(),
+      })
+    })
+  }
+  yInbox.observe(inboxObserver)
 
   const observer = (event) => {
     // 只关心新增 / 字段变化, 不处理删除
@@ -605,7 +628,7 @@ function ensureReverseChannel(room) {
   }
   yNodes.observe(observer)
 
-  reverseChannels.set(room, { doc, provider, yNodes, observer, baseline, sentConclusions })
+  reverseChannels.set(room, { doc, provider, yNodes, yInbox, observer, inboxObserver, baseline, inboxBaseline, sentConclusions })
 }
 
 // ============== 飞书原生工具 — image upload / docs create / bitable upsert ==============
@@ -1196,6 +1219,14 @@ async function processEventFile(filePath) {
 function start() {
   log(`启动 bot — source-proxy: ${SOURCE_PROXY}, default room: ${DEFAULT_ROOM}, lark-bin: ${LARK_BIN}`)
   log(`事件目录: ${path.resolve(EVENTS_DIR)} (cwd=${process.cwd()})`)
+
+  // 启动时预热 DEFAULT_ROOM 反向通道 — 这样无 feishu 消息触发的 cast (e2e 测试 / 第三方触发)
+  // 也能通过 inbox attribution.chatId 自动 register pending feedback + 等 conclusion 发卡
+  try {
+    ensureReverseChannel(DEFAULT_ROOM)
+  } catch (e) {
+    logErr('启动时 ensureReverseChannel 失败 (非致命):', e.message)
+  }
 
   // 准备事件目录 (清理上次残留, 创建新的)
   try {

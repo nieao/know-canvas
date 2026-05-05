@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useReactFlow } from 'reactflow'
+import { useReactFlow, useStore } from 'reactflow'
 import {
   setLocalCursor,
   setLocalSelection,
@@ -95,7 +95,9 @@ export function RemoteUserList({ className = '', style = {} }) {
 export function CursorAwarenessLayer({ wrapperRef, nodes }) {
   const reactFlowInstance = useReactFlow()
   const [cursors, setCursors] = useState([])
-  const [, forceUpdate] = useState(0)
+  // viewport 变化时 transform 改, 组件自然重渲 (替代 200ms 轮询 forceUpdate, 显著降 CPU)
+  // ✅ useStore 只在 transform 实际变时触发 re-render, idle 不消耗
+  useStore((s) => s.transform)
 
   // 选中节点广播
   useEffect(() => {
@@ -145,12 +147,7 @@ export function CursorAwarenessLayer({ wrapperRef, nodes }) {
     }
     update()
     const off = onAwarenessChange(update)
-    // 视口变化时也强制重渲，让屏幕坐标重算
-    const vpInterval = setInterval(() => forceUpdate((n) => n + 1), 200)
-    return () => {
-      off()
-      clearInterval(vpInterval)
-    }
+    return off
   }, [])
 
   const transform = useCallback((cursor) => {
@@ -317,13 +314,8 @@ export function useRecentMovers(windowMs = 3000) {
 export function NodeBadgeLayer({ wrapperRef, nodes }) {
   const reactFlowInstance = useReactFlow()
   const recentMovers = useRecentMovers(3000)
-  const [, forceUpdate] = useState(0)
-
-  // 视口缩放/平移时重渲染（屏幕坐标重算）
-  useEffect(() => {
-    const id = setInterval(() => forceUpdate((n) => n + 1), 200)
-    return () => clearInterval(id)
-  }, [])
+  // viewport 变化触发 re-render (替代 200ms forceUpdate 轮询)
+  useStore((s) => s.transform)
 
   if (!nodes || nodes.length === 0) return null
 
